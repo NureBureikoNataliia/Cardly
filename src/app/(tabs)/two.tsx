@@ -1,14 +1,14 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Image  } from 'react-native';
 
 import EditScreenInfo from '@/src/components/EditScreenInfo';
 import { Text, View } from '@/src/components/Themed';
+import { cards } from '@/assets/data/cards';
 
 export default function TabTwoScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Tab Two</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/(tabs)/two.tsx" />
+      <Text style={styles.title}>{cards[11].back_text}</Text>
+            {cards[11].back_media_url && <Image source={{ uri: cards[11].back_media_url }} style={{ width: 300, height: 200 }}/>}
     </View>
   );
 }

@@ -101,7 +101,7 @@ export const decks: Deck[] = [
     creator_id: 7,
     title: "American History Timeline",
     description: "Key events and dates in United States history",
-    cover_image_url: "https://images.unsplash.com/photo-1485082669829-51e3d8d17f8b?w=400",
+    cover_image_url: null,
     is_public: true,
     original_deck_id: null,
     config_id: 8,

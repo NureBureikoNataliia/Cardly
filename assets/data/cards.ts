@@ -155,8 +155,8 @@ export const cards: Card[] = [
     card_type: "basic",
     front_text: "What is the capital of Japan?",
     back_text: "Tokyo",
-    front_media_url: "https://example.com/images/japan-flag.png",
-    back_media_url: "https://example.com/images/tokyo.jpg",
+    front_media_url: "https://wallpaperaccess.com/full/390.gif",
+    back_media_url: "https://images.ctfassets.net/rc3dlxapnu6k/38dgzPwLXEAzsiXwsiY6yd/ad37be2dd2050daad155c409c6eda4e0/iStock-1216765464.jpg?w=2120&h=1414&fl=progressive&q=50&fm=jpg",
     notes: "Largest metropolitan area in the world",
     created_at: "2023-12-05T11:06:00Z",
     updated_at: "2023-12-05T11:06:00Z"
