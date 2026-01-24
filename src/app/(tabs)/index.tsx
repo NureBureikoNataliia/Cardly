@@ -1,13 +1,21 @@
 import Feather from '@expo/vector-icons/Feather';
+import { useRouter } from 'expo-router';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 
+import { Deck } from '@/assets/data/decks';
 import ListOfDecks from '@/src/components/ListOfDecks';
 import { View } from '@/src/components/Themed';
 
 export default function MainScreen() {
+  const router = useRouter();
+
+  const handlePressDeck = (deck: Deck) => {
+    router.push(`/deck-detail?id=${deck.deck_id}`);
+  };
+
   return (
     <View style={styles.container}>
-      <ListOfDecks />
+      <ListOfDecks onPressDeck={handlePressDeck} />
 
       <TouchableOpacity
         style={styles.fab}
