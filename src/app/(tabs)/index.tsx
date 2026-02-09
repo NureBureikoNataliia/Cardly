@@ -1,3 +1,4 @@
+import 'react-native-url-polyfill/auto';
 import Feather from '@expo/vector-icons/Feather';
 import { useRouter } from 'expo-router';
 import { StyleSheet, TouchableOpacity } from 'react-native';
