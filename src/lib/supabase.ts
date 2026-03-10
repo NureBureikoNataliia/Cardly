@@ -8,7 +8,7 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!
 
 const storage =
   Platform.OS === 'web'
-    ? undefined 
+    ? undefined
     : AsyncStorage
 
 export const supabase = createClient(
@@ -17,9 +17,11 @@ export const supabase = createClient(
   {
     auth: {
       storage,
-      persistSession: Platform.OS !== 'web',
-      autoRefreshToken: Platform.OS !== 'web',
-      detectSessionInUrl: false,
+      // Вмикаємо збереження сесії як на web, так і на native
+      persistSession: true,
+      autoRefreshToken: true,
+      // На web дозволяємо детектити сесію в URL (для magic link тощо)
+      detectSessionInUrl: Platform.OS === 'web',
     },
   }
 )

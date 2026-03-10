@@ -1,41 +1,88 @@
-import { decks as defaultDecks } from '@/assets/data/decks';
-import { Text, View } from '@/src/components/Themed';
 import Feather from '@expo/vector-icons/Feather';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+
+import { Deck } from '@/assets/data/decks';
+import { Text, View } from '@/src/components/Themed';
+import { supabase } from '@/src/lib/supabase';
 
 export default function AddCardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const deckId = typeof params.deckId === 'string' ? parseInt(params.deckId, 10) : null;
-  
-  const deck = deckId ? defaultDecks.find(d => d.deck_id === deckId) : null;
-  
+  const deckId = typeof params.deckId === 'string' ? params.deckId : null;
+  const [deck, setDeck] = useState<Deck | null>(null);
   const [frontText, setFrontText] = useState('');
   const [backText, setBackText] = useState('');
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!deckId) {
+      setError('Deck not found');
+      return;
+    }
+
+    const loadDeck = async () => {
+      const { data, error } = await supabase
+        .from('decks')
+        .select('*')
+        .eq('deck_id', deckId)
+        .single();
+
+      if (error) {
+        setError('Failed to load deck');
+      } else {
+        setDeck(data as Deck);
+      }
+    };
+
+    loadDeck();
+  }, [deckId]);
 
   if (!deck) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.deckName}>Deck not found</Text>
+      <View style={styles.flex}>
+        <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+          <Text style={styles.deckName}>{error ?? 'Deck not found'}</Text>
+          <TouchableOpacity
+            style={[styles.button, styles.cancelButton, { marginTop: 16, marginHorizontal: 16 }]}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.cancelButtonText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!frontText.trim() || !backText.trim()) {
       return;
     }
 
     setIsSaving(true);
-    // Simulate saving
-    setTimeout(() => {
+    setError(null);
+
+    const { error: insertError } = await supabase
+      .from('cards')
+      .insert({
+        deck_id: deckId,
+        card_type: 'basic',
+        front_text: frontText.trim(),
+        back_text: backText.trim(),
+        notes: notes.trim() || null,
+      })
+      .single();
+
+    if (insertError) {
+      setError(insertError.message || 'Failed to save card. Please try again.');
       setIsSaving(false);
-      router.back();
-    }, 500);
+      return;
+    }
+
+    router.back();
   };
 
   const isValid = frontText.trim().length > 0 && backText.trim().length > 0;
@@ -87,6 +134,8 @@ export default function AddCardScreen() {
               textAlignVertical="top"
             />
           </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
 
         <View style={styles.buttonContainer}>
@@ -133,7 +182,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 40,
+    flexGrow: 1,
+    justifyContent: 'space-between',
+    paddingBottom: 16,
   },
   deckName: {
     fontSize: 16,
@@ -196,5 +247,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  errorText: {
+    marginTop: 4,
+    color: '#ef4444',
+    fontSize: 13,
   },
 });

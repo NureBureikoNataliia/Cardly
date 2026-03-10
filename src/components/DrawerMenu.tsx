@@ -2,6 +2,7 @@ import Feather from '@expo/vector-icons/Feather';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useAuth } from '@/src/contexts/AuthContext';
 
 export interface DrawerMenuProps {
   visible: boolean;
@@ -10,6 +11,7 @@ export interface DrawerMenuProps {
 
 export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
   const router = useRouter();
+  const { signOut } = useAuth();
   const anim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
   const [mounted, setMounted] = useState(visible);
 
@@ -41,6 +43,15 @@ export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
     setTimeout(() => router.push(path as never), 220);
   }
 
+  async function handleLogout() {
+    onClose();
+    // Дочекаємося закриття анімації/меню
+    setTimeout(async () => {
+      await signOut();
+      router.replace('/auth/login' as never);
+    }, 220);
+  }
+
   return (
     <View style={styles.overlay}>
       {/* Tapping this area (outside the drawer) closes it */}
@@ -67,6 +78,15 @@ export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
         <Pressable style={styles.item} onPress={() => navigateTo('/help')} accessibilityRole="button">
           <Feather name="help-circle" size={18} color="#222" />
           <Text style={styles.itemText}>Help</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.item, styles.logoutItem]}
+          onPress={handleLogout}
+          accessibilityRole="button"
+        >
+          <Feather name="log-out" size={18} color="#ef4444" />
+          <Text style={[styles.itemText, styles.logoutText]}>Logout</Text>
         </Pressable>
       </Animated.View>
     </View>
@@ -105,6 +125,13 @@ const styles = StyleSheet.create({
   itemText: {
     marginLeft: 12,
     fontSize: 16,
+  },
+  logoutItem: {
+    marginTop: 8,
+  },
+  logoutText: {
+    color: '#ef4444',
+    fontWeight: '600',
   },
   outside: {
     position: 'absolute',

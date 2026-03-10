@@ -1,10 +1,10 @@
-import { cards } from "@/assets/data/cards";
-import { decks as defaultDecks } from "@/assets/data/decks";
+import { Deck } from "@/assets/data/decks";
+import { Card } from "@/assets/data/cards";
 import { Text, View } from "@/src/components/Themed";
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useLayoutEffect } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import {
     Image,
     ScrollView,
@@ -12,20 +12,69 @@ import {
     TouchableOpacity,
     useColorScheme,
 } from "react-native";
+import { supabase } from "@/src/lib/supabase";
 
 export default function DeckDetailScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
   const params = useLocalSearchParams();
-  const deckId = typeof params.id === "string" ? parseInt(params.id, 10) : null;
+  const deckId = typeof params.id === "string" ? params.id : null;
 
-  const deck = deckId ? defaultDecks.find((d) => d.deck_id === deckId) : null;
+  const [deck, setDeck] = useState<Deck | null>(null);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [totalCards, setTotalCards] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showCards, setShowCards] = useState(false);
 
-  // Count total cards in deck
-  const totalCards = deckId
-    ? cards.filter((c) => c.deck_id === deckId).length
-    : 0;
+  useEffect(() => {
+    if (!deckId) {
+      setError("Deck not found");
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadData = async () => {
+      setLoading(true);
+      setError(null);
+
+      const [{ data: deckData, error: deckError }, { data: cardsData, error: cardsError }] =
+        await Promise.all([
+          supabase
+            .from("decks")
+            .select("*")
+            .eq("deck_id", deckId)
+            .single(),
+          supabase
+            .from("cards")
+            .select("*")
+            .eq("deck_id", deckId)
+            .order("created_at", { ascending: true }),
+        ]);
+
+      if (!isMounted) return;
+
+      if (deckError || cardsError) {
+        setError("Failed to load deck");
+      } else {
+        setDeck(deckData as Deck);
+        const list = (cardsData as Card[]) ?? [];
+        setCards(list);
+        setTotalCards(list.length);
+      }
+
+      setLoading(false);
+    };
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [deckId, params.id]);
 
   // For now, we'll show a portion of cards as "due for review today"
   // In a real app, this would be based on spaced repetition scheduling
@@ -46,10 +95,18 @@ export default function DeckDetailScreen() {
     };
   }, [navigation]);
 
-  if (!deck) {
+  if (loading) {
     return (
       <View style={styles.container}>
-        <Text style={styles.deckTitle}>Deck not found</Text>
+        <Text style={styles.deckTitle}>Loading deck...</Text>
+      </View>
+    );
+  }
+
+  if (error || !deck) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.deckTitle}>{error ?? "Deck not found"}</Text>
       </View>
     );
   }
@@ -92,7 +149,7 @@ export default function DeckDetailScreen() {
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={[styles.button, styles.repeatButton]}
-          onPress={() => console.log("Review cards")}
+          onPress={() => setShowCards((prev) => !prev)}
           accessibilityRole="button"
           accessibilityLabel="Review cards"
         >
@@ -110,6 +167,22 @@ export default function DeckDetailScreen() {
           <Text style={styles.buttonText}>Add Card</Text>
         </TouchableOpacity>
       </View>
+
+      {showCards && (
+        <View style={styles.cardsListContainer}>
+          {cards.length === 0 ? (
+            <Text style={styles.emptyCardsText}>No cards in this deck yet.</Text>
+          ) : (
+            cards.map((card) => (
+              <View key={card.card_id} style={styles.cardItem}>
+                <Text style={styles.cardFront}>{card.front_text}</Text>
+                <Text style={styles.cardBack}>{card.back_text}</Text>
+                {card.notes ? <Text style={styles.cardNotes}>{card.notes}</Text> : null}
+              </View>
+            ))
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -202,5 +275,36 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: "#fff",
+  },
+  cardsListContainer: {
+    width: "100%",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+    gap: 8,
+  },
+  emptyCardsText: {
+    textAlign: "center",
+    opacity: 0.7,
+  },
+  cardItem: {
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  cardFront: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  cardBack: {
+    fontSize: 15,
+    marginBottom: 4,
+  },
+  cardNotes: {
+    fontSize: 13,
+    color: "#6b7280",
   },
 });
