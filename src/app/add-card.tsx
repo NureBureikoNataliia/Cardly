@@ -11,6 +11,7 @@ export default function AddCardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const deckId = typeof params.deckId === 'string' ? params.deckId : null;
+  const cardId = typeof params.cardId === 'string' ? params.cardId : null;
   const [deck, setDeck] = useState<Deck | null>(null);
   const [frontText, setFrontText] = useState('');
   const [backText, setBackText] = useState('');
@@ -24,22 +25,36 @@ export default function AddCardScreen() {
       return;
     }
 
-    const loadDeck = async () => {
-      const { data, error } = await supabase
+    const loadDeckAndCard = async () => {
+      const [{ data: deckData, error: deckError }, { data: cardData, error: cardError }] = await Promise.all([
+        supabase
         .from('decks')
         .select('*')
         .eq('deck_id', deckId)
-        .single();
+        .single(),
+        cardId
+          ? supabase
+              .from('cards')
+              .select('*')
+              .eq('card_id', cardId)
+              .single()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
 
-      if (error) {
-        setError('Failed to load deck');
+      if (deckError || cardError) {
+        setError('Failed to load data');
       } else {
-        setDeck(data as Deck);
+        setDeck(deckData as Deck);
+        if (cardData) {
+          setFrontText(cardData.front_text ?? '');
+          setBackText(cardData.back_text ?? '');
+          setNotes(cardData.notes ?? '');
+        }
       }
     };
 
-    loadDeck();
-  }, [deckId]);
+    loadDeckAndCard();
+  }, [deckId, cardId]);
 
   if (!deck) {
     return (
@@ -65,19 +80,29 @@ export default function AddCardScreen() {
     setIsSaving(true);
     setError(null);
 
-    const { error: insertError } = await supabase
-      .from('cards')
-      .insert({
-        deck_id: deckId,
-        card_type: 'basic',
-        front_text: frontText.trim(),
-        back_text: backText.trim(),
-        notes: notes.trim() || null,
-      })
-      .single();
+    const query = cardId
+      ? supabase
+          .from('cards')
+          .update({
+            front_text: frontText.trim(),
+            back_text: backText.trim(),
+            notes: notes.trim() || null,
+          })
+          .eq('card_id', cardId)
+      : supabase
+          .from('cards')
+          .insert({
+            deck_id: deckId,
+            card_type: 'basic',
+            front_text: frontText.trim(),
+            back_text: backText.trim(),
+            notes: notes.trim() || null,
+          });
 
-    if (insertError) {
-      setError(insertError.message || 'Failed to save card. Please try again.');
+    const { error: upsertError } = await query.single();
+
+    if (upsertError) {
+      setError(upsertError.message || 'Failed to save card. Please try again.');
       setIsSaving(false);
       return;
     }
@@ -164,7 +189,7 @@ export default function AddCardScreen() {
             ) : (
               <>
                 <Feather name="check" size={20} color="#fff" />
-                <Text style={styles.buttonText}>Save</Text>
+                <Text style={styles.buttonText}>{cardId ? 'Update' : 'Save'}</Text>
               </>
             )}
           </TouchableOpacity>

@@ -2,15 +2,16 @@ import { Deck } from "@/assets/data/decks";
 import { Card } from "@/assets/data/cards";
 import { Text, View } from "@/src/components/Themed";
 import Feather from "@expo/vector-icons/Feather";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useLayoutEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
-    Image,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    useColorScheme,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  useColorScheme,
 } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 
@@ -28,57 +29,87 @@ export default function DeckDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showCards, setShowCards] = useState(false);
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!deckId) {
       setError("Deck not found");
       setLoading(false);
       return;
     }
 
-    let isMounted = true;
+    setLoading(true);
+    setError(null);
 
-    const loadData = async () => {
-      setLoading(true);
-      setError(null);
+    const [{ data: deckData, error: deckError }, { data: cardsData, error: cardsError }] =
+      await Promise.all([
+        supabase
+          .from("decks")
+          .select("*")
+          .eq("deck_id", deckId)
+          .single(),
+        supabase
+          .from("cards")
+          .select("*")
+          .eq("deck_id", deckId)
+          .order("created_at", { ascending: true }),
+      ]);
 
-      const [{ data: deckData, error: deckError }, { data: cardsData, error: cardsError }] =
-        await Promise.all([
-          supabase
-            .from("decks")
-            .select("*")
-            .eq("deck_id", deckId)
-            .single(),
-          supabase
-            .from("cards")
-            .select("*")
-            .eq("deck_id", deckId)
-            .order("created_at", { ascending: true }),
-        ]);
+    if (deckError || cardsError) {
+      setError("Failed to load deck");
+    } else {
+      setDeck(deckData as Deck);
+      const list = (cardsData as Card[]) ?? [];
+      setCards(list);
+      setTotalCards(list.length);
+    }
 
-      if (!isMounted) return;
+    setLoading(false);
+  }, [deckId]);
 
-      if (deckError || cardsError) {
-        setError("Failed to load deck");
-      } else {
-        setDeck(deckData as Deck);
-        const list = (cardsData as Card[]) ?? [];
-        setCards(list);
-        setTotalCards(list.length);
-      }
-
-      setLoading(false);
-    };
-
+  useEffect(() => {
     loadData();
+  }, [loadData]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [deckId, params.id]);
+  useFocusEffect(
+    useCallback(() => {
+      // Refresh data whenever the screen gains focus (e.g. after adding a card)
+      loadData();
+    }, [loadData])
+  );
 
   // For now, we'll show a portion of cards as "due for review today"
   // In a real app, this would be based on spaced repetition scheduling
   const dueToday = Math.ceil(totalCards * 0.3);
+
+  const handleDeleteCard = (card: Card) => {
+    Alert.alert(
+      "Delete card",
+      "Are you sure you want to delete this card?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const { error } = await supabase
+              .from("cards")
+              .delete()
+              .eq("card_id", card.card_id);
+
+            if (!error) {
+              setCards((prev) => prev.filter((c) => c.card_id !== card.card_id));
+              setTotalCards((prev) => Math.max(0, prev - 1));
+            } else {
+              Alert.alert("Error", "Failed to delete card. Please try again.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEditCard = (card: Card) => {
+    router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`);
+  };
 
 
   useLayoutEffect(() => {
@@ -115,6 +146,7 @@ export default function DeckDetailScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
+      contentInsetAdjustmentBehavior="never"
     >
       <View style={styles.headerRow}>
         <TouchableOpacity
@@ -128,11 +160,13 @@ export default function DeckDetailScreen() {
       </View>
 
       {deck.cover_image_url && (
-        <Image
-          source={{ uri: deck.cover_image_url }}
-          style={styles.deckImage}
-          resizeMode="cover"
-        />
+        <View style={styles.deckImageWrapper}>
+          <Image
+            source={{ uri: deck.cover_image_url }}
+            style={styles.deckImage}
+            resizeMode="cover"
+          />
+        </View>
       )}
 
       <Text style={[styles.deckTitle, !deck.cover_image_url && styles.deckTitleNoImage]}>
@@ -186,9 +220,29 @@ export default function DeckDetailScreen() {
           ) : (
             cards.map((card) => (
               <View key={card.card_id} style={styles.cardItem}>
-                <Text style={styles.cardFront}>{card.front_text}</Text>
-                <Text style={styles.cardBack}>{card.back_text}</Text>
-                {card.notes ? <Text style={styles.cardNotes}>{card.notes}</Text> : null}
+                <View style={styles.cardContent}>
+                  <Text style={styles.cardFront}>{card.front_text}</Text>
+                  <Text style={styles.cardBack}>{card.back_text}</Text>
+                  {card.notes ? <Text style={styles.cardNotes}>{card.notes}</Text> : null}
+                </View>
+                <View style={styles.cardActions}>
+                  <TouchableOpacity
+                    style={[styles.cardActionButton, styles.cardEditButton]}
+                    onPress={() => handleEditCard(card)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Edit card"
+                  >
+                    <Feather name="edit-2" size={16} color="#2563eb" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.cardActionButton, styles.cardDeleteButton]}
+                    onPress={() => handleDeleteCard(card)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete card"
+                  >
+                    <Feather name="trash-2" size={16} color="#dc2626" />
+                  </TouchableOpacity>
+                </View>
               </View>
             ))
           )}
@@ -201,6 +255,7 @@ export default function DeckDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#f3f4f6",
   },
   contentContainer: {
     alignItems: "center",
@@ -209,6 +264,10 @@ const styles = StyleSheet.create({
   deckImage: {
     width: "100%",
     height: 200,
+  },
+  deckImageWrapper: {
+    width: "100%",
+    marginTop: -16,
   },
   headerRow: {
     position: "absolute",
@@ -319,6 +378,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9fafb",
     borderWidth: 1,
     borderColor: "#e5e7eb",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
   },
   cardFront: {
     fontSize: 16,
@@ -333,4 +395,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6b7280",
   },
+  cardContent: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  cardActions: {
+    flexDirection: "row",
+    gap: 4,
+  },
+  cardActionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e5e7eb",
+  },
+  cardEditButton: {},
+  cardDeleteButton: {},
 });
