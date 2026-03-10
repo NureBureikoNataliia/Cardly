@@ -72,7 +72,9 @@ export default function AddDeckScreen() {
 
         <View style={styles.formCard}>
           <View style={[styles.formGroup, styles.formGroupFirst]}>
-            <Text style={styles.label}>Title</Text>
+            <Text style={styles.label}>
+              Title <Text style={styles.requiredMark}>*</Text>
+            </Text>
             <TextInput
               style={styles.input}
               placeholder="Deck title"
@@ -204,6 +206,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
   },
+  requiredMark: {
+    color: '#ef4444',
+  },
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
@@ -256,7 +261,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   saveButton: {
-    backgroundColor: '#64B5F6',
+    backgroundColor: '#2563eb',
   },
   saveButtonDisabled: {
     opacity: 0.5,
