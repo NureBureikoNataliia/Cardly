@@ -116,6 +116,17 @@ export default function DeckDetailScreen() {
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
     >
+      <View style={styles.headerRow}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={styles.backButton}
+        >
+          <Feather name="arrow-left" size={22} color="#111827" />
+        </TouchableOpacity>
+      </View>
+
       {deck.cover_image_url && (
         <Image
           source={{ uri: deck.cover_image_url }}
@@ -198,6 +209,21 @@ const styles = StyleSheet.create({
   deckImage: {
     width: "100%",
     height: 200,
+  },
+  headerRow: {
+    position: "absolute",
+    top: 16,
+    left: 12,
+    right: 12,
+    zIndex: 10,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   deckTitle: {
     fontSize: 28,
