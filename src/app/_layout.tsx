@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 // Импортируем контекст авторизации и хук темы
 import { useColorScheme } from '@/src/components/useColorScheme';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
+import { LanguageProvider } from '@/src/contexts/LanguageContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -45,9 +46,11 @@ export default function RootLayout() {
 
   // Оборачиваем навигацию в провайдер данных о пользователе
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <RootLayoutNav />
+      </AuthProvider>
+    </LanguageProvider>
   );
 }
 
@@ -100,6 +103,15 @@ function RootLayoutNav() {
           options={{ 
             headerShown: false 
           }} 
+        />
+
+        {/* Деталі дошки */}
+        <Stack.Screen
+          name="deck-detail"
+          options={{
+            headerShown: true,
+            animation: 'slide_from_right',
+          }}
         />
 
         {/* Модальное окно */}

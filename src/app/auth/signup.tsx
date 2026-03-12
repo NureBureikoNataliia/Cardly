@@ -11,7 +11,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useLanguage } from '@/src/contexts/LanguageContext';
 import { BookOpen } from 'lucide-react-native';
+import { LanguageDropdown } from '@/src/components/LanguageDropdown';
 
 export default function SignUpScreen() {
   const [email, setEmail] = useState('');
@@ -20,21 +22,22 @@ export default function SignUpScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { signUp } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
 
   const handleSignUp = async () => {
     if (!email || !password || !confirmPassword) {
-      setError('Please fill in all fields');
+      setError(t('fillAllFields'));
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('passwordsNoMatch'));
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t('passwordMinLength'));
       return;
     }
 
@@ -56,17 +59,20 @@ export default function SignUpScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <View style={styles.langBtn}>
+        <LanguageDropdown />
+      </View>
       <View style={styles.content}>
         <View style={styles.header}>
           <BookOpen size={48} color="#3b82f6" />
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Start your learning journey</Text>
+          <Text style={styles.title}>{t('createAccount')}</Text>
+          <Text style={styles.subtitle}>{t('startJourney')}</Text>
         </View>
 
         <View style={styles.form}>
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder={t('email')}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -76,7 +82,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Password"
+            placeholder={t('password')}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -85,7 +91,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Confirm Password"
+            placeholder={t('confirmPassword')}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry
@@ -102,14 +108,14 @@ export default function SignUpScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Sign Up</Text>
+              <Text style={styles.buttonText}>{t('signUp')}</Text>
             )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
+            <Text style={styles.footerText}>{t('haveAccount')} </Text>
             <TouchableOpacity onPress={() => router.push('/auth/login')}>
-              <Text style={styles.linkText}>Sign In</Text>
+              <Text style={styles.linkText}>{t('signIn')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -122,6 +128,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
+  },
+  langBtn: {
+    position: 'absolute',
+    top: 48,
+    right: 24,
+    zIndex: 10,
   },
   content: {
     flex: 1,

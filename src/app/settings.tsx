@@ -1,12 +1,14 @@
 import { Text, View } from '@/src/components/Themed';
 import React from 'react';
 import { StyleSheet } from 'react-native';
+import { useLanguage } from '@/src/contexts/LanguageContext';
 
 export default function SettingsScreen() {
+  const { t } = useLanguage();
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Settings</Text>
-      <Text>Placeholder for settings.</Text>
+      <Text style={styles.title}>{t('settings')}</Text>
+      <Text>{t('settingsPlaceholder')}</Text>
     </View>
   );
 }

@@ -4,17 +4,23 @@ import { Text, View } from "@/src/components/Themed";
 import Feather from "@expo/vector-icons/Feather";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  Alert,
   Image,
-  Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   useColorScheme,
 } from "react-native";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { Link } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
+import ConfirmModal from "@/src/components/ConfirmModal";
+import { LanguageDropdown } from "@/src/components/LanguageDropdown";
+import { useLanguage } from "@/src/contexts/LanguageContext";
+
+const scrollPositions: Record<string, number> = {};
 
 export default function DeckDetailScreen() {
   const router = useRouter();
@@ -22,6 +28,7 @@ export default function DeckDetailScreen() {
   const colorScheme = useColorScheme();
   const params = useLocalSearchParams();
   const deckId = typeof params.id === "string" ? params.id : null;
+  const { t } = useLanguage();
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
@@ -29,10 +36,13 @@ export default function DeckDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCards, setShowCards] = useState(false);
+  const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
+  const [errorModal, setErrorModal] = useState<string | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const loadData = useCallback(async () => {
     if (!deckId) {
-      setError("Deck not found");
+      setError(t("deckNotFound"));
       setLoading(false);
       return;
     }
@@ -51,11 +61,11 @@ export default function DeckDetailScreen() {
           .from("cards")
           .select("*")
           .eq("deck_id", deckId)
-          .order("created_at", { ascending: true }),
+          .order("created_at", { ascending: false }),
       ]);
 
     if (deckError || cardsError) {
-      setError("Failed to load deck");
+      setError(t("failedToLoadDeck"));
     } else {
       setDeck(deckData as Deck);
       const list = (cardsData as Card[]) ?? [];
@@ -64,7 +74,7 @@ export default function DeckDetailScreen() {
     }
 
     setLoading(false);
-  }, [deckId]);
+  }, [deckId, t]);
 
   useEffect(() => {
     loadData();
@@ -72,47 +82,48 @@ export default function DeckDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Refresh data whenever the screen gains focus (e.g. after adding a card)
-      loadData();
-    }, [loadData])
+      loadData().then(() => {
+        if (deckId && scrollPositions[deckId] > 0) {
+          const y = scrollPositions[deckId];
+          let attempts = 0;
+          const attemptScroll = () => {
+            if (scrollViewRef.current) {
+              scrollViewRef.current.scrollTo({ y, animated: false });
+            } else if (attempts < 20) {
+              attempts++;
+              setTimeout(attemptScroll, 50);
+            }
+          };
+          setTimeout(attemptScroll, 150);
+        }
+      });
+    }, [loadData, deckId])
   );
 
   // For now, we'll show a portion of cards as "due for review today"
   // In a real app, this would be based on spaced repetition scheduling
   const dueToday = Math.ceil(totalCards * 0.3);
 
-  const performDelete = async (card: Card) => {
+  const handleDeleteCard = (card: Card) => {
+    setCardToDelete(card);
+  };
+
+  const performDeleteCard = async () => {
+    if (!cardToDelete) return;
+    const card = cardToDelete;
+    setCardToDelete(null);
+
     const { error } = await supabase
       .from("cards")
       .delete()
       .eq("card_id", card.card_id);
 
     if (error) {
-      const msg = error.message || "Failed to delete card.";
-      if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.alert("Error: " + msg);
-      } else {
-        Alert.alert("Error", msg);
-      }
+      setErrorModal(error.message || t("failedToDeleteCard"));
       return;
     }
     setCards((prev) => prev.filter((c) => c.card_id !== card.card_id));
     setTotalCards((prev) => Math.max(0, prev - 1));
-  };
-
-  const handleDeleteCard = (card: Card) => {
-    const message = "Are you sure you want to delete this card?";
-
-    if (Platform.OS === "web" && typeof window !== "undefined") {
-      if (window.confirm(message)) {
-        performDelete(card);
-      }
-    } else {
-      Alert.alert("Delete card", message, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => performDelete(card) },
-      ]);
-    }
   };
 
   const handleEditCard = (card: Card) => {
@@ -122,7 +133,34 @@ export default function DeckDetailScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerShown: false,
+      headerShown: true,
+      title: t("appName"),
+      headerStyle: { backgroundColor: "#fff" },
+      headerShadowVisible: true,
+      headerTintColor: "#1f2937",
+      headerTitleStyle: { fontSize: 18, fontWeight: "600" },
+      headerLeft: () => (
+        <Pressable onPress={() => router.back()} style={{ marginLeft: 8, padding: 4 }}>
+          <Feather name="arrow-left" size={24} color="#1f2937" />
+        </Pressable>
+      ),
+      headerRight: () => (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginRight: 8 }}>
+          <LanguageDropdown />
+          <Link href="/modal" asChild>
+            <Pressable>
+              {({ pressed }) => (
+                <FontAwesome
+                  name="info-circle"
+                  size={25}
+                  color="#1f2937"
+                  style={{ opacity: pressed ? 0.5 : 1 }}
+                />
+              )}
+            </Pressable>
+          </Link>
+        </View>
+      ),
       tabBarStyle: { display: "none" },
     });
 
@@ -132,12 +170,12 @@ export default function DeckDetailScreen() {
         tabBarStyle: undefined,
       });
     };
-  }, [navigation]);
+  }, [navigation, router, t]);
 
   if (loading) {
     return (
       <View style={styles.container}>
-        <Text style={styles.deckTitle}>Loading deck...</Text>
+        <Text style={styles.deckTitle}>{t("loadingDeck")}</Text>
       </View>
     );
   }
@@ -145,28 +183,21 @@ export default function DeckDetailScreen() {
   if (error || !deck) {
     return (
       <View style={styles.container}>
-        <Text style={styles.deckTitle}>{error ?? "Deck not found"}</Text>
+        <Text style={styles.deckTitle}>{error ?? t("deckNotFound")}</Text>
       </View>
     );
   }
 
   return (
+    <>
     <ScrollView
+      ref={scrollViewRef}
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
       contentInsetAdjustmentBehavior="never"
+      onScroll={(e) => { if (deckId) scrollPositions[deckId] = e.nativeEvent.contentOffset.y; }}
+      scrollEventThrottle={100}
     >
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          style={styles.backButton}
-        >
-          <Feather name="arrow-left" size={22} color="#111827" />
-        </TouchableOpacity>
-      </View>
-
       {deck.cover_image_url && (
         <View style={styles.deckImageWrapper}>
           <Image
@@ -187,13 +218,13 @@ export default function DeckDetailScreen() {
 
       <View style={styles.statsCard}>
         <View style={styles.statRow}>
-          <Text style={styles.statLabel}>Due today</Text>
+          <Text style={styles.statLabel}>{t("dueToday")}</Text>
           <Text style={styles.statNumber}>{dueToday}</Text>
         </View>
         <View style={[styles.divider]} />
         <View style={styles.statRow}>
           <Text style={[styles.statLabel]}>
-            Total cards
+            {t("totalCards")}
           </Text>
           <Text style={styles.statNumber}>{totalCards}</Text>
         </View>
@@ -204,30 +235,31 @@ export default function DeckDetailScreen() {
           style={[styles.button, styles.repeatButton]}
           onPress={() => setShowCards((prev) => !prev)}
           accessibilityRole="button"
-          accessibilityLabel="Review cards"
+          accessibilityLabel={t("reviewCards")}
         >
           <Feather size={24} color="#fff" />
-          <Text style={styles.buttonText}>Review Cards</Text>
+          <Text style={styles.buttonText}>{t("reviewCards")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.button, styles.addButton]}
           onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
           accessibilityRole="button"
-          accessibilityLabel="Add card"
+          accessibilityLabel={t("addCard")}
         >
           <Feather name="plus" size={24} color="#fff" />
-          <Text style={styles.buttonText}>Add Card</Text>
+          <Text style={styles.buttonText}>{t("addCard")}</Text>
         </TouchableOpacity>
       </View>
 
       {showCards && (
         <View style={styles.cardsListContainer}>
           {cards.length === 0 ? (
-            <Text style={styles.emptyCardsText}>No cards in this deck yet.</Text>
+            <Text style={styles.emptyCardsText}>{t("noCardsInDeck")}</Text>
           ) : (
-            cards.map((card) => (
-              <View key={card.card_id} style={styles.cardItem}>
+            cards.map((card, index) => (
+              <View key={card.card_id} style={[styles.cardItem, index % 2 === 0 && styles.cardItemAlt]}>
+                <View style={styles.cardAccent} />
                 <View style={styles.cardContent}>
                   <Text style={styles.cardFront}>{card.front_text}</Text>
                   <Text style={styles.cardBack}>{card.back_text}</Text>
@@ -238,17 +270,19 @@ export default function DeckDetailScreen() {
                     style={[styles.cardActionButton, styles.cardEditButton]}
                     onPress={() => handleEditCard(card)}
                     accessibilityRole="button"
-                    accessibilityLabel="Edit card"
+                    accessibilityLabel={t("editCard")}
+                    activeOpacity={0.7}
                   >
-                    <Feather name="edit-2" size={16} color="#2563eb" />
+                    <Feather name="edit-2" size={18} color="#4255ff" />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.cardActionButton, styles.cardDeleteButton]}
                     onPress={() => handleDeleteCard(card)}
                     accessibilityRole="button"
-                    accessibilityLabel="Delete card"
+                    accessibilityLabel={t("deleteCard")}
+                    activeOpacity={0.7}
                   >
-                    <Feather name="trash-2" size={16} color="#dc2626" />
+                    <Feather name="trash-2" size={18} color="#dc2626" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -257,6 +291,29 @@ export default function DeckDetailScreen() {
         </View>
       )}
     </ScrollView>
+
+    <ConfirmModal
+      visible={Boolean(cardToDelete)}
+      title={t("deleteCard")}
+      message={t("deleteCardConfirm")}
+      confirmText={t("delete")}
+      cancelText={t("cancel")}
+      destructive
+      icon="trash-2"
+      onConfirm={performDeleteCard}
+      onCancel={() => setCardToDelete(null)}
+    />
+
+    <ConfirmModal
+      visible={Boolean(errorModal)}
+      title={t("error")}
+      message={errorModal ?? ""}
+      confirmText={t("ok")}
+      cancelText={null}
+      onConfirm={() => setErrorModal(null)}
+      onCancel={() => setErrorModal(null)}
+    />
+    </>
   );
 }
 
@@ -275,22 +332,6 @@ const styles = StyleSheet.create({
   },
   deckImageWrapper: {
     width: "100%",
-    marginTop: -16,
-  },
-  headerRow: {
-    position: "absolute",
-    top: 16,
-    left: 12,
-    right: 12,
-    zIndex: 10,
-  },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    alignItems: "center",
-    justifyContent: "center",
   },
   deckTitle: {
     fontSize: 28,
@@ -372,53 +413,91 @@ const styles = StyleSheet.create({
   cardsListContainer: {
     width: "100%",
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 20,
     paddingBottom: 24,
-    gap: 8,
+    gap: 14,
   },
   emptyCardsText: {
     textAlign: "center",
     opacity: 0.7,
   },
   cardItem: {
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    position: "relative",
+    padding: 18,
+    paddingLeft: 22,
+    borderRadius: 14,
+    backgroundColor: "#fff",
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
+    overflow: "hidden",
+    elevation: 3,
+    shadowColor: "#4255ff",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+  },
+  cardItemAlt: {
+    backgroundColor: "#fafbff",
+    shadowColor: "#1f2937",
+    shadowOpacity: 0.05,
+  },
+  cardAccent: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: "#4255ff",
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+    opacity: 0.85,
   },
   cardFront: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1f2937",
+    marginBottom: 8,
+    letterSpacing: 0.2,
   },
   cardBack: {
-    fontSize: 15,
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#4b5563",
+    marginBottom: 6,
+    lineHeight: 22,
   },
   cardNotes: {
     fontSize: 13,
-    color: "#6b7280",
+    color: "#9ca3af",
+    fontStyle: "italic",
+    lineHeight: 18,
   },
   cardContent: {
     flex: 1,
-    paddingRight: 8,
+    paddingRight: 12,
+    paddingLeft: 4,
   },
   cardActions: {
     flexDirection: "row",
-    gap: 4,
+    gap: 6,
   },
   cardActionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#f3f4f6",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  cardEditButton: {},
-  cardDeleteButton: {},
+  cardEditButton: {
+    backgroundColor: "rgba(66, 85, 255, 0.08)",
+    borderColor: "rgba(66, 85, 255, 0.2)",
+  },
+  cardDeleteButton: {
+    backgroundColor: "rgba(220, 38, 38, 0.06)",
+    borderColor: "rgba(220, 38, 38, 0.2)",
+  },
 });

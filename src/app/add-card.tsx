@@ -2,7 +2,7 @@ import Feather from '@expo/vector-icons/Feather';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,24 +14,36 @@ import {
 import { Deck } from '@/assets/data/decks';
 import { Text, View } from '@/src/components/Themed';
 import { supabase } from '@/src/lib/supabase';
+import ConfirmModal from '@/src/components/ConfirmModal';
+import { useLanguage } from '@/src/contexts/LanguageContext';
 
 export default function AddCardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const deckId = Array.isArray(params.deckId) ? params.deckId[0] : (typeof params.deckId === 'string' ? params.deckId : null);
   const cardId = Array.isArray(params.cardId) ? params.cardId[0] : (typeof params.cardId === 'string' ? params.cardId : null);
+  const { t } = useLanguage();
   const [deck, setDeck] = useState<Deck | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [frontText, setFrontText] = useState('');
   const [backText, setBackText] = useState('');
   const [notes, setNotes] = useState('');
+  const [initialFront, setInitialFront] = useState('');
+  const [initialBack, setInitialBack] = useState('');
+  const [initialNotes, setInitialNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorModal, setErrorModal] = useState<string | null>(null);
 
   useEffect(() => {
     if (!deckId) {
-      setError('Deck not found');
+      setError(t('deckNotFound'));
+      setIsLoading(false);
       return;
     }
+
+    setIsLoading(true);
+    setError(null);
 
     const loadDeckAndCard = async () => {
       const [{ data: deckData, error: deckError }, { data: cardData, error: cardError }] = await Promise.all([
@@ -50,30 +62,43 @@ export default function AddCardScreen() {
       ]);
 
       if (deckError || cardError) {
-        setError('Failed to load data');
+        setError(t('failedToLoadData'));
       } else {
         setDeck(deckData as Deck);
-        if (cardData) {
-          setFrontText(cardData.front_text ?? '');
-          setBackText(cardData.back_text ?? '');
-          setNotes(cardData.notes ?? '');
-        }
+        const front = cardData?.front_text ?? '';
+        const back = cardData?.back_text ?? '';
+        const notesVal = cardData?.notes ?? '';
+        setFrontText(front);
+        setBackText(back);
+        setNotes(notesVal);
+        setInitialFront(front);
+        setInitialBack(back);
+        setInitialNotes(notesVal);
       }
+      setIsLoading(false);
     };
 
     loadDeckAndCard();
-  }, [deckId, cardId]);
+  }, [deckId, cardId, t]);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.flex, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#4255ff" />
+      </View>
+    );
+  }
 
   if (!deck) {
     return (
       <View style={styles.flex}>
         <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
-          <Text style={styles.deckName}>{error ?? 'Deck not found'}</Text>
+          <Text style={styles.deckName}>{error ?? t('deckNotFound')}</Text>
           <TouchableOpacity
             style={[styles.button, styles.cancelButton, { marginTop: 16, marginHorizontal: 16 }]}
             onPress={() => router.back()}
           >
-            <Text style={styles.cancelButtonText}>Go back</Text>
+            <Text style={styles.cancelButtonText}>{t('goBack')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -85,7 +110,7 @@ export default function AddCardScreen() {
       return;
     }
     if (!cardId && !deckId) {
-      setError('Missing deck or card ID');
+      setError(t('deckNotFound'));
       return;
     }
 
@@ -114,25 +139,27 @@ export default function AddCardScreen() {
             });
 
       if (upsertError) {
-        const msg = upsertError.message || 'Failed to save card. Please try again.';
+        const msg = upsertError.message || t('failedToSaveCard');
         setError(msg);
         setIsSaving(false);
-        Alert.alert('Error', msg);
+        setErrorModal(msg);
         return;
       }
 
       router.back();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
+      const msg = err instanceof Error ? err.message : t('unexpectedError');
       setError(msg);
       setIsSaving(false);
-      Alert.alert('Error', msg);
+      setErrorModal(msg);
     }
   };
 
   const isValid = frontText.trim().length > 0 && backText.trim().length > 0;
+  const hasChanges = frontText !== initialFront || backText !== initialBack || notes !== initialNotes;
 
   return (
+    <>
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.flex}
@@ -142,10 +169,10 @@ export default function AddCardScreen() {
 
         <View style={styles.formContainer}>
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Front</Text>
+            <Text style={styles.label}>{t('front')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="What should be learned?"
+              placeholder={t('frontPlaceholder')}
               placeholderTextColor="#999"
               value={frontText}
               onChangeText={setFrontText}
@@ -155,10 +182,10 @@ export default function AddCardScreen() {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Back</Text>
+            <Text style={styles.label}>{t('back')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="Answer"
+              placeholder={t('backPlaceholder')}
               placeholderTextColor="#999"
               value={backText}
               onChangeText={setBackText}
@@ -168,10 +195,10 @@ export default function AddCardScreen() {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Notes (optional)</Text>
+            <Text style={styles.label}>{t('notes')}</Text>
             <TextInput
               style={[styles.input, { minHeight: 80 }]}
-              placeholder="Additional information..."
+              placeholder={t('notesPlaceholder')}
               placeholderTextColor="#999"
               value={notes}
               onChangeText={setNotes}
@@ -190,38 +217,55 @@ export default function AddCardScreen() {
             accessibilityRole="button"
             accessibilityLabel="Cancel"
           >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
+            <Text style={styles.cancelButtonText}>{t('cancel')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
               styles.button,
               styles.saveButton,
+              hasChanges && isValid && styles.saveButtonModified,
               !isValid && styles.saveButtonDisabled
             ]}
             onPress={handleSave}
             disabled={!isValid || isSaving}
             accessibilityRole="button"
-            accessibilityLabel="Save card"
+            accessibilityLabel={t('save')}
           >
             {isSaving ? (
-              <Text style={styles.buttonText}>Saving...</Text>
+              <Text style={styles.buttonText}>{t('saving')}...</Text>
             ) : (
               <>
                 <Feather name="check" size={20} color="#fff" />
-                <Text style={styles.buttonText}>{cardId ? 'Update' : 'Save'}</Text>
+                <Text style={styles.buttonText}>{cardId ? t('update') : t('save')}</Text>
               </>
             )}
           </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+
+    <ConfirmModal
+      visible={Boolean(errorModal)}
+      title={t('error')}
+      message={errorModal ?? ''}
+      confirmText={t('ok')}
+      cancelText={null}
+      onConfirm={() => setErrorModal(null)}
+      onCancel={() => setErrorModal(null)}
+    />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
   },
   container: {
     flex: 1,
@@ -284,6 +328,9 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: '#64B5F6',
+  },
+  saveButtonModified: {
+    backgroundColor: '#4255ff',
   },
   saveButtonDisabled: {
     opacity: 0.5,

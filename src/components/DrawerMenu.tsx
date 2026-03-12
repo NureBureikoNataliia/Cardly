@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useLanguage } from '@/src/contexts/LanguageContext';
+import ConfirmModal from '@/src/components/ConfirmModal';
 
 export interface DrawerMenuProps {
   visible: boolean;
@@ -12,8 +14,10 @@ export interface DrawerMenuProps {
 export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
   const router = useRouter();
   const { signOut } = useAuth();
+  const { t } = useLanguage();
   const anim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
   const [mounted, setMounted] = useState(visible);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
 
   useEffect(() => {
     if (visible) setMounted(true);
@@ -43,9 +47,13 @@ export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
     setTimeout(() => router.push(path as never), 220);
   }
 
-  async function handleLogout() {
+  function handleLogoutClick() {
+    setLogoutModalVisible(true);
+  }
+
+  async function handleLogoutConfirm() {
+    setLogoutModalVisible(false);
     onClose();
-    // Дочекаємося закриття анімації/меню
     setTimeout(async () => {
       await signOut();
       router.replace('/auth/login' as never);
@@ -58,37 +66,49 @@ export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
       <Pressable style={styles.outside} onPress={onClose} accessibilityRole="button" />
 
       <Animated.View style={[styles.container, { transform: [{ translateX }] }]}>
-        <Text style={styles.header}>Menu</Text>
+        <Text style={styles.header}>{t('menu')}</Text>
 
         <Pressable style={styles.item} onPress={() => navigateTo('/')} accessibilityRole="button">
           <Feather name="layers" size={18} color="#222" />
-          <Text style={styles.itemText}>Decks</Text>
+          <Text style={styles.itemText}>{t('yourDecks')}</Text>
         </Pressable>
 
         <Pressable style={styles.item} onPress={() => navigateTo('/statistics')} accessibilityRole="button">
           <Feather name="bar-chart-2" size={18} color="#222" />
-          <Text style={styles.itemText}>Statistics</Text>
+          <Text style={styles.itemText}>{t('statistics')}</Text>
         </Pressable>
 
         <Pressable style={styles.item} onPress={() => navigateTo('/settings')} accessibilityRole="button">
           <Feather name="settings" size={18} color="#222" />
-          <Text style={styles.itemText}>Settings</Text>
+          <Text style={styles.itemText}>{t('settings')}</Text>
         </Pressable>
 
         <Pressable style={styles.item} onPress={() => navigateTo('/help')} accessibilityRole="button">
           <Feather name="help-circle" size={18} color="#222" />
-          <Text style={styles.itemText}>Help</Text>
+          <Text style={styles.itemText}>{t('help')}</Text>
         </Pressable>
 
         <Pressable
           style={[styles.item, styles.logoutItem]}
-          onPress={handleLogout}
+          onPress={handleLogoutClick}
           accessibilityRole="button"
         >
           <Feather name="log-out" size={18} color="#ef4444" />
-          <Text style={[styles.itemText, styles.logoutText]}>Logout</Text>
+          <Text style={[styles.itemText, styles.logoutText]}>{t('logout')}</Text>
         </Pressable>
       </Animated.View>
+
+      <ConfirmModal
+        visible={logoutModalVisible}
+        title={t('logout')}
+        message={t('logoutConfirm')}
+        confirmText={t('logout')}
+        cancelText={t('cancel')}
+        destructive
+        icon="log-out"
+        onConfirm={handleLogoutConfirm}
+        onCancel={() => setLogoutModalVisible(false)}
+      />
     </View>
   );
 }

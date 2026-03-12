@@ -1,47 +1,163 @@
-import React from 'react';
-import { FlatList, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useRef, useState } from 'react';
+import {
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
-import { cards } from '@/assets/data/cards';
-import { Deck, decks as defaultDecks } from '@/assets/data/decks';
-import { Text, View } from '@/src/components/Themed';
+import { Deck } from '@/assets/data/decks';
+import { Text } from '@/src/components/Themed';
+import { useLanguage } from '@/src/contexts/LanguageContext';
+import Feather from '@expo/vector-icons/Feather';
 
 export interface ListOfDecksProps {
   decks?: Deck[];
+  cardCounts?: Record<string, number>;
   onPressDeck?: (deck: Deck) => void;
-  showPrivate?: boolean; // whether to include private decks (default true)
+  onEditDeck?: (deck: Deck) => void;
+  onDeleteDeck?: (deck: Deck) => void;
+  showPrivate?: boolean;
 }
 
-export function ListOfDecks({ decks = defaultDecks, onPressDeck, showPrivate = true }: ListOfDecksProps) {
-  const cardCounts = React.useMemo(() => {
-    const m = new Map<number, number>();
-    for (const c of cards) {
-      m.set(c.deck_id, (m.get(c.deck_id) ?? 0) + 1);
-    }
-    return m;
-  }, []);
+function DeckCardInner({
+  item,
+  count,
+  hasCover,
+  onPress,
+  onEdit,
+  onDelete,
+  t,
+}: {
+  item: Deck;
+  count: number;
+  hasCover: boolean;
+  onPress: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  t: (key: string) => string;
+}) {
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [menuLayout, setMenuLayout] = useState<{ x: number; y: number } | null>(null);
+  const menuButtonRef = useRef<View>(null);
 
+  const openMenu = () => {
+    menuButtonRef.current?.measureInWindow((x, y, width, height) => {
+      const left = Math.max(8, x + width - 160);
+      setMenuLayout({ x: left, y: y + height + 4 });
+      setMenuVisible(true);
+    });
+  };
+
+  const handleEdit = () => {
+    setMenuVisible(false);
+    onEdit();
+  };
+
+  const handleDelete = () => {
+    setMenuVisible(false);
+    onDelete();
+  };
+
+  return (
+    <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.cardTouchable}
+        onPress={onPress}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+      >
+        {hasCover && (
+          <Image source={{ uri: item.cover_image_url! }} style={styles.cover} resizeMode="cover" />
+        )}
+        <View style={[styles.cardContent, !hasCover && styles.cardContentNoCover]}>
+          <View style={styles.cardIcon}>
+            <Feather name="layers" size={20} color="#4255ff" />
+          </View>
+          <View style={styles.cardBody}>
+            <Text style={styles.title} numberOfLines={2}>
+              {item.title}
+            </Text>
+            {item.description ? (
+              <Text style={styles.description} numberOfLines={2}>
+                {item.description}
+              </Text>
+            ) : null}
+            <Text style={styles.meta}>
+              {count} {count !== 1 ? t('cards') : t('card')}
+              {item.is_public ? ` • ${t('public')}` : ` • ${t('private')}`}
+            </Text>
+          </View>
+          <View style={styles.cardActions}>
+            <Pressable
+              ref={menuButtonRef}
+              onPress={(e) => {
+                e?.stopPropagation?.();
+                openMenu();
+              }}
+              style={styles.menuButton}
+              hitSlop={8}
+            >
+              <Feather name="more-vertical" size={20} color="#9ca3af" />
+            </Pressable>
+            <Feather name="chevron-right" size={20} color="#9ca3af" />
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
+          {menuLayout && (
+            <View style={[styles.menuCard, { left: menuLayout.x, top: menuLayout.y }]}>
+              <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
+                <Feather name="edit-2" size={18} color="#1f2937" />
+                <Text style={styles.menuItemText}>{t('editBoard')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleDelete}>
+                <Feather name="trash-2" size={18} color="#dc2626" />
+                <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>{t('deleteBoard')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+export function ListOfDecks({
+  decks = [],
+  cardCounts = {},
+  onPressDeck,
+  onEditDeck,
+  onDeleteDeck,
+  showPrivate = true,
+}: ListOfDecksProps) {
+  const { t } = useLanguage();
   const data = React.useMemo(() => decks.filter((d) => showPrivate || d.is_public), [decks, showPrivate]);
 
   const renderItem = ({ item }: { item: Deck }) => {
-    const count = cardCounts.get(item.deck_id) ?? 0;
+    const count = cardCounts[item.deck_id] ?? 0;
     const hasCover = Boolean(item.cover_image_url);
 
     return (
-      <TouchableOpacity accessibilityRole="button" style={styles.item} onPress={() => onPressDeck?.(item)}>
-        <View style={styles.info}>
-          <Text style={styles.title}>{item.title}</Text>
-          {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
-          <Text style={styles.meta}>{count} card{count !== 1 ? 's' : ''} • {item.is_public ? 'Public' : 'Private'}</Text>
-        </View>
-
-        {hasCover && (
-          <Image
-            source={{ uri: item.cover_image_url! }}
-            style={styles.cover}
-            resizeMode="cover"
-          />
-        )}
-      </TouchableOpacity>
+      <DeckCardInner
+        item={item}
+        count={count}
+        hasCover={hasCover}
+        onPress={() => onPressDeck?.(item)}
+        onEdit={() => onEditDeck?.(item)}
+        onDelete={() => onDeleteDeck?.(item)}
+        t={t}
+      />
     );
   };
 
@@ -52,7 +168,7 @@ export function ListOfDecks({ decks = defaultDecks, onPressDeck, showPrivate = t
       renderItem={renderItem}
       style={styles.list}
       contentContainerStyle={styles.container}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      showsVerticalScrollIndicator={false}
     />
   );
 }
@@ -61,45 +177,110 @@ export default ListOfDecks;
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 8,
-  },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  cover: {
-    width: 96,
-    height: 64,
-    borderRadius: 8,
-    backgroundColor: '#eaeaea',
-    marginLeft: 12,
-  },
-  info: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  description: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#666',
-  },
-  meta: {
-    marginTop: 6,
-    fontSize: 12,
-    color: '#888',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 100,
   },
   list: {
     flex: 1,
     width: '100%',
   },
-  separator: {
-    height: 1,
-    marginHorizontal: 12,
-    backgroundColor: '#efefef',
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'visible',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  cardTouchable: {
+    overflow: 'hidden',
+    borderRadius: 12,
+  },
+  cover: {
+    width: '100%',
+    height: 120,
+    backgroundColor: '#e5e7eb',
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  cardContentNoCover: {
+    paddingTop: 16,
+  },
+  cardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: 'rgba(66, 85, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  menuButton: {
+    padding: 4,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  description: {
+    marginTop: 4,
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 20,
+  },
+  meta: {
+    marginTop: 6,
+    fontSize: 13,
+    color: '#9ca3af',
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuCard: {
+    position: 'absolute',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 6,
+    minWidth: 160,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  menuItemDanger: {},
+  menuItemText: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  menuItemTextDanger: {
+    color: '#dc2626',
   },
 });

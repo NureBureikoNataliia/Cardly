@@ -11,7 +11,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useLanguage } from '@/src/contexts/LanguageContext';
 import { BookOpen } from 'lucide-react-native';
+import { LanguageDropdown } from '@/src/components/LanguageDropdown';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -19,11 +21,12 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { signIn } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setError('Please fill in all fields');
+      setError(t('fillAllFields'));
       return;
     }
 
@@ -45,17 +48,20 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <View style={styles.langBtn}>
+        <LanguageDropdown />
+      </View>
       <View style={styles.content}>
         <View style={styles.header}>
           <BookOpen size={48} color="#3b82f6" />
-          <Text style={styles.title}>FlashCard Master</Text>
-          <Text style={styles.subtitle}>Learn smarter, not harder</Text>
+          <Text style={styles.title}>{t('flashCardMaster')}</Text>
+          <Text style={styles.subtitle}>{t('learnSmarter')}</Text>
         </View>
 
         <View style={styles.form}>
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder={t('email')}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -65,7 +71,7 @@ export default function LoginScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Password"
+            placeholder={t('password')}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -82,14 +88,14 @@ export default function LoginScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
+              <Text style={styles.buttonText}>{t('signIn')}</Text>
             )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>{t('noAccount')} </Text>
             <TouchableOpacity onPress={() => router.push('/auth/signup' as never)}>
-              <Text style={styles.linkText}>Sign Up</Text>
+              <Text style={styles.linkText}>{t('signUp')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -102,6 +108,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
+  },
+  langBtn: {
+    position: 'absolute',
+    top: 48,
+    right: 24,
+    zIndex: 10,
   },
   content: {
     flex: 1,

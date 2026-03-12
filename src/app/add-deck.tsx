@@ -1,7 +1,8 @@
 import Feather from '@expo/vector-icons/Feather';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,24 +14,50 @@ import {
 
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useLanguage } from '@/src/contexts/LanguageContext';
 import { Text, View } from '@/src/components/Themed';
 
 export default function AddDeckScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ deckId?: string }>();
+  const deckId = typeof params.deckId === 'string' ? params.deckId : Array.isArray(params.deckId) ? params.deckId[0] : undefined;
   const { user } = useAuth();
+  const { t } = useLanguage();
+  const isEdit = Boolean(deckId);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
   const [isPublic, setIsPublic] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(isEdit);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!deckId || !user) return;
+    (async () => {
+      const { data, error: fetchError } = await supabase
+        .from('decks')
+        .select('*')
+        .eq('deck_id', deckId)
+        .eq('creator_id', user.id)
+        .single();
+      if (fetchError || !data) {
+        setError(t('deckNotFoundOrNoAccess'));
+        return;
+      }
+      setTitle(data.title ?? '');
+      setDescription(data.description ?? '');
+      setCoverUrl(data.cover_image_url ?? '');
+      setIsPublic(data.is_public ?? true);
+    })().finally(() => setIsLoading(false));
+  }, [deckId, user]);
 
   const isValid = title.trim().length > 0;
 
   const handleSave = async () => {
     if (!user) {
-      setError('You must be logged in to create a deck.');
+      setError(t('mustBeLoggedIn'));
       return;
     }
     if (!isValid || isSaving) return;
@@ -38,22 +65,42 @@ export default function AddDeckScreen() {
     setIsSaving(true);
     setError(null);
 
-    const { error: insertError } = await supabase
-      .from('decks')
-      .insert({
-        creator_id: user.id,
-        title: title.trim(),
-        description: description.trim() || null,
-        cover_image_url: coverUrl.trim() || null,
-        is_public: isPublic,
-      })
-      .select('*')
-      .single();
+    if (isEdit && deckId) {
+      const { error: updateError } = await supabase
+        .from('decks')
+        .update({
+          title: title.trim(),
+          description: description.trim() || null,
+          cover_image_url: coverUrl.trim() || null,
+          is_public: isPublic,
+        })
+        .eq('deck_id', deckId)
+        .eq('creator_id', user.id);
 
-    if (insertError) {
-      setError(insertError.message || 'Failed to create deck. Please try again.');
-      setIsSaving(false);
-      return;
+      if (updateError) {
+        const msg = updateError.message || 'Failed to update deck. Please try again.';
+        setError(msg);
+        setIsSaving(false);
+        return;
+      }
+    } else {
+      const { error: insertError } = await supabase
+        .from('decks')
+        .insert({
+          creator_id: user.id,
+          title: title.trim(),
+          description: description.trim() || null,
+          cover_image_url: coverUrl.trim() || null,
+          is_public: isPublic,
+        })
+        .select('*')
+        .single();
+
+      if (insertError) {
+        setError(insertError.message || 'Failed to create deck. Please try again.');
+        setIsSaving(false);
+        return;
+      }
     }
 
     router.back();
@@ -66,18 +113,26 @@ export default function AddDeckScreen() {
     >
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.header}>
-          <Text style={styles.screenTitle}>Create new deck</Text>
-          <Text style={styles.screenSubtitle}>Give your deck a clear name and an optional cover.</Text>
+          <Text style={styles.screenTitle}>{isEdit ? t('editDeck') : t('createNewDeck')}</Text>
+          <Text style={styles.screenSubtitle}>
+            {isEdit ? t('deckSubtitleEdit') : t('deckSubtitleCreate')}
+          </Text>
         </View>
 
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#2563eb" />
+          </View>
+        ) : (
+          <>
         <View style={styles.formCard}>
           <View style={[styles.formGroup, styles.formGroupFirst]}>
             <Text style={styles.label}>
-              Title <Text style={styles.requiredMark}>*</Text>
+              {t('title')} <Text style={styles.requiredMark}>*</Text>
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="Deck title"
+              placeholder={t('title')}
               placeholderTextColor="#999"
               value={title}
               onChangeText={setTitle}
@@ -85,10 +140,10 @@ export default function AddDeckScreen() {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Description</Text>
+            <Text style={styles.label}>{t('description')}</Text>
             <TextInput
               style={[styles.input, styles.multilineInput]}
-              placeholder="Short description (optional)"
+              placeholder={t('description')}
               placeholderTextColor="#999"
               value={description}
               onChangeText={setDescription}
@@ -98,7 +153,7 @@ export default function AddDeckScreen() {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Cover image URL</Text>
+            <Text style={styles.label}>{t('coverImageUrl')}</Text>
             <TextInput
               style={styles.input}
               placeholder="https://..."
@@ -111,8 +166,8 @@ export default function AddDeckScreen() {
 
           <View style={[styles.formGroup, styles.switchRow]}>
             <View>
-              <Text style={styles.label}>Public deck</Text>
-              <Text style={styles.helperText}>Other users will be able to find this deck.</Text>
+              <Text style={styles.label}>{t('publicDeck')}</Text>
+              <Text style={styles.helperText}>{t('publicDeckHelp')}</Text>
             </View>
             <Switch value={isPublic} onValueChange={setIsPublic} />
           </View>
@@ -127,7 +182,7 @@ export default function AddDeckScreen() {
             accessibilityRole="button"
             accessibilityLabel="Cancel"
           >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
+            <Text style={styles.cancelButtonText}>{t('cancel')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -139,18 +194,20 @@ export default function AddDeckScreen() {
             onPress={handleSave}
             disabled={!isValid || isSaving}
             accessibilityRole="button"
-            accessibilityLabel="Create deck"
+            accessibilityLabel={isEdit ? t('update') : t('create')}
           >
             {isSaving ? (
-              <Text style={styles.buttonText}>Saving...</Text>
+              <Text style={styles.buttonText}>{t('saving')}...</Text>
             ) : (
               <>
                 <Feather name="check" size={20} color="#fff" />
-                <Text style={styles.buttonText}>Create</Text>
+                <Text style={styles.buttonText}>{isEdit ? t('update') : t('create')}</Text>
               </>
             )}
           </TouchableOpacity>
         </View>
+          </>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -169,6 +226,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: 24,
     paddingHorizontal: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 200,
   },
   header: {
     paddingTop: 16,
