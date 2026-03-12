@@ -1,7 +1,15 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+} from 'react-native';
 
 import { Deck } from '@/assets/data/decks';
 import { Text, View } from '@/src/components/Themed';
@@ -10,8 +18,8 @@ import { supabase } from '@/src/lib/supabase';
 export default function AddCardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const deckId = typeof params.deckId === 'string' ? params.deckId : null;
-  const cardId = typeof params.cardId === 'string' ? params.cardId : null;
+  const deckId = Array.isArray(params.deckId) ? params.deckId[0] : (typeof params.deckId === 'string' ? params.deckId : null);
+  const cardId = Array.isArray(params.cardId) ? params.cardId[0] : (typeof params.cardId === 'string' ? params.cardId : null);
   const [deck, setDeck] = useState<Deck | null>(null);
   const [frontText, setFrontText] = useState('');
   const [backText, setBackText] = useState('');
@@ -76,38 +84,50 @@ export default function AddCardScreen() {
     if (!frontText.trim() || !backText.trim()) {
       return;
     }
+    if (!cardId && !deckId) {
+      setError('Missing deck or card ID');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
 
-    const query = cardId
-      ? supabase
-          .from('cards')
-          .update({
-            front_text: frontText.trim(),
-            back_text: backText.trim(),
-            notes: notes.trim() || null,
-          })
-          .eq('card_id', cardId)
-      : supabase
-          .from('cards')
-          .insert({
-            deck_id: deckId,
-            card_type: 'basic',
-            front_text: frontText.trim(),
-            back_text: backText.trim(),
-            notes: notes.trim() || null,
-          });
+    try {
+      const { error: upsertError } = cardId
+        ? await supabase
+            .from('cards')
+            .update({
+              front_text: frontText.trim(),
+              back_text: backText.trim(),
+              notes: notes.trim() || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('card_id', cardId)
+        : await supabase
+            .from('cards')
+            .insert({
+              deck_id: deckId,
+              card_type: 'basic',
+              front_text: frontText.trim(),
+              back_text: backText.trim(),
+              notes: notes.trim() || null,
+            });
 
-    const { error: upsertError } = await query.single();
+      if (upsertError) {
+        const msg = upsertError.message || 'Failed to save card. Please try again.';
+        setError(msg);
+        setIsSaving(false);
+        Alert.alert('Error', msg);
+        return;
+      }
 
-    if (upsertError) {
-      setError(upsertError.message || 'Failed to save card. Please try again.');
+      router.back();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
+      setError(msg);
       setIsSaving(false);
-      return;
+      Alert.alert('Error', msg);
     }
-
-    router.back();
   };
 
   const isValid = frontText.trim().length > 0 && backText.trim().length > 0;

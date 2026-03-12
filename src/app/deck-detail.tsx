@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useState } from "react"
 import {
   Alert,
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -80,31 +81,38 @@ export default function DeckDetailScreen() {
   // In a real app, this would be based on spaced repetition scheduling
   const dueToday = Math.ceil(totalCards * 0.3);
 
-  const handleDeleteCard = (card: Card) => {
-    Alert.alert(
-      "Delete card",
-      "Are you sure you want to delete this card?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            const { error } = await supabase
-              .from("cards")
-              .delete()
-              .eq("card_id", card.card_id);
+  const performDelete = async (card: Card) => {
+    const { error } = await supabase
+      .from("cards")
+      .delete()
+      .eq("card_id", card.card_id);
 
-            if (!error) {
-              setCards((prev) => prev.filter((c) => c.card_id !== card.card_id));
-              setTotalCards((prev) => Math.max(0, prev - 1));
-            } else {
-              Alert.alert("Error", "Failed to delete card. Please try again.");
-            }
-          },
-        },
-      ]
-    );
+    if (error) {
+      const msg = error.message || "Failed to delete card.";
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.alert("Error: " + msg);
+      } else {
+        Alert.alert("Error", msg);
+      }
+      return;
+    }
+    setCards((prev) => prev.filter((c) => c.card_id !== card.card_id));
+    setTotalCards((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleDeleteCard = (card: Card) => {
+    const message = "Are you sure you want to delete this card?";
+
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      if (window.confirm(message)) {
+        performDelete(card);
+      }
+    } else {
+      Alert.alert("Delete card", message, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => performDelete(card) },
+      ]);
+    }
   };
 
   const handleEditCard = (card: Card) => {
