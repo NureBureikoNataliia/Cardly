@@ -10,6 +10,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/src/components/useColorScheme';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { LanguageProvider } from '@/src/contexts/LanguageContext';
+import { StudySettingsProvider } from '@/src/contexts/StudySettingsContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -47,9 +48,11 @@ export default function RootLayout() {
   // Оборачиваем навигацию в провайдер данных о пользователе
   return (
     <LanguageProvider>
-      <AuthProvider>
-        <RootLayoutNav />
-      </AuthProvider>
+      <StudySettingsProvider>
+        <AuthProvider>
+          <RootLayoutNav />
+        </AuthProvider>
+      </StudySettingsProvider>
     </LanguageProvider>
   );
 }
@@ -108,6 +111,33 @@ function RootLayoutNav() {
         {/* Деталі дошки */}
         <Stack.Screen
           name="deck-detail"
+          options={{
+            headerShown: true,
+            animation: 'slide_from_right',
+          }}
+        />
+
+        {/* Публічні дошки */}
+        <Stack.Screen
+          name="publicdecks"
+          options={{
+            headerShown: true,
+            animation: 'slide_from_right',
+          }}
+        />
+
+        {/* Огляд карток покроково */}
+        <Stack.Screen
+          name="deck-review"
+          options={{
+            headerShown: true,
+            animation: 'slide_from_right',
+          }}
+        />
+
+        {/* Вивчення з алгоритмом */}
+        <Stack.Screen
+          name="deck-study"
           options={{
             headerShown: true,
             animation: 'slide_from_right',

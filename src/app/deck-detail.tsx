@@ -16,6 +16,8 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Link } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
 import { LanguageDropdown } from "@/src/components/LanguageDropdown";
 import { useLanguage } from "@/src/contexts/LanguageContext";
@@ -30,14 +32,18 @@ export default function DeckDetailScreen() {
   const deckId = typeof params.id === "string" ? params.id : null;
   const { t } = useLanguage();
 
+  const { user } = useAuth();
   const [deck, setDeck] = useState<Deck | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
+  const [progressMap, setProgressMap] = useState<Map<string, import("@/src/lib/userCardProgress").UserCardProgress>>(new Map());
   const [totalCards, setTotalCards] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCards, setShowCards] = useState(false);
   const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
   const [errorModal, setErrorModal] = useState<string | null>(null);
+  const [isCopying, setIsCopying] = useState(false);
+  const [hasCopy, setHasCopy] = useState<boolean | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const loadData = useCallback(async () => {
@@ -71,10 +77,15 @@ export default function DeckDetailScreen() {
       const list = (cardsData as Card[]) ?? [];
       setCards(list);
       setTotalCards(list.length);
+      if (user?.id) {
+        const cardIds = list.map((c) => c.card_id);
+        const progress = await fetchUserProgressForDeck(user.id, cardIds);
+        setProgressMap(progress);
+      }
     }
 
     setLoading(false);
-  }, [deckId, t]);
+  }, [deckId, t, user?.id]);
 
   useEffect(() => {
     loadData();
@@ -100,9 +111,130 @@ export default function DeckDetailScreen() {
     }, [loadData, deckId])
   );
 
-  // For now, we'll show a portion of cards as "due for review today"
-  // In a real app, this would be based on spaced repetition scheduling
-  const dueToday = Math.ceil(totalCards * 0.3);
+  const dueToday = user
+    ? getDueTodayCountForUser(cards.map((c) => c.card_id), progressMap)
+    : totalCards;
+
+  const isOwner = deck && user && deck.creator_id === user.id;
+  const isPublicFromOther = !isOwner && deck?.is_public;
+
+  const checkHasCopy = useCallback(async () => {
+    if (!deck || !user || isOwner) return;
+    const { data } = await supabase
+      .from("decks")
+      .select("deck_id")
+      .eq("creator_id", user.id)
+      .eq("original_deck_id", deck.deck_id)
+      .limit(1);
+    setHasCopy((data?.length ?? 0) > 0);
+  }, [deck, user, isOwner]);
+
+  useEffect(() => {
+    if (isPublicFromOther) checkHasCopy();
+  }, [isPublicFromOther, checkHasCopy]);
+
+  const handleAddToMyAccount = async () => {
+    if (!deck || !user || isCopying || hasCopy) return;
+    setIsCopying(true);
+    setError(null);
+    try {
+      const { data: newDeck, error: deckErr } = await supabase
+        .from("decks")
+        .insert({
+          creator_id: user.id,
+          title: deck.title,
+          description: deck.description,
+          cover_image_url: deck.cover_image_url,
+          is_public: false,
+          original_deck_id: deck.deck_id,
+        })
+        .select("deck_id")
+        .single();
+
+      if (deckErr) {
+        setErrorModal(deckErr.message ?? t("failedToLoadData"));
+        setIsCopying(false);
+        return;
+      }
+
+      if (cards.length > 0) {
+        const cardRows = cards.map((c) => ({
+          deck_id: newDeck.deck_id,
+          card_type: c.card_type ?? "basic",
+          front_text: c.front_text,
+          back_text: c.back_text,
+          front_media_url: c.front_media_url,
+          back_media_url: c.back_media_url,
+          notes: c.notes,
+        }));
+        const { error: cardsErr } = await supabase.from("cards").insert(cardRows);
+        if (cardsErr) {
+          setErrorModal(cardsErr.message ?? t("failedToLoadData"));
+          setIsCopying(false);
+          return;
+        }
+      }
+
+      setHasCopy(true);
+      router.replace(`/deck-detail?id=${newDeck.deck_id}`);
+    } catch (err) {
+      setErrorModal(err instanceof Error ? err.message : t("unexpectedError"));
+    } finally {
+      setIsCopying(false);
+    }
+  };
+
+  const isCopiedDeck = Boolean(deck?.original_deck_id);
+
+  const handleUpdateFromOriginal = async () => {
+    if (!deck || !deck.original_deck_id || isUpdating) return;
+    setIsUpdating(true);
+    setError(null);
+    try {
+      const { data: originalCards, error: fetchErr } = await supabase
+        .from("cards")
+        .select("front_text, back_text, notes, card_type, front_media_url, back_media_url")
+        .eq("deck_id", deck.original_deck_id);
+
+      if (fetchErr) {
+        setErrorModal(fetchErr.message ?? t("failedToLoadData"));
+        setIsUpdating(false);
+        return;
+      }
+
+      const existingKeys = new Set(cards.map((c) => `${c.front_text}\0${c.back_text}`));
+      const toAdd = (originalCards ?? []).filter(
+        (oc) => !existingKeys.has(`${oc.front_text}\0${oc.back_text}`)
+      );
+
+      if (toAdd.length === 0) {
+        setErrorModal(t("noNewCards"));
+        setIsUpdating(false);
+        return;
+      }
+
+      const cardRows = toAdd.map((c) => ({
+        deck_id: deck.deck_id,
+        card_type: c.card_type ?? "basic",
+        front_text: c.front_text,
+        back_text: c.back_text,
+        front_media_url: c.front_media_url,
+        back_media_url: c.back_media_url,
+        notes: c.notes,
+      }));
+      const { error: insertErr } = await supabase.from("cards").insert(cardRows);
+      if (insertErr) {
+        setErrorModal(insertErr.message ?? t("failedToLoadData"));
+        setIsUpdating(false);
+        return;
+      }
+      await loadData();
+    } catch (err) {
+      setErrorModal(err instanceof Error ? err.message : t("unexpectedError"));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   const handleDeleteCard = (card: Card) => {
     setCardToDelete(card);
@@ -231,29 +363,82 @@ export default function DeckDetailScreen() {
       </View>
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.button, styles.repeatButton]}
-          onPress={() => setShowCards((prev) => !prev)}
-          accessibilityRole="button"
-          accessibilityLabel={t("reviewCards")}
-        >
-          <Feather size={24} color="#fff" />
-          <Text style={styles.buttonText}>{t("reviewCards")}</Text>
-        </TouchableOpacity>
+        {isOwner && (
+          <>
+            <TouchableOpacity
+              style={[styles.button, styles.reviewButton]}
+              onPress={() => router.push(`/deck-review?id=${deck.deck_id}`)}
+              accessibilityRole="button"
+              accessibilityLabel={t("reviewCards")}
+            >
+              <Feather name="book-open" size={24} color="#fff" />
+              <Text style={styles.buttonText}>{t("reviewCards")}</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.button, styles.addButton]}
-          onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
-          accessibilityRole="button"
-          accessibilityLabel={t("addCard")}
-        >
-          <Feather name="plus" size={24} color="#fff" />
-          <Text style={styles.buttonText}>{t("addCard")}</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.studyButton]}
+              onPress={() => router.push(`/deck-study?id=${deck.deck_id}`)}
+              accessibilityRole="button"
+              accessibilityLabel={t("studying")}
+            >
+              <Feather name="trending-up" size={24} color="#fff" />
+              <Text style={styles.buttonText}>{t("studying")}</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {isOwner && (
+          <TouchableOpacity
+            style={[styles.button, styles.addButton]}
+            onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
+            accessibilityRole="button"
+            accessibilityLabel={t("addCard")}
+          >
+            <Feather name="plus" size={24} color="#fff" />
+            <Text style={styles.buttonText}>{t("addCard")}</Text>
+          </TouchableOpacity>
+        )}
+        {isOwner && isCopiedDeck && (
+          <TouchableOpacity
+            style={[styles.button, styles.updateButton, isUpdating && styles.updateButtonDisabled]}
+            onPress={handleUpdateFromOriginal}
+            disabled={isUpdating}
+            accessibilityRole="button"
+            accessibilityLabel={t("updateFromOriginal")}
+          >
+            <Feather name="refresh-cw" size={24} color="#fff" />
+            <Text style={styles.buttonText}>{isUpdating ? `${t("saving")}...` : t("updateFromOriginal")}</Text>
+          </TouchableOpacity>
+        )}
+        {isPublicFromOther && (
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.addToAccountButton,
+              (hasCopy || isCopying) && styles.addToAccountButtonDisabled,
+            ]}
+            onPress={handleAddToMyAccount}
+            disabled={hasCopy === true || isCopying}
+            accessibilityRole="button"
+            accessibilityLabel={hasCopy ? t("alreadyInCollection") : t("addToMyAccount")}
+          >
+            {isCopying ? (
+              <Text style={styles.buttonText}>{t("saving")}...</Text>
+            ) : hasCopy ? (
+              <>
+                <Feather name="check" size={24} color="#fff" />
+                <Text style={styles.buttonText}>{t("alreadyInCollection")}</Text>
+              </>
+            ) : (
+              <>
+                <Feather name="download" size={24} color="#fff" />
+                <Text style={styles.buttonText}>{t("addToMyAccount")}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
-      {showCards && (
-        <View style={styles.cardsListContainer}>
+      <View style={styles.cardsListContainer}>
           {cards.length === 0 ? (
             <Text style={styles.emptyCardsText}>{t("noCardsInDeck")}</Text>
           ) : (
@@ -261,35 +446,42 @@ export default function DeckDetailScreen() {
               <View key={card.card_id} style={[styles.cardItem, index % 2 === 0 && styles.cardItemAlt]}>
                 <View style={styles.cardAccent} />
                 <View style={styles.cardContent}>
+                  {card.front_media_url ? (
+                    <Image source={{ uri: card.front_media_url }} style={styles.cardMedia} resizeMode="contain" />
+                  ) : null}
                   <Text style={styles.cardFront}>{card.front_text}</Text>
+                  {card.back_media_url ? (
+                    <Image source={{ uri: card.back_media_url }} style={styles.cardMedia} resizeMode="contain" />
+                  ) : null}
                   <Text style={styles.cardBack}>{card.back_text}</Text>
                   {card.notes ? <Text style={styles.cardNotes}>{card.notes}</Text> : null}
                 </View>
-                <View style={styles.cardActions}>
-                  <TouchableOpacity
-                    style={[styles.cardActionButton, styles.cardEditButton]}
-                    onPress={() => handleEditCard(card)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t("editCard")}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="edit-2" size={18} color="#4255ff" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.cardActionButton, styles.cardDeleteButton]}
-                    onPress={() => handleDeleteCard(card)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t("deleteCard")}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="trash-2" size={18} color="#dc2626" />
-                  </TouchableOpacity>
-                </View>
+                {isOwner && (
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity
+                      style={[styles.cardActionButton, styles.cardEditButton]}
+                      onPress={() => handleEditCard(card)}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("editCard")}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="edit-2" size={18} color="#4255ff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.cardActionButton, styles.cardDeleteButton]}
+                      onPress={() => handleDeleteCard(card)}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("deleteCard")}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="trash-2" size={18} color="#dc2626" />
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             ))
           )}
         </View>
-      )}
     </ScrollView>
 
     <ConfirmModal
@@ -399,11 +591,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 2,
   },
-  repeatButton: {
+  reviewButton: {
+    backgroundColor: "#64B5F6",
+  },
+  studyButton: {
     backgroundColor: "#66BB6A",
   },
   addButton: {
     backgroundColor: "#64B5F6",
+  },
+  addToAccountButton: {
+    backgroundColor: "#8B5CF6",
+  },
+  updateButton: {
+    backgroundColor: "#0EA5E9",
+  },
+  updateButtonDisabled: {
+    opacity: 0.7,
+  },
+  addToAccountButtonDisabled: {
+    backgroundColor: "#9ca3af",
+    opacity: 0.9,
   },
   buttonText: {
     fontSize: 18,
@@ -452,6 +660,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 14,
     borderBottomLeftRadius: 14,
     opacity: 0.85,
+  },
+  cardMedia: {
+    width: "100%",
+    height: 120,
+    borderRadius: 8,
+    marginBottom: 8,
+    backgroundColor: "#f3f4f6",
   },
   cardFront: {
     fontSize: 18,

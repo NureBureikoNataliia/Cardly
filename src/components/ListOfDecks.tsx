@@ -21,6 +21,7 @@ export interface ListOfDecksProps {
   onEditDeck?: (deck: Deck) => void;
   onDeleteDeck?: (deck: Deck) => void;
   showPrivate?: boolean;
+  readOnly?: boolean;
 }
 
 function DeckCardInner({
@@ -30,6 +31,7 @@ function DeckCardInner({
   onPress,
   onEdit,
   onDelete,
+  readOnly,
   t,
 }: {
   item: Deck;
@@ -38,6 +40,7 @@ function DeckCardInner({
   onPress: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  readOnly?: boolean;
   t: (key: string) => string;
 }) {
   const [menuVisible, setMenuVisible] = useState(false);
@@ -92,17 +95,19 @@ function DeckCardInner({
             </Text>
           </View>
           <View style={styles.cardActions}>
-            <Pressable
-              ref={menuButtonRef}
-              onPress={(e) => {
-                e?.stopPropagation?.();
-                openMenu();
-              }}
-              style={styles.menuButton}
-              hitSlop={8}
-            >
-              <Feather name="more-vertical" size={20} color="#9ca3af" />
-            </Pressable>
+            {!readOnly && (
+              <Pressable
+                ref={menuButtonRef}
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  openMenu();
+                }}
+                style={styles.menuButton}
+                hitSlop={8}
+              >
+                <Feather name="more-vertical" size={20} color="#9ca3af" />
+              </Pressable>
+            )}
             <Feather name="chevron-right" size={20} color="#9ca3af" />
           </View>
         </View>
@@ -140,6 +145,7 @@ export function ListOfDecks({
   onEditDeck,
   onDeleteDeck,
   showPrivate = true,
+  readOnly = false,
 }: ListOfDecksProps) {
   const { t } = useLanguage();
   const data = React.useMemo(() => decks.filter((d) => showPrivate || d.is_public), [decks, showPrivate]);
@@ -156,6 +162,7 @@ export function ListOfDecks({
         onPress={() => onPressDeck?.(item)}
         onEdit={() => onEditDeck?.(item)}
         onDelete={() => onDeleteDeck?.(item)}
+        readOnly={readOnly}
         t={t}
       />
     );

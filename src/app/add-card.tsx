@@ -27,9 +27,13 @@ export default function AddCardScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [frontText, setFrontText] = useState('');
   const [backText, setBackText] = useState('');
+  const [frontImageUrl, setFrontImageUrl] = useState('');
+  const [backImageUrl, setBackImageUrl] = useState('');
   const [notes, setNotes] = useState('');
   const [initialFront, setInitialFront] = useState('');
   const [initialBack, setInitialBack] = useState('');
+  const [initialFrontImage, setInitialFrontImage] = useState('');
+  const [initialBackImage, setInitialBackImage] = useState('');
   const [initialNotes, setInitialNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,12 +71,18 @@ export default function AddCardScreen() {
         setDeck(deckData as Deck);
         const front = cardData?.front_text ?? '';
         const back = cardData?.back_text ?? '';
+        const frontImg = cardData?.front_media_url ?? '';
+        const backImg = cardData?.back_media_url ?? '';
         const notesVal = cardData?.notes ?? '';
         setFrontText(front);
         setBackText(back);
+        setFrontImageUrl(frontImg);
+        setBackImageUrl(backImg);
         setNotes(notesVal);
         setInitialFront(front);
         setInitialBack(back);
+        setInitialFrontImage(frontImg);
+        setInitialBackImage(backImg);
         setInitialNotes(notesVal);
       }
       setIsLoading(false);
@@ -118,12 +128,16 @@ export default function AddCardScreen() {
     setError(null);
 
     try {
+      const frontMedia = frontImageUrl.trim() || null;
+      const backMedia = backImageUrl.trim() || null;
       const { error: upsertError } = cardId
         ? await supabase
             .from('cards')
             .update({
               front_text: frontText.trim(),
               back_text: backText.trim(),
+              front_media_url: frontMedia,
+              back_media_url: backMedia,
               notes: notes.trim() || null,
               updated_at: new Date().toISOString(),
             })
@@ -135,6 +149,8 @@ export default function AddCardScreen() {
               card_type: 'basic',
               front_text: frontText.trim(),
               back_text: backText.trim(),
+              front_media_url: frontMedia,
+              back_media_url: backMedia,
               notes: notes.trim() || null,
             });
 
@@ -156,7 +172,8 @@ export default function AddCardScreen() {
   };
 
   const isValid = frontText.trim().length > 0 && backText.trim().length > 0;
-  const hasChanges = frontText !== initialFront || backText !== initialBack || notes !== initialNotes;
+  const hasChanges = frontText !== initialFront || backText !== initialBack
+    || frontImageUrl !== initialFrontImage || backImageUrl !== initialBackImage || notes !== initialNotes;
 
   return (
     <>
@@ -182,6 +199,18 @@ export default function AddCardScreen() {
           </View>
 
           <View style={styles.formGroup}>
+            <Text style={styles.label}>{t('frontImageUrl')}</Text>
+            <TextInput
+              style={[styles.input, styles.urlInput]}
+              placeholder="https://..."
+              placeholderTextColor="#999"
+              value={frontImageUrl}
+              onChangeText={setFrontImageUrl}
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
             <Text style={styles.label}>{t('back')}</Text>
             <TextInput
               style={styles.input}
@@ -191,6 +220,18 @@ export default function AddCardScreen() {
               onChangeText={setBackText}
               multiline
               textAlignVertical="top"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t('backImageUrl')}</Text>
+            <TextInput
+              style={[styles.input, styles.urlInput]}
+              placeholder="https://..."
+              placeholderTextColor="#999"
+              value={backImageUrl}
+              onChangeText={setBackImageUrl}
+              autoCapitalize="none"
             />
           </View>
 
@@ -302,6 +343,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
     minHeight: 100,
+  },
+  urlInput: {
+    minHeight: 44,
   },
   buttonContainer: {
     flexDirection: 'row',

@@ -9,6 +9,12 @@ export interface Card {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  // Spaced repetition (Anki/SM-2)
+  next_review_at?: string | null;
+  interval_days?: number;
+  ease_factor?: number;
+  repetitions?: number;
+  last_reviewed_at?: string | null;
 }
 
 // Початково масив порожній – картки приходять з бекенду / створюються користувачем

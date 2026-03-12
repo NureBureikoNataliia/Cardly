@@ -73,6 +73,11 @@ export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
           <Text style={styles.itemText}>{t('yourDecks')}</Text>
         </Pressable>
 
+        <Pressable style={styles.item} onPress={() => navigateTo('/publicdecks')} accessibilityRole="button">
+          <Feather name="globe" size={18} color="#222" />
+          <Text style={styles.itemText}>{t('publicDecks')}</Text>
+        </Pressable>
+
         <Pressable style={styles.item} onPress={() => navigateTo('/statistics')} accessibilityRole="button">
           <Feather name="bar-chart-2" size={18} color="#222" />
           <Text style={styles.itemText}>{t('statistics')}</Text>
