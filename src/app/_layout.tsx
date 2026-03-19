@@ -5,11 +5,11 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
-import { Pressable, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 
-// Импортируем контекст авторизации и хук темы
 import { useColorScheme } from '@/src/components/useColorScheme';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
+import Sidebar from '@/src/components/Sidebar';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { LanguageProvider } from '@/src/contexts/LanguageContext';
 import { StudySettingsProvider } from '@/src/contexts/StudySettingsContext';
@@ -59,27 +59,27 @@ export default function RootLayout() {
   );
 }
 
+const isWeb = Platform.OS === 'web';
+
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const { session, loading } = useAuth(); // Предполагаем, что AuthContext возвращает сессию и статус загрузки
+  const { session, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    // Если сессия еще загружается, ничего не делаем
     if (loading) return;
-
-    // Проверяем, находится ли пользователь в группе (auth)
     const inAuthGroup = segments[0] === 'auth';
-
     if (!session && !inAuthGroup) {
-      // Если пользователь не авторизован и НЕ в папке auth — отправляем на логин
       router.replace('/auth/login');
     } else if (session && inAuthGroup) {
-      // Если пользователь авторизован и находится в папке auth — отправляем в основное приложение
       router.replace('/(tabs)');
     }
   }, [session, loading, segments]);
+
+  const inAuthGroup = segments[0] === 'auth';
+  // Show the sidebar on web only when the user is authenticated and NOT on auth screens
+  const showSidebar = isWeb && !!session && !loading && !inAuthGroup;
 
   const sharedHeaderRight = () => (
     <View style={{ marginRight: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -97,94 +97,56 @@ function RootLayoutNav() {
     </View>
   );
 
+  const stackNav = (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: '#fff' },
+        headerShadowVisible: true,
+        headerTintColor: '#1f2937',
+        headerTitleStyle: { fontSize: 18, fontWeight: '600' },
+        headerRight: sharedHeaderRight,
+        animation: 'slide_from_right',
+      }}
+    >
+      {/* Auth — without header */}
+      <Stack.Screen name="auth/login"  options={{ headerShown: false, animation: 'fade' }} />
+      <Stack.Screen name="auth/signup" options={{ headerShown: false, animation: 'fade' }} />
+
+      {/* Tabs — own header inside */}
+      <Stack.Screen name="(tabs)"      options={{ headerShown: false }} />
+
+      <Stack.Screen name="deck-detail"  options={{ headerShown: true }} />
+      <Stack.Screen name="publicdecks"  options={{ headerShown: true }} />
+      <Stack.Screen name="deck-review"  options={{ headerShown: true }} />
+      <Stack.Screen name="deck-study"   options={{ headerShown: true }} />
+      <Stack.Screen name="settings"     options={{ headerShown: true }} />
+      <Stack.Screen name="add-deck"     options={{ headerShown: true }} />
+      <Stack.Screen name="add-card"     options={{ headerShown: true }} />
+      <Stack.Screen name="statistics"   options={{ headerShown: true }} />
+      <Stack.Screen name="help"         options={{ headerShown: true }} />
+
+      {/* Modal — no headerRight buttons */}
+      <Stack.Screen
+        name="modal"
+        options={{ presentation: 'modal', title: 'Info', headerRight: undefined }}
+      />
+    </Stack>
+  );
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: '#fff' },
-          headerShadowVisible: true,
-          headerTintColor: '#1f2937',
-          headerTitleStyle: { fontSize: 18, fontWeight: '600' },
-          headerRight: sharedHeaderRight,
-          animation: 'slide_from_right',
-        }}
-      >
-        {/* Auth — без хедера */}
-        <Stack.Screen
-          name="auth/login"
-          options={{ headerShown: false, animation: 'fade' }}
-        />
-        <Stack.Screen
-          name="auth/signup"
-          options={{ headerShown: false, animation: 'fade' }}
-        />
-
-        {/* Tabs — свій хедер всередині */}
-        <Stack.Screen
-          name="(tabs)"
-          options={{ headerShown: false }}
-        />
-
-        {/* Деталі дошки */}
-        <Stack.Screen
-          name="deck-detail"
-          options={{ headerShown: true }}
-        />
-
-        {/* Публічні дошки */}
-        <Stack.Screen
-          name="publicdecks"
-          options={{ headerShown: true }}
-        />
-
-        {/* Огляд карток */}
-        <Stack.Screen
-          name="deck-review"
-          options={{ headerShown: true }}
-        />
-
-        {/* Вивчення */}
-        <Stack.Screen
-          name="deck-study"
-          options={{ headerShown: true }}
-        />
-
-        {/* Налаштування */}
-        <Stack.Screen
-          name="settings"
-          options={{ headerShown: true }}
-        />
-
-        {/* Додати/редагувати дошку */}
-        <Stack.Screen
-          name="add-deck"
-          options={{ headerShown: true }}
-        />
-
-        {/* Додати/редагувати картку */}
-        <Stack.Screen
-          name="add-card"
-          options={{ headerShown: true }}
-        />
-
-        {/* Статистика */}
-        <Stack.Screen
-          name="statistics"
-          options={{ headerShown: true }}
-        />
-
-        {/* Допомога */}
-        <Stack.Screen
-          name="help"
-          options={{ headerShown: true }}
-        />
-
-        {/* Модальне вікно — без кнопок */}
-        <Stack.Screen
-          name="modal"
-          options={{ presentation: 'modal', title: 'Info', headerRight: undefined }}
-        />
-      </Stack>
+      {showSidebar ? (
+        // Web + authenticated: flex row [Sidebar | content]
+        <View style={{ flex: 1, flexDirection: 'row' }}>
+          <Sidebar />
+          <View style={{ flex: 1, overflow: 'hidden' }}>
+            {stackNav}
+          </View>
+        </View>
+      ) : (
+        // Mobile or not-authenticated: just the stack
+        stackNav
+      )}
     </ThemeProvider>
   );
 }
