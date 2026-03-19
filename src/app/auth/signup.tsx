@@ -16,6 +16,7 @@ import { BookOpen } from 'lucide-react-native';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
 
 export default function SignUpScreen() {
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -26,7 +27,7 @@ export default function SignUpScreen() {
   const router = useRouter();
 
   const handleSignUp = async () => {
-    if (!email || !password || !confirmPassword) {
+    if (!username.trim() || !email || !password || !confirmPassword) {
       setError(t('fillAllFields'));
       return;
     }
@@ -44,7 +45,7 @@ export default function SignUpScreen() {
     setLoading(true);
     setError('');
 
-    const { error } = await signUp(email, password);
+    const { error } = await signUp(email, password, username.trim());
 
     if (error) {
       setError(error.message);
@@ -70,6 +71,15 @@ export default function SignUpScreen() {
         </View>
 
         <View style={styles.form}>
+          <TextInput
+            style={styles.input}
+            placeholder={t('username')}
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            editable={!loading}
+          />
+
           <TextInput
             style={styles.input}
             placeholder={t('email')}

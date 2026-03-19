@@ -5,9 +5,11 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
+import { Pressable, View } from 'react-native';
 
 // Импортируем контекст авторизации и хук темы
 import { useColorScheme } from '@/src/components/useColorScheme';
+import { LanguageDropdown } from '@/src/components/LanguageDropdown';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { LanguageProvider } from '@/src/contexts/LanguageContext';
 import { StudySettingsProvider } from '@/src/contexts/StudySettingsContext';
@@ -141,6 +143,29 @@ function RootLayoutNav() {
           options={{
             headerShown: true,
             animation: 'slide_from_right',
+          }}
+        />
+
+        <Stack.Screen
+          name="settings"
+          options={{
+            headerShown: true,
+            animation: 'slide_from_right',
+            headerRight: () => (
+              <View style={{ marginRight: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <LanguageDropdown />
+                <Pressable onPress={() => router.push('/modal')}>
+                  {({ pressed }) => (
+                    <FontAwesome
+                      name="info-circle"
+                      size={25}
+                      color="#111827"
+                      style={{ opacity: pressed ? 0.5 : 1 }}
+                    />
+                  )}
+                </Pressable>
+              </View>
+            ),
           }}
         />
 

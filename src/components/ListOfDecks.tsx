@@ -22,6 +22,7 @@ export interface ListOfDecksProps {
   onDeleteDeck?: (deck: Deck) => void;
   showPrivate?: boolean;
   readOnly?: boolean;
+  listHeaderComponent?: React.ReactElement | null;
 }
 
 function DeckCardInner({
@@ -146,6 +147,7 @@ export function ListOfDecks({
   onDeleteDeck,
   showPrivate = true,
   readOnly = false,
+  listHeaderComponent = null,
 }: ListOfDecksProps) {
   const { t } = useLanguage();
   const data = React.useMemo(() => decks.filter((d) => showPrivate || d.is_public), [decks, showPrivate]);
@@ -173,6 +175,7 @@ export function ListOfDecks({
       data={data}
       keyExtractor={(d) => String(d.deck_id)}
       renderItem={renderItem}
+      ListHeaderComponent={listHeaderComponent}
       style={styles.list}
       contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
