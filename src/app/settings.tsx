@@ -79,16 +79,10 @@ export default function SettingsScreen() {
   };
 
   const handleSaveAvatar = async () => {
-    if (!avatarUrl.trim()) {
-      setError(t('avatarUrlRequired'));
-      setMessage(null);
-      return;
-    }
-
     setSavingAvatar(true);
     setError(null);
     setMessage(null);
-    const { error: updateError } = await updateMetadata({ avatar_url: avatarUrl.trim() });
+    const { error: updateError } = await updateMetadata({ avatar_url: avatarUrl.trim() || null });
     setSavingAvatar(false);
 
     if (updateError) {
