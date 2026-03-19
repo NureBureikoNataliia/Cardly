@@ -51,20 +51,9 @@ export default function DeckReviewScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerShown: true,
       title: t("reviewCards"),
-      headerStyle: { backgroundColor: "#fff" },
-      headerShadowVisible: true,
-      headerTintColor: "#1f2937",
-      headerTitleStyle: { fontSize: 18, fontWeight: "600" },
-      headerLeft: () => (
-        <Pressable onPress={() => router.back()} style={{ marginLeft: 8, padding: 4 }}>
-          <Feather name="arrow-left" size={24} color="#1f2937" />
-        </Pressable>
-      ),
-      tabBarStyle: { display: "none" },
     });
-  }, [navigation, router, t]);
+  }, [navigation, t]);
 
   const currentCard = cards[currentIndex];
   const total = cards.length;

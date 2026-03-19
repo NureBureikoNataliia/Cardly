@@ -348,6 +348,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111827',
     paddingVertical: 0,
+    // @ts-ignore
+    outlineWidth: 0,
+    outlineStyle: 'none',
   },
   controlBlock: {
     gap: 6,

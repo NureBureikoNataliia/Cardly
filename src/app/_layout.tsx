@@ -81,101 +81,108 @@ function RootLayoutNav() {
     }
   }, [session, loading, segments]);
 
+  const sharedHeaderRight = () => (
+    <View style={{ marginRight: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <LanguageDropdown />
+      <Pressable onPress={() => router.push('/modal')}>
+        {({ pressed }) => (
+          <FontAwesome
+            name="info-circle"
+            size={25}
+            color="#111827"
+            style={{ opacity: pressed ? 0.5 : 1 }}
+          />
+        )}
+      </Pressable>
+    </View>
+  );
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        {/* Экран логина */}
-        <Stack.Screen 
-          name="auth/login" 
-          options={{ 
-            headerShown: false,
-            animation: 'fade' 
-          }} 
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: '#fff' },
+          headerShadowVisible: true,
+          headerTintColor: '#1f2937',
+          headerTitleStyle: { fontSize: 18, fontWeight: '600' },
+          headerRight: sharedHeaderRight,
+          animation: 'slide_from_right',
+        }}
+      >
+        {/* Auth — без хедера */}
+        <Stack.Screen
+          name="auth/login"
+          options={{ headerShown: false, animation: 'fade' }}
         />
-        
-        {/* Экран регистрации */}
-        <Stack.Screen 
-          name="auth/signup" 
-          options={{ 
-            headerShown: false,
-            animation: 'fade' 
-          }} 
+        <Stack.Screen
+          name="auth/signup"
+          options={{ headerShown: false, animation: 'fade' }}
         />
 
-        {/* Основной интерфейс с табами */}
-        <Stack.Screen 
-          name="(tabs)" 
-          options={{ 
-            headerShown: false 
-          }} 
+        {/* Tabs — свій хедер всередині */}
+        <Stack.Screen
+          name="(tabs)"
+          options={{ headerShown: false }}
         />
 
         {/* Деталі дошки */}
         <Stack.Screen
           name="deck-detail"
-          options={{
-            headerShown: true,
-            animation: 'slide_from_right',
-          }}
+          options={{ headerShown: true }}
         />
 
         {/* Публічні дошки */}
         <Stack.Screen
           name="publicdecks"
-          options={{
-            headerShown: true,
-            animation: 'slide_from_right',
-          }}
+          options={{ headerShown: true }}
         />
 
-        {/* Огляд карток покроково */}
+        {/* Огляд карток */}
         <Stack.Screen
           name="deck-review"
-          options={{
-            headerShown: true,
-            animation: 'slide_from_right',
-          }}
+          options={{ headerShown: true }}
         />
 
-        {/* Вивчення з алгоритмом */}
+        {/* Вивчення */}
         <Stack.Screen
           name="deck-study"
-          options={{
-            headerShown: true,
-            animation: 'slide_from_right',
-          }}
+          options={{ headerShown: true }}
         />
 
+        {/* Налаштування */}
         <Stack.Screen
           name="settings"
-          options={{
-            headerShown: true,
-            animation: 'slide_from_right',
-            headerRight: () => (
-              <View style={{ marginRight: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <LanguageDropdown />
-                <Pressable onPress={() => router.push('/modal')}>
-                  {({ pressed }) => (
-                    <FontAwesome
-                      name="info-circle"
-                      size={25}
-                      color="#111827"
-                      style={{ opacity: pressed ? 0.5 : 1 }}
-                    />
-                  )}
-                </Pressable>
-              </View>
-            ),
-          }}
+          options={{ headerShown: true }}
         />
 
-        {/* Модальное окно */}
-        <Stack.Screen 
-          name="modal" 
-          options={{ 
-            presentation: 'modal',
-            title: 'Info'
-          }} 
+        {/* Додати/редагувати дошку */}
+        <Stack.Screen
+          name="add-deck"
+          options={{ headerShown: true }}
+        />
+
+        {/* Додати/редагувати картку */}
+        <Stack.Screen
+          name="add-card"
+          options={{ headerShown: true }}
+        />
+
+        {/* Статистика */}
+        <Stack.Screen
+          name="statistics"
+          options={{ headerShown: true }}
+        />
+
+        {/* Допомога */}
+        <Stack.Screen
+          name="help"
+          options={{ headerShown: true }}
+        />
+
+        {/* Модальне вікно — без кнопок */}
+        <Stack.Screen
+          name="modal"
+          options={{ presentation: 'modal', title: 'Info', headerRight: undefined }}
         />
       </Stack>
     </ThemeProvider>
