@@ -124,7 +124,7 @@ export default function MainScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <>
+        <View style={styles.contentWrapper}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t('yourDecks')}</Text>
             <Text style={styles.sectionCount}>{decks.length} {decks.length !== 1 ? t('decks') : t('deck')}</Text>
@@ -136,7 +136,7 @@ export default function MainScreen() {
             onEditDeck={handleEditDeck}
             onDeleteDeck={handleDeleteDeck}
           />
-        </>
+        </View>
       )}
 
       {decks.length > 0 && (
@@ -179,6 +179,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f6f7fb',
+  },
+  contentWrapper: {
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+    flex: 1,
   },
   center: {
     flex: 1,

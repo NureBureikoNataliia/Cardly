@@ -125,20 +125,15 @@ export default function PublicDecksScreen() {
           <Text style={styles.emptySubtitle}>{t("noPublicDecksHint")}</Text>
         </View>
       ) : (
-        <>
+        <View style={styles.contentWrapper}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t("publicDecks")}</Text>
             <Text style={styles.sectionCount}>
               {decks.length} {decks.length !== 1 ? t("decks") : t("deck")}
             </Text>
           </View>
-          <ListOfDecks
-            decks={decks}
-            cardCounts={cardCounts}
-            onPressDeck={handlePressDeck}
-            readOnly
-          />
-        </>
+          <ListOfDecks decks={decks} cardCounts={cardCounts} onPressDeck={handlePressDeck} readOnly />
+        </View>
       )}
     </View>
   );
@@ -148,6 +143,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f6f7fb",
+  },
+  contentWrapper: {
+    width: "100%",
+    maxWidth: 640,
+    alignSelf: "center",
+    flex: 1,
   },
   center: {
     flex: 1,

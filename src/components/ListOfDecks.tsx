@@ -169,20 +169,28 @@ export function ListOfDecks({
   };
 
   return (
-    <FlatList
-      data={data}
-      keyExtractor={(d) => String(d.deck_id)}
-      renderItem={renderItem}
-      style={styles.list}
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-    />
+    <View style={styles.listWrapper}>
+      <FlatList
+        data={data}
+        keyExtractor={(d) => String(d.deck_id)}
+        renderItem={renderItem}
+        style={styles.list}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      />
+    </View>
   );
 }
 
 export default ListOfDecks;
 
 const styles = StyleSheet.create({
+  listWrapper: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+  },
   container: {
     paddingHorizontal: 16,
     paddingTop: 8,
