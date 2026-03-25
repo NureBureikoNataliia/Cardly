@@ -26,6 +26,8 @@ export default function PublicDecksScreen() {
   const { t } = useLanguage();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cardCounts, setCardCounts] = useState<Record<string, number>>({});
+  const [ratingByDeckId, setRatingByDeckId] = useState<Record<string, number>>({});
+  const [ratingCountByDeckId, setRatingCountByDeckId] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +38,8 @@ export default function PublicDecksScreen() {
     if (!user?.id) {
       setDecks([]);
       setCardCounts({});
+      setRatingByDeckId({});
+      setRatingCountByDeckId({});
       setLoading(false);
       return;
     }
@@ -62,6 +66,8 @@ export default function PublicDecksScreen() {
 
     if (deckList.length === 0) {
       setCardCounts({});
+      setRatingByDeckId({});
+      setRatingCountByDeckId({});
       setLoading(false);
       return;
     }
@@ -78,6 +84,34 @@ export default function PublicDecksScreen() {
       counts[did] = (counts[did] ?? 0) + 1;
     });
     setCardCounts(counts);
+
+    const { data: ratingsData, error: ratingsError } = await supabase
+      .from("pack_ratings")
+      .select("deck_id, rating")
+      .in("deck_id", deckIds);
+
+    if (!ratingsError && ratingsData) {
+      const sumByDeck: Record<string, number> = {};
+      const countByDeck: Record<string, number> = {};
+
+      for (const r of ratingsData) {
+        const did = r.deck_id as string;
+        const rating = r.rating as number;
+        sumByDeck[did] = (sumByDeck[did] ?? 0) + rating;
+        countByDeck[did] = (countByDeck[did] ?? 0) + 1;
+      }
+
+      const avgByDeck: Record<string, number> = {};
+      for (const did of Object.keys(countByDeck)) {
+        avgByDeck[did] = sumByDeck[did] / countByDeck[did];
+      }
+
+      setRatingByDeckId(avgByDeck);
+      setRatingCountByDeckId(countByDeck);
+    } else {
+      setRatingByDeckId({});
+      setRatingCountByDeckId({});
+    }
     setLoading(false);
   }, [user?.id, t]);
 
@@ -193,6 +227,8 @@ export default function PublicDecksScreen() {
         <ListOfDecks
           decks={filtered}
           cardCounts={cardCounts}
+          ratingByDeckId={ratingByDeckId}
+          ratingCountByDeckId={ratingCountByDeckId}
           onPressDeck={handlePressDeck}
           readOnly
           listHeaderComponent={listHeader}
@@ -265,9 +301,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#111827",
     paddingVertical: 0,
-    // @ts-ignore
-    outlineWidth: 0,
-    outlineStyle: "none",
   },
   controlBlock: {
     gap: 6,

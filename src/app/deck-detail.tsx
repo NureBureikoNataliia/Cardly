@@ -4,14 +4,16 @@ import { Text, View } from "@/src/components/Themed";
 import Feather from "@expo/vector-icons/Feather";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
+  type LayoutChangeEvent,
   Pressable,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   useColorScheme,
+  useWindowDimensions,
 } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -21,6 +23,14 @@ import { useLanguage } from "@/src/contexts/LanguageContext";
 
 const scrollPositions: Record<string, number> = {};
 
+const CARD_GRID_GUTTER = 10;
+
+function gridColumnsForWidth(w: number): number {
+  if (w >= 960) return 4;
+  if (w >= 600) return 3;
+  return 2;
+}
+
 export default function DeckDetailScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -28,6 +38,8 @@ export default function DeckDetailScreen() {
   const params = useLocalSearchParams();
   const deckId = typeof params.id === "string" ? params.id : null;
   const { t } = useLanguage();
+  const { width: windowWidth } = useWindowDimensions();
+  const [cardsGridWidth, setCardsGridWidth] = useState(0);
 
   const { user } = useAuth();
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -183,6 +195,27 @@ export default function DeckDetailScreen() {
 
   const isCopiedDeck = Boolean(deck?.original_deck_id);
 
+  const onCardsGridLayout = useCallback((e: LayoutChangeEvent) => {
+    setCardsGridWidth(e.nativeEvent.layout.width);
+  }, []);
+
+  const gridColumns = useMemo(() => {
+    const w = cardsGridWidth > 0 ? cardsGridWidth : Math.max(320, windowWidth - 32);
+    return gridColumnsForWidth(w);
+  }, [cardsGridWidth, windowWidth]);
+
+  /** Equal-width tiles that grow to fill the row (space-between distributes leftover). */
+  const cardFlexStyle = useMemo(() => {
+    const n = gridColumns;
+    return {
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: 0,
+      minWidth: `${100 / n - 1.5}%` as const,
+      maxWidth: `${100 / n}%` as const,
+    };
+  }, [gridColumns]);
+
   const handleUpdateFromOriginal = async () => {
     if (!deck || !deck.original_deck_id || isUpdating) return;
     setIsUpdating(true);
@@ -318,15 +351,13 @@ export default function DeckDetailScreen() {
       )}
 
       <View style={styles.statsCard}>
-        <View style={styles.statRow}>
+        <View style={styles.statCell}>
           <Text style={styles.statLabel}>{t("dueToday")}</Text>
           <Text style={styles.statNumber}>{dueToday}</Text>
         </View>
-        <View style={[styles.divider]} />
-        <View style={styles.statRow}>
-          <Text style={[styles.statLabel]}>
-            {t("totalCards")}
-          </Text>
+        <View style={styles.statDividerVertical} />
+        <View style={styles.statCell}>
+          <Text style={styles.statLabel}>{t("totalCards")}</Text>
           <Text style={styles.statNumber}>{totalCards}</Text>
         </View>
       </View>
@@ -340,7 +371,7 @@ export default function DeckDetailScreen() {
               accessibilityRole="button"
               accessibilityLabel={t("reviewCards")}
             >
-              <Feather name="book-open" size={24} color="#fff" />
+              <Feather name="book-open" size={22} color="#fff" />
               <Text style={styles.buttonText}>{t("reviewCards")}</Text>
             </TouchableOpacity>
 
@@ -350,7 +381,7 @@ export default function DeckDetailScreen() {
               accessibilityRole="button"
               accessibilityLabel={t("studying")}
             >
-              <Feather name="trending-up" size={24} color="#fff" />
+              <Feather name="trending-up" size={22} color="#fff" />
               <Text style={styles.buttonText}>{t("studying")}</Text>
             </TouchableOpacity>
           </>
@@ -362,7 +393,7 @@ export default function DeckDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel={t("addCard")}
           >
-            <Feather name="plus" size={24} color="#fff" />
+            <Feather name="plus" size={22} color="#fff" />
             <Text style={styles.buttonText}>{t("addCard")}</Text>
           </TouchableOpacity>
         )}
@@ -374,8 +405,21 @@ export default function DeckDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel={t("updateFromOriginal")}
           >
-            <Feather name="refresh-cw" size={24} color="#fff" />
-            <Text style={styles.buttonText}>{isUpdating ? `${t("saving")}...` : t("updateFromOriginal")}</Text>
+            <Feather name="refresh-cw" size={22} color="#fff" />
+            <Text style={styles.buttonText}>
+              {isUpdating ? `${t("saving")}...` : t("updateFromOriginal")}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {user && (
+          <TouchableOpacity
+            style={[styles.button, styles.rateButton]}
+            onPress={() => router.push(`/deck-rate?id=${deck.deck_id}`)}
+            accessibilityRole="button"
+            accessibilityLabel={t("rateComment")}
+          >
+            <Feather name="star" size={22} color="#fff" />
+            <Text style={styles.buttonText}>{t("rateComment")}</Text>
           </TouchableOpacity>
         )}
         {isPublicFromOther && (
@@ -394,12 +438,12 @@ export default function DeckDetailScreen() {
               <Text style={styles.buttonText}>{t("saving")}...</Text>
             ) : hasCopy ? (
               <>
-                <Feather name="check" size={24} color="#fff" />
+                <Feather name="check" size={22} color="#fff" />
                 <Text style={styles.buttonText}>{t("alreadyInCollection")}</Text>
               </>
             ) : (
               <>
-                <Feather name="download" size={24} color="#fff" />
+                <Feather name="download" size={22} color="#fff" />
                 <Text style={styles.buttonText}>{t("addToMyAccount")}</Text>
               </>
             )}
@@ -407,46 +451,71 @@ export default function DeckDetailScreen() {
         )}
       </View>
 
-      <View style={styles.cardsListContainer}>
+      <View style={styles.cardsListContainer} onLayout={onCardsGridLayout}>
           {cards.length === 0 ? (
             <Text style={styles.emptyCardsText}>{t("noCardsInDeck")}</Text>
           ) : (
             cards.map((card, index) => (
-              <View key={card.card_id} style={[styles.cardItem, index % 2 === 0 && styles.cardItemAlt]}>
+              <View
+                key={card.card_id}
+                style={[
+                  styles.cardItem,
+                  cardFlexStyle,
+                  index % 2 === 0 && styles.cardItemAlt,
+                ]}
+              >
                 <View style={styles.cardAccent} />
-                <View style={styles.cardContent}>
-                  {card.front_media_url ? (
-                    <Image source={{ uri: card.front_media_url }} style={styles.cardMedia} resizeMode="contain" />
-                  ) : null}
-                  <Text style={styles.cardFront}>{card.front_text}</Text>
-                  {card.back_media_url ? (
-                    <Image source={{ uri: card.back_media_url }} style={styles.cardMedia} resizeMode="contain" />
-                  ) : null}
-                  <Text style={styles.cardBack}>{card.back_text}</Text>
-                  {card.notes ? <Text style={styles.cardNotes}>{card.notes}</Text> : null}
-                </View>
-                {isOwner && (
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={[styles.cardActionButton, styles.cardEditButton]}
-                      onPress={() => handleEditCard(card)}
-                      accessibilityRole="button"
-                      accessibilityLabel={t("editCard")}
-                      activeOpacity={0.7}
-                    >
-                      <Feather name="edit-2" size={18} color="#4255ff" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.cardActionButton, styles.cardDeleteButton]}
-                      onPress={() => handleDeleteCard(card)}
-                      accessibilityRole="button"
-                      accessibilityLabel={t("deleteCard")}
-                      activeOpacity={0.7}
-                    >
-                      <Feather name="trash-2" size={18} color="#dc2626" />
-                    </TouchableOpacity>
+                <View style={styles.cardItemInner}>
+                  <View style={styles.cardContent}>
+                    {card.front_media_url ? (
+                      <Image
+                        source={{ uri: card.front_media_url }}
+                        style={[styles.cardMedia, gridColumns >= 3 && styles.cardMediaCompact]}
+                        resizeMode="contain"
+                      />
+                    ) : null}
+                    <Text style={[styles.cardFront, gridColumns >= 3 && styles.cardFrontCompact]} numberOfLines={4}>
+                      {card.front_text}
+                    </Text>
+                    {card.back_media_url ? (
+                      <Image
+                        source={{ uri: card.back_media_url }}
+                        style={[styles.cardMedia, gridColumns >= 3 && styles.cardMediaCompact]}
+                        resizeMode="contain"
+                      />
+                    ) : null}
+                    <Text style={[styles.cardBack, gridColumns >= 3 && styles.cardBackCompact]} numberOfLines={4}>
+                      {card.back_text}
+                    </Text>
+                    {card.notes ? (
+                      <Text style={styles.cardNotes} numberOfLines={2}>
+                        {card.notes}
+                      </Text>
+                    ) : null}
                   </View>
-                )}
+                  {isOwner && (
+                    <View style={styles.cardActions}>
+                      <TouchableOpacity
+                        style={[styles.cardActionButton, styles.cardEditButton]}
+                        onPress={() => handleEditCard(card)}
+                        accessibilityRole="button"
+                        accessibilityLabel={t("editCard")}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="edit-2" size={16} color="#4255ff" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.cardActionButton, styles.cardDeleteButton]}
+                        onPress={() => handleDeleteCard(card)}
+                        accessibilityRole="button"
+                        accessibilityLabel={t("deleteCard")}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="trash-2" size={16} color="#dc2626" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               </View>
             ))
           )}
@@ -481,10 +550,13 @@ export default function DeckDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: "100%",
     backgroundColor: "#f3f4f6",
   },
   contentContainer: {
-    alignItems: "center",
+    alignItems: "stretch",
+    alignSelf: "stretch",
+    width: "100%",
     paddingBottom: 24,
   },
   deckImage: {
@@ -493,6 +565,7 @@ const styles = StyleSheet.create({
   },
   deckImageWrapper: {
     width: "100%",
+    alignSelf: "stretch",
   },
   deckTitle: {
     fontSize: 28,
@@ -512,48 +585,74 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   statsCard: {
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 32,
-    width: "80%",
-    maxWidth: 280,
-    backgroundColor: "transparent",
-  },
-  statRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-    backgroundColor: "transparent",
+    alignItems: "stretch",
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    marginBottom: 24,
+    width: "100%",
+    maxWidth: 400,
+    alignSelf: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  divider: {
-    height: 1,
-    marginVertical: 8,
-    backgroundColor: "#ccc",
+  statCell: {
+    flex: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+  },
+  statDividerVertical: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "#e5e7eb",
+    marginVertical: 4,
   },
   statNumber: {
-    fontSize: 16,
-    fontWeight: "bold",
-     backgroundColor: "transparent",
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
   },
   statLabel: {
-    fontSize: 14,
-    opacity: 0.7,
-     backgroundColor: "transparent",
+    fontSize: 13,
+    opacity: 0.65,
+    color: "#374151",
+    textAlign: "center",
   },
   buttonContainer: {
-    gap: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    alignContent: "flex-start",
+    alignSelf: "stretch",
     paddingHorizontal: 16,
     width: "100%",
+    rowGap: 12,
+    marginBottom: 8,
   },
   button: {
     flexDirection: "row",
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "48%",
+    minWidth: "47%",
+    maxWidth: "48%",
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    gap: 8,
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -562,6 +661,9 @@ const styles = StyleSheet.create({
   },
   reviewButton: {
     backgroundColor: "#64B5F6",
+  },
+  rateButton: {
+    backgroundColor: "#F59E0B",
   },
   studyButton: {
     backgroundColor: "#66BB6A",
@@ -583,36 +685,49 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   buttonText: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: "600",
     color: "#fff",
+    textAlign: "center",
+    flexShrink: 1,
   },
   cardsListContainer: {
     width: "100%",
+    alignSelf: "stretch",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignContent: "flex-start",
+    justifyContent: "space-between",
+    rowGap: CARD_GRID_GUTTER,
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 24,
-    gap: 14,
   },
   emptyCardsText: {
     textAlign: "center",
     opacity: 0.7,
+    width: "100%",
   },
   cardItem: {
     position: "relative",
-    padding: 18,
-    paddingLeft: 22,
+    paddingVertical: 12,
+    paddingRight: 10,
+    paddingLeft: 14,
     borderRadius: 14,
     backgroundColor: "#fff",
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+    flexDirection: "column",
+    alignItems: "stretch",
     overflow: "hidden",
     elevation: 3,
     shadowColor: "#4255ff",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
+  },
+  cardItemInner: {
+    flexDirection: "column",
+    flex: 1,
+    minHeight: 0,
   },
   cardItemAlt: {
     backgroundColor: "#fafbff",
@@ -637,12 +752,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     backgroundColor: "#f3f4f6",
   },
+  cardMediaCompact: {
+    height: 72,
+  },
   cardFront: {
     fontSize: 18,
     fontWeight: "700",
     color: "#1f2937",
     marginBottom: 8,
     letterSpacing: 0.2,
+  },
+  cardFrontCompact: {
+    fontSize: 15,
+    marginBottom: 6,
   },
   cardBack: {
     fontSize: 16,
@@ -651,6 +773,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     lineHeight: 22,
   },
+  cardBackCompact: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
   cardNotes: {
     fontSize: 13,
     color: "#9ca3af",
@@ -658,18 +784,23 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   cardContent: {
-    flex: 1,
-    paddingRight: 12,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
     paddingLeft: 4,
+    paddingRight: 4,
   },
   cardActions: {
     flexDirection: "row",
     gap: 6,
+    alignSelf: "flex-end",
+    marginTop: 10,
+    paddingTop: 4,
   },
   cardActionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#f3f4f6",

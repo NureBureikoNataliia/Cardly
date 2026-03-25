@@ -22,6 +22,8 @@ export default function MainScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [cardCounts, setCardCounts] = useState<Record<string, number>>({});
+  const [ratingByDeckId, setRatingByDeckId] = useState<Record<string, number>>({});
+  const [ratingCountByDeckId, setRatingCountByDeckId] = useState<Record<string, number>>({});
   const [deckToDelete, setDeckToDelete] = useState<Deck | null>(null);
   const [errorModal, setErrorModal] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,6 +35,8 @@ export default function MainScreen() {
     if (!user) {
       setDecks([]);
       setCardCounts({});
+      setRatingByDeckId({});
+      setRatingCountByDeckId({});
       setLoading(false);
       return;
     }
@@ -51,9 +55,17 @@ export default function MainScreen() {
 
     if (decksError) {
       setError('Failed to load decks');
-    } else if (decksData) {
-      setDecks(decksData as Deck[]);
+      setDecks([]);
+      setCardCounts({});
+      setRatingByDeckId({});
+      setRatingCountByDeckId({});
+      setLoading(false);
+      return;
     }
+
+    const deckList = (decksData ?? []) as Deck[];
+    const deckIds = deckList.map((d) => d.deck_id);
+    setDecks(deckList);
 
     const counts: Record<string, number> = {};
     if (cardsData) {
@@ -63,6 +75,39 @@ export default function MainScreen() {
       }
     }
     setCardCounts(counts);
+
+    if (deckIds.length > 0) {
+      const { data: ratingsData, error: ratingsError } = await supabase
+        .from('pack_ratings')
+        .select('deck_id, rating')
+        .in('deck_id', deckIds);
+
+      if (!ratingsError && ratingsData) {
+        const sumByDeck: Record<string, number> = {};
+        const countByDeck: Record<string, number> = {};
+
+        for (const r of ratingsData) {
+          const did = r.deck_id as string;
+          const rating = r.rating as number;
+          sumByDeck[did] = (sumByDeck[did] ?? 0) + rating;
+          countByDeck[did] = (countByDeck[did] ?? 0) + 1;
+        }
+
+        const avgByDeck: Record<string, number> = {};
+        for (const did of Object.keys(countByDeck)) {
+          avgByDeck[did] = sumByDeck[did] / countByDeck[did];
+        }
+
+        setRatingByDeckId(avgByDeck);
+        setRatingCountByDeckId(countByDeck);
+      } else {
+        setRatingByDeckId({});
+        setRatingCountByDeckId({});
+      }
+    } else {
+      setRatingByDeckId({});
+      setRatingCountByDeckId({});
+    }
     setLoading(false);
   }, [user, authLoading]);
 
@@ -158,6 +203,8 @@ export default function MainScreen() {
         <ListOfDecks
           decks={filteredAndSortedDecks}
           cardCounts={cardCounts}
+          ratingByDeckId={ratingByDeckId}
+          ratingCountByDeckId={ratingCountByDeckId}
           onPressDeck={handlePressDeck}
           onEditDeck={handleEditDeck}
           onDeleteDeck={handleDeleteDeck}

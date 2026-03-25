@@ -1,17 +1,19 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { HeaderBackButton } from '@react-navigation/elements';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useCallback, useEffect, type ReactNode } from 'react';
 import 'react-native-reanimated';
 import { Platform, Pressable, View } from 'react-native';
 
 import { useColorScheme } from '@/src/components/useColorScheme';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
-import Sidebar from '@/src/components/Sidebar';
+import Sidebar, { AppLogo } from '@/src/components/Sidebar';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { LanguageProvider } from '@/src/contexts/LanguageContext';
+import { SidebarDrawerProvider, useSidebarDrawer } from '@/src/contexts/SidebarDrawerContext';
 import { StudySettingsProvider } from '@/src/contexts/StudySettingsContext';
 
 export {
@@ -61,6 +63,78 @@ export default function RootLayout() {
 
 const isWeb = Platform.OS === 'web';
 
+function WebAuthenticatedShell({
+  sharedHeaderRight,
+}: {
+  sharedHeaderRight: () => ReactNode;
+}) {
+  const { isCompact, toggleDrawer } = useSidebarDrawer();
+
+  const headerLeft = useCallback(
+    (props: { canGoBack?: boolean } & Record<string, unknown>) => (
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
+        {props.canGoBack ? (
+          <HeaderBackButton {...(props as any)} labelVisible={false} tintColor="#1f2937" />
+        ) : null}
+        <Pressable
+          onPress={toggleDrawer}
+          style={({ pressed }) => ({
+            paddingVertical: 6,
+            paddingHorizontal: 8,
+            marginLeft: props.canGoBack ? 0 : 4,
+            opacity: pressed ? 0.75 : 1,
+          })}
+          accessibilityRole="button"
+          accessibilityLabel="Open menu"
+        >
+          <AppLogo size={28} />
+        </Pressable>
+      </View>
+    ),
+    [toggleDrawer],
+  );
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, flexDirection: 'row' }}>
+        {!isCompact ? <Sidebar /> : null}
+        <View style={{ flex: 1, overflow: 'hidden' }}>
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: '#fff' },
+              headerShadowVisible: true,
+              headerTintColor: '#1f2937',
+              headerTitleStyle: { fontSize: 18, fontWeight: '600' },
+              headerRight: sharedHeaderRight,
+              headerLeft: isCompact ? headerLeft : undefined,
+              animation: 'slide_from_right',
+            }}
+          >
+            <Stack.Screen name="auth/login" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="auth/signup" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
+            <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
+            <Stack.Screen name="deck-review" options={{ headerShown: true }} />
+            <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
+            <Stack.Screen name="deck-study" options={{ headerShown: true }} />
+            <Stack.Screen name="settings" options={{ headerShown: true }} />
+            <Stack.Screen name="add-deck" options={{ headerShown: true }} />
+            <Stack.Screen name="add-card" options={{ headerShown: true }} />
+            <Stack.Screen name="statistics" options={{ headerShown: true }} />
+            <Stack.Screen name="help" options={{ headerShown: true }} />
+            <Stack.Screen
+              name="modal"
+              options={{ presentation: 'modal', title: 'Info', headerRight: undefined }}
+            />
+          </Stack>
+        </View>
+      </View>
+      {isCompact ? <Sidebar /> : null}
+    </View>
+  );
+}
+
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { session, loading } = useAuth();
@@ -108,24 +182,19 @@ function RootLayoutNav() {
         animation: 'slide_from_right',
       }}
     >
-      {/* Auth — without header */}
-      <Stack.Screen name="auth/login"  options={{ headerShown: false, animation: 'fade' }} />
+      <Stack.Screen name="auth/login" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="auth/signup" options={{ headerShown: false, animation: 'fade' }} />
-
-      {/* Tabs — own header inside */}
-      <Stack.Screen name="(tabs)"      options={{ headerShown: false }} />
-
-      <Stack.Screen name="deck-detail"  options={{ headerShown: true }} />
-      <Stack.Screen name="publicdecks"  options={{ headerShown: true }} />
-      <Stack.Screen name="deck-review"  options={{ headerShown: true }} />
-      <Stack.Screen name="deck-study"   options={{ headerShown: true }} />
-      <Stack.Screen name="settings"     options={{ headerShown: true }} />
-      <Stack.Screen name="add-deck"     options={{ headerShown: true }} />
-      <Stack.Screen name="add-card"     options={{ headerShown: true }} />
-      <Stack.Screen name="statistics"   options={{ headerShown: true }} />
-      <Stack.Screen name="help"         options={{ headerShown: true }} />
-
-      {/* Modal — no headerRight buttons */}
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
+      <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
+      <Stack.Screen name="deck-review" options={{ headerShown: true }} />
+      <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
+      <Stack.Screen name="deck-study" options={{ headerShown: true }} />
+      <Stack.Screen name="settings" options={{ headerShown: true }} />
+      <Stack.Screen name="add-deck" options={{ headerShown: true }} />
+      <Stack.Screen name="add-card" options={{ headerShown: true }} />
+      <Stack.Screen name="statistics" options={{ headerShown: true }} />
+      <Stack.Screen name="help" options={{ headerShown: true }} />
       <Stack.Screen
         name="modal"
         options={{ presentation: 'modal', title: 'Info', headerRight: undefined }}
@@ -136,15 +205,10 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       {showSidebar ? (
-        // Web + authenticated: flex row [Sidebar | content]
-        <View style={{ flex: 1, flexDirection: 'row' }}>
-          <Sidebar />
-          <View style={{ flex: 1, overflow: 'hidden' }}>
-            {stackNav}
-          </View>
-        </View>
+        <SidebarDrawerProvider>
+          <WebAuthenticatedShell sharedHeaderRight={sharedHeaderRight} />
+        </SidebarDrawerProvider>
       ) : (
-        // Mobile or not-authenticated: just the stack
         stackNav
       )}
     </ThemeProvider>

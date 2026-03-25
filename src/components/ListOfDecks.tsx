@@ -17,6 +17,8 @@ import Feather from '@expo/vector-icons/Feather';
 export interface ListOfDecksProps {
   decks?: Deck[];
   cardCounts?: Record<string, number>;
+  ratingByDeckId?: Record<string, number>; // average rating (1..5)
+  ratingCountByDeckId?: Record<string, number>; // number of ratings
   onPressDeck?: (deck: Deck) => void;
   onEditDeck?: (deck: Deck) => void;
   onDeleteDeck?: (deck: Deck) => void;
@@ -28,6 +30,8 @@ export interface ListOfDecksProps {
 function DeckCardInner({
   item,
   count,
+  ratingAvg,
+  ratingCount,
   hasCover,
   onPress,
   onEdit,
@@ -37,6 +41,8 @@ function DeckCardInner({
 }: {
   item: Deck;
   count: number;
+  ratingAvg: number;
+  ratingCount: number;
   hasCover: boolean;
   onPress: () => void;
   onEdit: () => void;
@@ -94,6 +100,14 @@ function DeckCardInner({
               {count} {count !== 1 ? t('cards') : t('card')}
               {item.is_public ? ` • ${t('public')}` : ` • ${t('private')}`}
             </Text>
+            {ratingCount > 0 ? (
+              <View style={styles.ratingRow}>
+                <Feather name="star" size={14} color="#f59e0b" />
+                <Text style={styles.ratingText}>
+                  {ratingAvg.toFixed(1)} ({ratingCount})
+                </Text>
+              </View>
+            ) : null}
           </View>
           <View style={styles.cardActions}>
             {!readOnly && (
@@ -142,6 +156,8 @@ function DeckCardInner({
 export function ListOfDecks({
   decks = [],
   cardCounts = {},
+  ratingByDeckId = {},
+  ratingCountByDeckId = {},
   onPressDeck,
   onEditDeck,
   onDeleteDeck,
@@ -154,12 +170,16 @@ export function ListOfDecks({
 
   const renderItem = ({ item }: { item: Deck }) => {
     const count = cardCounts[item.deck_id] ?? 0;
+    const ratingCount = ratingCountByDeckId[item.deck_id] ?? 0;
+    const ratingAvg = ratingByDeckId[item.deck_id] ?? 0;
     const hasCover = Boolean(item.cover_image_url);
 
     return (
       <DeckCardInner
         item={item}
         count={count}
+        ratingAvg={ratingAvg}
+        ratingCount={ratingCount}
         hasCover={hasCover}
         onPress={() => onPressDeck?.(item)}
         onEdit={() => onEditDeck?.(item)}
@@ -267,6 +287,17 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 13,
     color: '#9ca3af',
+  },
+  ratingRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ratingText: {
+    fontSize: 13,
+    color: '#f59e0b',
+    fontWeight: '700',
   },
   menuOverlay: {
     flex: 1,

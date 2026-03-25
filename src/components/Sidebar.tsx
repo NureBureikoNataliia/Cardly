@@ -6,8 +6,8 @@
  */
 import Feather from '@expo/vector-icons/Feather';
 import { usePathname, useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 
 /**
  * CardlyLogo — heraldic-inspired badge for the sidebar.
@@ -23,7 +23,7 @@ import { Animated, Pressable, StyleSheet, View } from 'react-native';
  *   │       gold "C" center      │
  *   └─────────────────────────────┘
  */
-function AppLogo({ size = 34 }: { size?: number }) {
+export function AppLogo({ size = 34 }: { size?: number }) {
   const s   = size;
   const pad = s * 0.08;
 
@@ -231,6 +231,7 @@ function AppLogo({ size = 34 }: { size?: number }) {
 }
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useSidebarDrawer } from '@/src/contexts/SidebarDrawerContext';
 import ConfirmModal from '@/src/components/ConfirmModal';
 
 const MINI_W = 62;
@@ -245,32 +246,78 @@ const NAV_ITEMS = [
 ] as const;
 
 export default function Sidebar() {
-  const router   = useRouter();
+  const router = useRouter();
   const pathname = usePathname();
   const { signOut } = useAuth();
   const { t } = useLanguage();
   const [logoutModal, setLogoutModal] = useState(false);
 
-  const anim = useRef(new Animated.Value(0)).current;
+  const { isCompact, drawerOpen, closeDrawer, toggleDrawer } = useSidebarDrawer();
+
+  const hoverAnim = useRef(new Animated.Value(0)).current;
+  const drawerX = useRef(new Animated.Value(-FULL_W)).current;
+  const drawerOpenRef = useRef(drawerOpen);
+  drawerOpenRef.current = drawerOpen;
+
+  useEffect(() => {
+    if (!isCompact) {
+      hoverAnim.setValue(0);
+      closeDrawer();
+    }
+  }, [isCompact, closeDrawer, hoverAnim]);
+
+  useEffect(() => {
+    if (!isCompact) return;
+    Animated.spring(drawerX, {
+      toValue: drawerOpen ? 0 : -FULL_W,
+      useNativeDriver: true,
+      tension: 210,
+      friction: 26,
+    }).start();
+  }, [drawerOpen, isCompact, drawerX]);
+
+  const edgePan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: (evt) => {
+          if (!drawerOpenRef.current) return evt.nativeEvent.pageX < 36;
+          return false;
+        },
+        onMoveShouldSetPanResponder: (_, g) =>
+          !drawerOpenRef.current && g.dx > 8 && Math.abs(g.dy) < 36,
+        onPanResponderRelease: (_, g) => {
+          if (!drawerOpenRef.current && g.dx > 44) toggleDrawer();
+        },
+      }),
+    [toggleDrawer],
+  );
 
   function expand() {
-    Animated.spring(anim, {
-      toValue: 1, useNativeDriver: false, tension: 210, friction: 24,
+    Animated.spring(hoverAnim, {
+      toValue: 1,
+      useNativeDriver: false,
+      tension: 210,
+      friction: 24,
     }).start();
   }
 
   function collapse() {
-    Animated.spring(anim, {
-      toValue: 0, useNativeDriver: false, tension: 210, friction: 24,
+    Animated.spring(hoverAnim, {
+      toValue: 0,
+      useNativeDriver: false,
+      tension: 210,
+      friction: 24,
     }).start();
   }
 
-  const sidebarWidth = anim.interpolate({
-    inputRange: [0, 1], outputRange: [MINI_W, FULL_W],
+  const sidebarWidth = hoverAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [MINI_W, FULL_W],
   });
 
-  const labelOpacity = anim.interpolate({
-    inputRange: [0, 0.4, 1], outputRange: [0, 0, 1],
+  const labelOpacity = hoverAnim.interpolate({
+    inputRange: [0, 0.4, 1],
+    outputRange: [0, 0, 1],
   });
 
   const handleLogout = async () => {
@@ -279,55 +326,51 @@ export default function Sidebar() {
     router.replace('/auth/login' as never);
   };
 
-  return (
-    <>
-      {/* @ts-ignore — onMouseEnter/Leave are valid on React Native Web */}
-      <Animated.View
-        style={[styles.sidebar, { width: sidebarWidth }]}
-        onMouseEnter={expand}
-        onMouseLeave={collapse}
-      >
-        {/* ── Logo ── */}
-        <View style={styles.logoRow}>
+  const navigate = (path: string) => {
+    router.push(path as never);
+    if (isCompact) closeDrawer();
+  };
+
+  const sidebarBody = (opts: { labelOpacityStyle: Animated.AnimatedInterpolation<number> | number }) => {
+    const lo = opts.labelOpacityStyle;
+    return (
+      <>
+        <Pressable
+          style={styles.logoRow}
+          onPress={isCompact ? toggleDrawer : undefined}
+          disabled={!isCompact}
+          accessibilityRole={isCompact ? 'button' : undefined}
+          accessibilityLabel={isCompact ? 'Menu' : undefined}
+        >
           <AppLogo size={34} />
-          <Animated.Text style={[styles.brandName, { opacity: labelOpacity }]} numberOfLines={1}>
+          <Animated.Text style={[styles.brandName, { opacity: lo }]} numberOfLines={1}>
             Cardly
           </Animated.Text>
-        </View>
+        </Pressable>
 
         <View style={styles.divider} />
 
-        {/* ── Nav items ── */}
         {NAV_ITEMS.map((item) => {
           const active =
-            pathname === item.path ||
-            (item.path !== '/' && pathname.startsWith(item.path));
+            pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path));
           return (
             <Pressable
               key={item.key}
               // @ts-ignore
               style={({ pressed, hovered: h }: any) => [
                 styles.navItem,
-                active  && styles.navItemActive,
-                h       && !active && styles.navItemHover,
+                active && styles.navItemActive,
+                h && !active && styles.navItemHover,
                 pressed && styles.navItemPressed,
               ]}
-              onPress={() => router.push(item.path as never)}
+              onPress={() => navigate(item.path)}
               accessibilityRole="button"
             >
               <View style={styles.iconWrap}>
-                <Feather
-                  name={item.icon as any}
-                  size={20}
-                  color={active ? '#6366f1' : '#6b7280'}
-                />
+                <Feather name={item.icon as any} size={20} color={active ? '#4f46e5' : '#64748b'} />
               </View>
               <Animated.Text
-                style={[
-                  styles.navLabel,
-                  active && styles.navLabelActive,
-                  { opacity: labelOpacity },
-                ]}
+                style={[styles.navLabel, active && styles.navLabelActive, { opacity: lo }]}
                 numberOfLines={1}
               >
                 {t(item.key)}
@@ -339,12 +382,11 @@ export default function Sidebar() {
         <View style={{ flex: 1 }} />
         <View style={styles.divider} />
 
-        {/* ── Logout ── */}
         <Pressable
           // @ts-ignore
           style={({ pressed, hovered: h }: any) => [
             styles.navItem,
-            h       && styles.navItemHover,
+            h && styles.navItemHover,
             pressed && styles.navItemPressed,
           ]}
           onPress={() => setLogoutModal(true)}
@@ -353,13 +395,51 @@ export default function Sidebar() {
           <View style={styles.iconWrap}>
             <Feather name="log-out" size={20} color="#ef4444" />
           </View>
-          <Animated.Text
-            style={[styles.navLabel, styles.logoutLabel, { opacity: labelOpacity }]}
-            numberOfLines={1}
-          >
+          <Animated.Text style={[styles.navLabel, styles.logoutLabel, { opacity: lo }]} numberOfLines={1}>
             {t('logout')}
           </Animated.Text>
         </Pressable>
+      </>
+    );
+  };
+
+  if (isCompact) {
+    return (
+      <View style={styles.drawerRoot} pointerEvents="box-none">
+        {!drawerOpen ? (
+          <View style={styles.edgeHit} {...edgePan.panHandlers} collapsable={false} />
+        ) : null}
+
+        {drawerOpen ? (
+          <Pressable style={styles.backdrop} onPress={closeDrawer} accessibilityLabel="Close menu" />
+        ) : null}
+
+        <Animated.View style={[styles.sidebarDrawer, { width: FULL_W, transform: [{ translateX: drawerX }] }]}>
+          {sidebarBody({ labelOpacityStyle: 1 })}
+        </Animated.View>
+
+        <ConfirmModal
+          visible={logoutModal}
+          title={t('logout')}
+          message={t('logoutConfirm')}
+          confirmText={t('logout')}
+          cancelText={t('cancel')}
+          destructive
+          icon="log-out"
+          onConfirm={handleLogout}
+          onCancel={() => setLogoutModal(false)}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <Animated.View
+        style={[styles.sidebar, { width: sidebarWidth }]}
+        {...({ onMouseEnter: expand, onMouseLeave: collapse } as object)}
+      >
+        {sidebarBody({ labelOpacityStyle: labelOpacity })}
       </Animated.View>
 
       <ConfirmModal
@@ -378,6 +458,42 @@ export default function Sidebar() {
 }
 
 const styles = StyleSheet.create({
+  drawerRoot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    pointerEvents: 'box-none',
+  },
+  edgeHit: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 28,
+    zIndex: 102,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    zIndex: 100,
+  },
+  sidebarDrawer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#ffffff',
+    borderRightWidth: 1,
+    borderRightColor: '#e5e7eb',
+    paddingTop: 14,
+    paddingBottom: 16,
+    zIndex: 101,
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 0 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 12,
+    overflow: 'hidden',
+  },
   sidebar: {
     // NOT position:absolute — lives in the flex row, pushes content
     backgroundColor:  '#ffffff',
@@ -419,14 +535,17 @@ const styles = StyleSheet.create({
   navItem: {
     flexDirection:   'row',
     alignItems:      'center',
-    paddingVertical:  10,
-    marginHorizontal: 6,
-    borderRadius:    10,
-    marginBottom:     2,
+    paddingVertical:  11,
+    paddingHorizontal: 10,
+    marginHorizontal: 8,
+    borderRadius:    14,
+    marginBottom:     4,
+    borderWidth:     1,
+    borderColor:     'transparent',
   },
-  navItemActive:  { backgroundColor: '#eef2ff' },
-  navItemHover:   { backgroundColor: '#f9fafb' },
-  navItemPressed: { backgroundColor: '#f3f4f6' },
+  navItemActive:  { backgroundColor: '#f4f6ff', borderColor: '#e8ecff' },
+  navItemHover:   { backgroundColor: '#fafafa', borderColor: '#f1f5f9' },
+  navItemPressed: { backgroundColor: '#f1f5f9' },
 
   iconWrap: {
     width:          38,
