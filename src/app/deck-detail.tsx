@@ -13,13 +13,10 @@ import {
   TouchableOpacity,
   useColorScheme,
 } from "react-native";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { Link } from "expo-router";
 import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
-import { LanguageDropdown } from "@/src/components/LanguageDropdown";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 
 const scrollPositions: Record<string, number> = {};
@@ -265,35 +262,7 @@ export default function DeckDetailScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerShown: true,
       title: t("appName"),
-      headerStyle: { backgroundColor: "#fff" },
-      headerShadowVisible: true,
-      headerTintColor: "#1f2937",
-      headerTitleStyle: { fontSize: 18, fontWeight: "600" },
-      headerLeft: () => (
-        <Pressable onPress={() => router.back()} style={{ marginLeft: 8, padding: 4 }}>
-          <Feather name="arrow-left" size={24} color="#1f2937" />
-        </Pressable>
-      ),
-      headerRight: () => (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginRight: 8 }}>
-          <LanguageDropdown />
-          <Link href="/modal" asChild>
-            <Pressable>
-              {({ pressed }) => (
-                <FontAwesome
-                  name="info-circle"
-                  size={25}
-                  color="#1f2937"
-                  style={{ opacity: pressed ? 0.5 : 1 }}
-                />
-              )}
-            </Pressable>
-          </Link>
-        </View>
-      ),
-      tabBarStyle: { display: "none" },
     });
 
     return () => {

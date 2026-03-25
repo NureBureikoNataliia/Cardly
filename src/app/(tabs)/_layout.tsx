@@ -2,7 +2,7 @@ import Feather from '@expo/vector-icons/Feather';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Link, Tabs } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import DrawerMenu from '@/src/components/DrawerMenu';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
@@ -11,26 +11,36 @@ import { useColorScheme } from '@/src/components/useColorScheme';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import Colors from '@/src/constants/Colors';
 
+const isWeb = Platform.OS === 'web';
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  // Drawer state is only used on native; web has the persistent Sidebar in root layout
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { t } = useLanguage();
 
   return (
     <>
-      <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      {/* Mobile-only overlay drawer (web uses Sidebar rendered at root level) */}
+      {!isWeb && (
+        <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      )}
 
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
           headerShown: useClientOnlyValue(false, true),
           tabBarStyle: { display: 'none' },
-          headerLeft: () => (
-            <Pressable onPress={() => setDrawerOpen(true)} style={styles.menuBtn}>
-              <Feather name="menu" size={24} color={Colors[colorScheme ?? 'light'].text} />
-            </Pressable>
-          ),
-        }}>
+          // Hamburger only on native
+          headerLeft: isWeb
+            ? undefined
+            : () => (
+                <Pressable onPress={() => setDrawerOpen(true)} style={styles.menuBtn}>
+                  <Feather name="menu" size={24} color={Colors[colorScheme ?? 'light'].text} />
+                </Pressable>
+              ),
+        }}
+      >
         <Tabs.Screen
           name="index"
           options={{
@@ -62,9 +72,9 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginRight: 8,
+    alignItems:    'center',
+    gap:           12,
+    marginRight:   8,
   },
   menuBtn: {
     padding: 4,

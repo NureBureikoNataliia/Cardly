@@ -1,20 +1,24 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useRouter } from "expo-router";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
+
 
 import { Deck } from "@/assets/data/decks";
 import ListOfDecks from "@/src/components/ListOfDecks";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { supabase } from "@/src/lib/supabase";
+
+type SortKey = "newest" | "oldest" | "title" | "cards";
 
 export default function PublicDecksScreen() {
   const router = useRouter();
@@ -24,6 +28,9 @@ export default function PublicDecksScreen() {
   const [cardCounts, setCardCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("newest");
 
   const loadDecks = useCallback(async () => {
     if (!user?.id) {
@@ -74,15 +81,8 @@ export default function PublicDecksScreen() {
     setLoading(false);
   }, [user?.id, t]);
 
-  useEffect(() => {
-    loadDecks();
-  }, [loadDecks]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadDecks();
-    }, [loadDecks])
-  );
+  useEffect(() => { loadDecks(); }, [loadDecks]);
+  useFocusEffect(useCallback(() => { loadDecks(); }, [loadDecks]));
 
   const handlePressDeck = (deck: Deck) => {
     router.push(`/deck-detail?id=${deck.deck_id}`);
@@ -91,20 +91,85 @@ export default function PublicDecksScreen() {
   const navigation = useNavigation();
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerShown: true,
       title: t("publicDecks"),
-      headerStyle: { backgroundColor: "#fff" },
-      headerShadowVisible: true,
-      headerTintColor: "#1f2937",
-      headerTitleStyle: { fontSize: 18, fontWeight: "600" },
-      headerLeft: () => (
-        <Pressable onPress={() => router.back()} style={{ marginLeft: 8, padding: 4 }}>
-          <Feather name="arrow-left" size={24} color="#1f2937" />
-        </Pressable>
-      ),
-      tabBarStyle: { display: "none" },
     });
-  }, [navigation, router, t]);
+  }, [navigation, t]);
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return [...decks]
+      .filter((deck) => {
+        if (!q) return true;
+        return (
+          (deck.title ?? "").toLowerCase().includes(q) ||
+          (deck.description ?? "").toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        if (sortBy === "oldest")
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        if (sortBy === "title")
+          return (a.title ?? "").localeCompare(b.title ?? "", undefined, { sensitivity: "base" });
+        if (sortBy === "cards")
+          return (cardCounts[b.deck_id] ?? 0) - (cardCounts[a.deck_id] ?? 0);
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+  }, [decks, searchQuery, sortBy, cardCounts]);
+
+  const sortOptions: { key: SortKey; label: string }[] = [
+    { key: "newest", label: t("newest") },
+    { key: "oldest", label: t("oldest") },
+    { key: "title",  label: t("title")  },
+    { key: "cards",  label: t("cards")  },
+  ];
+
+  const listHeader = (
+    <>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{t("publicDecks")}</Text>
+        <Text style={styles.sectionCount}>
+          {filtered.length} {filtered.length !== 1 ? t("decks") : t("deck")}
+        </Text>
+      </View>
+
+      <View style={styles.controlsContainer}>
+        {/* search */}
+        <View style={styles.searchContainer}>
+          <Feather name="search" size={16} color="#9ca3af" />
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={t("searchDecks")}
+            placeholderTextColor="#9ca3af"
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+              <Feather name="x-circle" size={16} color="#9ca3af" />
+            </Pressable>
+          )}
+        </View>
+
+        {/* sort */}
+        <View style={styles.controlBlock}>
+          <Text style={styles.chipsLabel}>{t("sortBy")}</Text>
+          <View style={styles.chipsRow}>
+            {sortOptions.map(({ key, label }) => (
+              <Pressable
+                key={key}
+                style={[styles.chip, sortBy === key && styles.chipActive]}
+                onPress={() => setSortBy(key)}
+              >
+                <Text style={[styles.chipText, sortBy === key && styles.chipTextActive]}>
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </View>
+    </>
+  );
 
   return (
     <View style={styles.container}>
@@ -125,15 +190,13 @@ export default function PublicDecksScreen() {
           <Text style={styles.emptySubtitle}>{t("noPublicDecksHint")}</Text>
         </View>
       ) : (
-        <View style={styles.contentWrapper}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t("publicDecks")}</Text>
-            <Text style={styles.sectionCount}>
-              {decks.length} {decks.length !== 1 ? t("decks") : t("deck")}
-            </Text>
-          </View>
-          <ListOfDecks decks={decks} cardCounts={cardCounts} onPressDeck={handlePressDeck} readOnly />
-        </View>
+        <ListOfDecks
+          decks={filtered}
+          cardCounts={cardCounts}
+          onPressDeck={handlePressDeck}
+          readOnly
+          listHeaderComponent={listHeader}
+        />
       )}
     </View>
   );
@@ -160,23 +223,90 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#6b7280",
   },
+
+  /* header */
   sectionHeader: {
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 14,
     paddingBottom: 8,
   },
   sectionTitle: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#1f2937",
+    color: "#111827",
   },
   sectionCount: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#9ca3af",
   },
+
+  /* controls */
+  controlsContainer: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    gap: 10,
+  },
+  searchContainer: {
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#111827",
+    paddingVertical: 0,
+    // @ts-ignore
+    outlineWidth: 0,
+    outlineStyle: "none",
+  },
+  controlBlock: {
+    gap: 6,
+  },
+  chipsLabel: {
+    fontSize: 12,
+    color: "#6b7280",
+    fontWeight: "600",
+  },
+  chipsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  chip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    minWidth: 54,
+    alignItems: "center",
+  },
+  chipActive: {
+    borderColor: "#4255ff",
+    backgroundColor: "rgba(66, 85, 255, 0.12)",
+  },
+  chipText: {
+    fontSize: 13,
+    color: "#4b5563",
+  },
+  chipTextActive: {
+    color: "#4255ff",
+    fontWeight: "600",
+  },
+
+  /* empty */
   emptyState: {
     flex: 1,
     alignItems: "center",
