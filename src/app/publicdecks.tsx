@@ -32,6 +32,7 @@ export default function PublicDecksScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("newest");
 
   const loadDecks = useCallback(async () => {
@@ -168,18 +169,20 @@ export default function PublicDecksScreen() {
 
       <View style={styles.controlsContainer}>
         {/* search */}
-        <View style={styles.searchContainer}>
-          <Feather name="search" size={16} color="#9ca3af" />
+        <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
+          <Feather name="search" size={16} color={searchFocused ? '#4255ff' : '#b0b8c8'} />
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder={t("searchDecks")}
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor="#c4cbd8"
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
           />
           {searchQuery.length > 0 && (
             <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
-              <Feather name="x-circle" size={16} color="#9ca3af" />
+              <Feather name="x-circle" size={16} color="#d1d5db" />
             </Pressable>
           )}
         </View>
@@ -286,20 +289,33 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   searchContainer: {
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    height: 46,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: '#e8eaee',
+    backgroundColor: '#f7f8fb',
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  searchContainerFocused: {
+    borderColor: '#4255ff',
+    backgroundColor: '#fff',
+    shadowColor: '#4255ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 2,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    color: "#111827",
+    fontSize: 15,
+    color: '#111827',
+    paddingVertical: 0,
+    // @ts-ignore — web-only
+    outlineWidth: 0,
+    outlineStyle: 'none',
     paddingVertical: 0,
   },
   controlBlock: {

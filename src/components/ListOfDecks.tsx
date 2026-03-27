@@ -3,10 +3,12 @@ import {
   FlatList,
   Image,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 import { Deck } from '@/assets/data/decks';
@@ -166,6 +168,11 @@ export function ListOfDecks({
   listHeaderComponent = null,
 }: ListOfDecksProps) {
   const { t } = useLanguage();
+  const { width } = useWindowDimensions();
+
+  // On wide web screens show 2 columns, on narrow/mobile show 1
+  const numColumns = Platform.OS === 'web' && width >= 900 ? 2 : 1;
+
   const data = React.useMemo(() => decks.filter((d) => showPrivate || d.is_public), [decks, showPrivate]);
 
   const renderItem = ({ item }: { item: Deck }) => {
@@ -175,18 +182,20 @@ export function ListOfDecks({
     const hasCover = Boolean(item.cover_image_url);
 
     return (
-      <DeckCardInner
-        item={item}
-        count={count}
-        ratingAvg={ratingAvg}
-        ratingCount={ratingCount}
-        hasCover={hasCover}
-        onPress={() => onPressDeck?.(item)}
-        onEdit={() => onEditDeck?.(item)}
-        onDelete={() => onDeleteDeck?.(item)}
-        readOnly={readOnly}
-        t={t}
-      />
+      <View style={numColumns === 2 ? styles.gridCell : undefined}>
+        <DeckCardInner
+          item={item}
+          count={count}
+          ratingAvg={ratingAvg}
+          ratingCount={ratingCount}
+          hasCover={hasCover}
+          onPress={() => onPressDeck?.(item)}
+          onEdit={() => onEditDeck?.(item)}
+          onDelete={() => onDeleteDeck?.(item)}
+          readOnly={readOnly}
+          t={t}
+        />
+      </View>
     );
   };
 
@@ -196,6 +205,8 @@ export function ListOfDecks({
         data={data}
         keyExtractor={(d) => String(d.deck_id)}
         renderItem={renderItem}
+        numColumns={numColumns}
+        key={numColumns}
         ListHeaderComponent={listHeaderComponent}
         style={styles.list}
         contentContainerStyle={styles.container}
@@ -211,8 +222,6 @@ const styles = StyleSheet.create({
   listWrapper: {
     flex: 1,
     width: '100%',
-    maxWidth: 640,
-    alignSelf: 'center',
   },
   container: {
     paddingHorizontal: 16,
@@ -222,6 +231,10 @@ const styles = StyleSheet.create({
   list: {
     flex: 1,
     width: '100%',
+  },
+  gridCell: {
+    flex: 1,
+    margin: 6,
   },
   card: {
     backgroundColor: '#fff',

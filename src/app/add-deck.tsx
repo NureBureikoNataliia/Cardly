@@ -113,10 +113,11 @@ export default function AddDeckScreen() {
       style={{ flex: 1, backgroundColor: '#f5f6fa' }}
     >
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={styles.scrollOuter}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+      <View style={styles.formContainer}>
 
         {/* ── HERO HEADER ── */}
         <View style={styles.hero}>
@@ -313,6 +314,7 @@ export default function AddDeckScreen() {
             </View>
           </>
         )}
+      </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -375,6 +377,18 @@ function InputRow({
 
 /* ─── STYLES ─── */
 const styles = StyleSheet.create({
+  scrollOuter: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingBottom: 36,
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 860,
+    paddingHorizontal: 16,
+    gap: 14,
+  },
   scroll: {
     padding: 16,
     paddingBottom: 36,

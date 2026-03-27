@@ -167,10 +167,11 @@ export default function AddCardScreen() {
         style={{ flex: 1, backgroundColor: '#f5f6fa' }}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={styles.scrollOuter}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+        <View style={styles.formContainer}>
 
           {/* ── HERO HEADER ── */}
           <View style={styles.hero}>
@@ -367,6 +368,7 @@ export default function AddCardScreen() {
             </TouchableOpacity>
           </View>
 
+        </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -447,6 +449,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f6fa',
   },
 
+  scrollOuter: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingBottom: 36,
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 860,
+    paddingHorizontal: 16,
+    gap: 14,
+  },
   scroll: {
     padding: 16,
     paddingBottom: 36,

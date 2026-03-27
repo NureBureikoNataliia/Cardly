@@ -146,7 +146,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentOuter}><View style={styles.content}>
       <Text style={styles.title}>{t('account')}</Text>
 
       <View style={styles.topMenuCard}>
@@ -376,7 +376,7 @@ export default function SettingsScreen() {
         onConfirm={handleDeleteAccount}
         onCancel={() => setDeleteModalVisible(false)}
       />
-    </ScrollView>
+    </View></ScrollView>
   );
 }
 
@@ -385,8 +385,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f6f7fb',
   },
+  contentOuter: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
   content: {
-    padding: 16,
+    width: '100%',
+    maxWidth: 900,
+    paddingHorizontal: 16,
     paddingBottom: 36,
     gap: 12,
   },
