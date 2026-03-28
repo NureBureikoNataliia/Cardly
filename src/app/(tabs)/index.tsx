@@ -6,12 +6,22 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, TextInput, TouchableOpacity, View as RNView } from 'react-native';
 
 import { Deck } from '@/assets/data/decks';
+import { compareDeckTitles } from '@/src/lib/deckSort';
 import { supabase } from '@/src/lib/supabase';
 import ConfirmModal from '@/src/components/ConfirmModal';
 import ListOfDecks from '@/src/components/ListOfDecks';
 import { Text, View } from '@/src/components/Themed';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+
+type SortKey =
+  | 'newest'
+  | 'oldest'
+  | 'titleAsc'
+  | 'titleDesc'
+  | 'ratingAsc'
+  | 'ratingDesc'
+  | 'cards';
 
 export default function MainScreen() {
   const router = useRouter();
@@ -28,7 +38,7 @@ export default function MainScreen() {
   const [errorModal, setErrorModal] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'title' | 'cards'>('newest');
+  const [sortBy, setSortBy] = useState<SortKey>('newest');
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private'>('all');
 
   const loadDecks = useCallback(async () => {
@@ -134,6 +144,16 @@ export default function MainScreen() {
     setDeckToDelete(deck);
   };
 
+  const sortOptions: { key: SortKey; label: string }[] = [
+    { key: 'newest', label: t('newest') },
+    { key: 'oldest', label: t('oldest') },
+    { key: 'titleAsc', label: t('sortTitleAZ') },
+    { key: 'titleDesc', label: t('sortTitleZA') },
+    { key: 'ratingDesc', label: t('sortRatingDesc') },
+    { key: 'ratingAsc', label: t('sortRatingAsc') },
+    { key: 'cards', label: t('cards') },
+  ];
+
   const performDeleteDeck = async () => {
     if (!deckToDelete) return;
     setDeckToDelete(null);
@@ -164,15 +184,34 @@ export default function MainScreen() {
         if (sortBy === 'oldest') {
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         }
-        if (sortBy === 'title') {
-          return (a.title ?? '').localeCompare(b.title ?? '', undefined, { sensitivity: 'base' });
+        if (sortBy === 'titleAsc') {
+          return compareDeckTitles(a, b);
+        }
+        if (sortBy === 'titleDesc') {
+          return compareDeckTitles(b, a);
+        }
+        if (sortBy === 'ratingDesc' || sortBy === 'ratingAsc') {
+          const countA = ratingCountByDeckId[a.deck_id] ?? 0;
+          const countB = ratingCountByDeckId[b.deck_id] ?? 0;
+          const avgA = countA > 0 ? (ratingByDeckId[a.deck_id] ?? 0) : null;
+          const avgB = countB > 0 ? (ratingByDeckId[b.deck_id] ?? 0) : null;
+          if (avgA === null && avgB === null) {
+            return compareDeckTitles(a, b);
+          }
+          if (avgA === null) return 1;
+          if (avgB === null) return -1;
+          const diff = sortBy === 'ratingDesc' ? avgB - avgA : avgA - avgB;
+          if (diff !== 0) {
+            return diff > 0 ? 1 : -1;
+          }
+          return compareDeckTitles(a, b);
         }
         if (sortBy === 'cards') {
           return (cardCounts[b.deck_id] ?? 0) - (cardCounts[a.deck_id] ?? 0);
         }
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [decks, searchQuery, sortBy, visibilityFilter, cardCounts]);
+  }, [decks, searchQuery, sortBy, visibilityFilter, cardCounts, ratingByDeckId, ratingCountByDeckId]);
 
   return (
     <View style={styles.container}>
@@ -239,34 +278,15 @@ export default function MainScreen() {
                 <RNView style={styles.controlBlock}>
                   <Text style={styles.chipsLabel}>{t('sortBy')}</Text>
                   <RNView style={styles.chipsRow}>
-                    <Pressable
-                      style={[styles.chip, sortBy === 'newest' && styles.chipActive]}
-                      onPress={() => setSortBy('newest')}
-                    >
-                      <Text style={[styles.chipText, sortBy === 'newest' && styles.chipTextActive]}>
-                        {t('newest')}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.chip, sortBy === 'oldest' && styles.chipActive]}
-                      onPress={() => setSortBy('oldest')}
-                    >
-                      <Text style={[styles.chipText, sortBy === 'oldest' && styles.chipTextActive]}>
-                        {t('oldest')}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.chip, sortBy === 'title' && styles.chipActive]}
-                      onPress={() => setSortBy('title')}
-                    >
-                      <Text style={[styles.chipText, sortBy === 'title' && styles.chipTextActive]}>{t('title')}</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.chip, sortBy === 'cards' && styles.chipActive]}
-                      onPress={() => setSortBy('cards')}
-                    >
-                      <Text style={[styles.chipText, sortBy === 'cards' && styles.chipTextActive]}>{t('cards')}</Text>
-                    </Pressable>
+                    {sortOptions.map(({ key, label }) => (
+                      <Pressable
+                        key={key}
+                        style={[styles.chip, sortBy === key && styles.chipActive]}
+                        onPress={() => setSortBy(key)}
+                      >
+                        <Text style={[styles.chipText, sortBy === key && styles.chipTextActive]}>{label}</Text>
+                      </Pressable>
+                    ))}
                   </RNView>
                 </RNView>
 

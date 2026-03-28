@@ -26,6 +26,8 @@ export interface ListOfDecksProps {
   onDeleteDeck?: (deck: Deck) => void;
   showPrivate?: boolean;
   readOnly?: boolean;
+  /** When set with readOnly (e.g. public decks), shows ⋮ → report flow. */
+  onReportDeck?: (deck: Deck) => void;
   listHeaderComponent?: React.ReactElement | null;
 }
 
@@ -35,10 +37,12 @@ function DeckCardInner({
   ratingAvg,
   ratingCount,
   hasCover,
+  isGrid,
   onPress,
   onEdit,
   onDelete,
   readOnly,
+  onReportDeck,
   t,
 }: {
   item: Deck;
@@ -46,10 +50,12 @@ function DeckCardInner({
   ratingAvg: number;
   ratingCount: number;
   hasCover: boolean;
+  isGrid: boolean;
   onPress: () => void;
   onEdit: () => void;
   onDelete: () => void;
   readOnly?: boolean;
+  onReportDeck?: (deck: Deck) => void;
   t: (key: string) => string;
 }) {
   const [menuVisible, setMenuVisible] = useState(false);
@@ -74,45 +80,65 @@ function DeckCardInner({
     onDelete();
   };
 
+  const handleReport = () => {
+    setMenuVisible(false);
+    onReportDeck?.(item);
+  };
+
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, isGrid && styles.cardGrid]}>
       <TouchableOpacity
-        style={styles.cardTouchable}
+        style={[styles.cardTouchable, isGrid && styles.cardTouchableGrid]}
         onPress={onPress}
         activeOpacity={0.85}
         accessibilityRole="button"
       >
-        {hasCover && (
-          <Image source={{ uri: item.cover_image_url! }} style={styles.cover} resizeMode="cover" />
-        )}
-        <View style={[styles.cardContent, !hasCover && styles.cardContentNoCover]}>
+        <View style={styles.coverWrap}>
+          {hasCover ? (
+            <Image source={{ uri: item.cover_image_url! }} style={styles.cover} resizeMode="cover" />
+          ) : (
+            <View style={styles.coverPlaceholder}>
+              <Feather name="image" size={28} color="#b8c0d0" />
+            </View>
+          )}
+        </View>
+        <View style={[styles.cardContent, isGrid && styles.cardContentGrid]}>
           <View style={styles.cardIcon}>
             <Feather name="layers" size={20} color="#4255ff" />
           </View>
-          <View style={styles.cardBody}>
-            <Text style={styles.title} numberOfLines={2}>
-              {item.title}
-            </Text>
-            {item.description ? (
-              <Text style={styles.description} numberOfLines={2}>
-                {item.description}
+          <View style={[styles.cardBody, isGrid && styles.cardBodyGrid]}>
+            <View style={isGrid ? styles.titleSlot : undefined}>
+              <Text style={styles.title} numberOfLines={2}>
+                {item.title}
               </Text>
-            ) : null}
+            </View>
+            {(item.description || isGrid) && (
+              <View style={isGrid ? styles.descriptionSlot : undefined}>
+                <Text
+                  style={[styles.description, isGrid && styles.descriptionInGrid]}
+                  numberOfLines={2}
+                >
+                  {item.description ? item.description : '\u00a0'}
+                </Text>
+              </View>
+            )}
             <Text style={styles.meta}>
               {count} {count !== 1 ? t('cards') : t('card')}
               {item.is_public ? ` • ${t('public')}` : ` • ${t('private')}`}
             </Text>
-            {ratingCount > 0 ? (
-              <View style={styles.ratingRow}>
-                <Feather name="star" size={14} color="#f59e0b" />
-                <Text style={styles.ratingText}>
-                  {ratingAvg.toFixed(1)} ({ratingCount})
-                </Text>
-              </View>
-            ) : null}
+            <View style={styles.ratingSlot}>
+              {ratingCount > 0 ? (
+                <View style={styles.ratingRow}>
+                  <Feather name="star" size={14} color="#f59e0b" />
+                  <Text style={styles.ratingText}>
+                    {ratingAvg.toFixed(1)} ({ratingCount})
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
           <View style={styles.cardActions}>
-            {!readOnly && (
+            {(!readOnly || onReportDeck) && (
               <Pressable
                 ref={menuButtonRef}
                 onPress={(e) => {
@@ -139,14 +165,23 @@ function DeckCardInner({
         <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
           {menuLayout && (
             <View style={[styles.menuCard, { left: menuLayout.x, top: menuLayout.y }]}>
-              <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
-                <Feather name="edit-2" size={18} color="#1f2937" />
-                <Text style={styles.menuItemText}>{t('editBoard')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleDelete}>
-                <Feather name="trash-2" size={18} color="#dc2626" />
-                <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>{t('deleteBoard')}</Text>
-              </TouchableOpacity>
+              {readOnly && onReportDeck ? (
+                <TouchableOpacity style={styles.menuItem} onPress={handleReport}>
+                  <Feather name="flag" size={18} color="#1f2937" />
+                  <Text style={styles.menuItemText}>{t('reportBoard')}</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
+                    <Feather name="edit-2" size={18} color="#1f2937" />
+                    <Text style={styles.menuItemText}>{t('editBoard')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleDelete}>
+                    <Feather name="trash-2" size={18} color="#dc2626" />
+                    <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>{t('deleteBoard')}</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           )}
         </Pressable>
@@ -165,13 +200,14 @@ export function ListOfDecks({
   onDeleteDeck,
   showPrivate = true,
   readOnly = false,
+  onReportDeck,
   listHeaderComponent = null,
 }: ListOfDecksProps) {
   const { t } = useLanguage();
   const { width } = useWindowDimensions();
 
-  // On wide web screens show 2 columns, on narrow/mobile show 1
-  const numColumns = Platform.OS === 'web' && width >= 900 ? 2 : 1;
+  // Wide web: 3 columns; narrow / native: 1
+  const numColumns = Platform.OS === 'web' && width >= 900 ? 3 : 1;
 
   const data = React.useMemo(() => decks.filter((d) => showPrivate || d.is_public), [decks, showPrivate]);
 
@@ -181,18 +217,22 @@ export function ListOfDecks({
     const ratingAvg = ratingByDeckId[item.deck_id] ?? 0;
     const hasCover = Boolean(item.cover_image_url);
 
+    const isGrid = numColumns > 1;
+
     return (
-      <View style={numColumns === 2 ? styles.gridCell : undefined}>
+      <View style={isGrid ? styles.gridCell : undefined}>
         <DeckCardInner
           item={item}
           count={count}
           ratingAvg={ratingAvg}
           ratingCount={ratingCount}
           hasCover={hasCover}
+          isGrid={isGrid}
           onPress={() => onPressDeck?.(item)}
           onEdit={() => onEditDeck?.(item)}
           onDelete={() => onDeleteDeck?.(item)}
           readOnly={readOnly}
+          onReportDeck={onReportDeck}
           t={t}
         />
       </View>
@@ -207,6 +247,7 @@ export function ListOfDecks({
         renderItem={renderItem}
         numColumns={numColumns}
         key={numColumns}
+        columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
         ListHeaderComponent={listHeaderComponent}
         style={styles.list}
         contentContainerStyle={styles.container}
@@ -232,9 +273,13 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+  gridRow: {
+    alignItems: 'stretch',
+  },
   gridCell: {
     flex: 1,
     margin: 6,
+    minWidth: 0,
   },
   card: {
     backgroundColor: '#fff',
@@ -247,14 +292,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 4,
   },
+  cardGrid: {
+    flex: 1,
+  },
   cardTouchable: {
     overflow: 'hidden',
     borderRadius: 12,
   },
-  cover: {
+  cardTouchableGrid: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  coverWrap: {
     width: '100%',
     height: 120,
+    backgroundColor: '#e8ecf2',
+  },
+  cover: {
+    width: '100%',
+    height: '100%',
     backgroundColor: '#e5e7eb',
+  },
+  coverPlaceholder: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef1f6',
   },
   cardContent: {
     flexDirection: 'row',
@@ -262,8 +326,9 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
-  cardContentNoCover: {
-    paddingTop: 16,
+  cardContentGrid: {
+    flex: 1,
+    alignItems: 'center',
   },
   cardIcon: {
     width: 40,
@@ -276,6 +341,17 @@ const styles = StyleSheet.create({
   cardBody: {
     flex: 1,
     minWidth: 0,
+  },
+  cardBodyGrid: {
+    flexGrow: 1,
+  },
+  titleSlot: {
+    minHeight: 48,
+    justifyContent: 'flex-start',
+  },
+  descriptionSlot: {
+    marginTop: 4,
+    minHeight: 44,
   },
   cardActions: {
     flexDirection: 'row',
@@ -296,13 +372,20 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     lineHeight: 20,
   },
+  descriptionInGrid: {
+    marginTop: 0,
+  },
   meta: {
     marginTop: 6,
     fontSize: 13,
     color: '#9ca3af',
   },
-  ratingRow: {
+  ratingSlot: {
+    minHeight: 22,
     marginTop: 6,
+    justifyContent: 'center',
+  },
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

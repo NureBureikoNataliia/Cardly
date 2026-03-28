@@ -1,12 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
+import { fetchIsAdmin } from '@/src/lib/fetchIsAdmin';
+import { signInWithGoogleOAuth } from '@/src/lib/signInWithGoogle';
 import { supabase } from '@/src/lib/supabase';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  /** From profiles.isAdmin or users.isAdmin; false if missing or logged out. */
+  isAdmin: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: any; isAdmin?: boolean }>;
+  /** Supabase Google OAuth (configured in Dashboard → Auth → Providers). */
+  signInWithGoogle: () => Promise<{ error: any; isAdmin?: boolean }>;
   signUp: (email: string, password: string, username: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
@@ -17,32 +24,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { session: s },
+      } = await supabase.auth.getSession();
+      if (cancelled) return;
+      setSession(s);
+      setUser(s?.user ?? null);
+      setIsAdmin(await fetchIsAdmin(s?.user?.id, s?.user?.email));
       setLoading(false);
-    });
+    })();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, s) => {
       (async () => {
-        setSession(session);
-        setUser(session?.user ?? null);
+        setSession(s);
+        setUser(s?.user ?? null);
+        setIsAdmin(await fetchIsAdmin(s?.user?.id, s?.user?.email));
       })();
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    return { error };
+    if (error) {
+      return { error };
+    }
+    const uid = data.user?.id;
+    const admin = await fetchIsAdmin(uid, data.user?.email);
+    setIsAdmin(admin);
+    return { error: null, isAdmin: admin };
+  };
+
+  const signInWithGoogle = async () => {
+    const { error } = await signInWithGoogleOAuth();
+    if (error) {
+      return { error };
+    }
+    if (Platform.OS === 'web') {
+      return { error: null };
+    }
+    const {
+      data: { session: s },
+    } = await supabase.auth.getSession();
+    setSession(s);
+    setUser(s?.user ?? null);
+    const admin = await fetchIsAdmin(s?.user?.id, s?.user?.email);
+    setIsAdmin(admin);
+    return { error: null, isAdmin: admin };
   };
 
   const signUp = async (email: string, password: string, username: string) => {
@@ -59,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    setIsAdmin(false);
     await supabase.auth.signOut();
   };
 
@@ -68,7 +111,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         session,
         loading,
+        isAdmin,
         signIn,
+        signInWithGoogle,
         signUp,
         signOut,
       }}

@@ -237,20 +237,28 @@ import ConfirmModal from '@/src/components/ConfirmModal';
 const MINI_W = 62;
 const FULL_W = 224;
 
-const NAV_ITEMS = [
-  { key: 'yourDecks',   icon: 'layers',      path: '/'            },
-  { key: 'publicDecks', icon: 'globe',        path: '/publicdecks' },
-  { key: 'statistics',  icon: 'bar-chart-2',  path: '/statistics'  },
-  { key: 'settings',    icon: 'settings',     path: '/settings'    },
-  { key: 'help',        icon: 'help-circle',  path: '/help'        },
-] as const;
-
 export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { signOut } = useAuth();
+  const { signOut, isAdmin } = useAuth();
   const { t } = useLanguage();
   const [logoutModal, setLogoutModal] = useState(false);
+
+  const navItems = useMemo(() => {
+    const items: { key: string; icon: string; path: string }[] = [
+      { key: 'yourDecks', icon: 'layers', path: '/' },
+      { key: 'publicDecks', icon: 'globe', path: '/publicdecks' },
+    ];
+    if (isAdmin) {
+      items.push({ key: 'adminPanel', icon: 'shield', path: '/admin' });
+    }
+    items.push(
+      { key: 'statistics', icon: 'bar-chart-2', path: '/statistics' },
+      { key: 'settings', icon: 'settings', path: '/settings' },
+      { key: 'help', icon: 'help-circle', path: '/help' },
+    );
+    return items;
+  }, [isAdmin]);
 
   const { isCompact, drawerOpen, closeDrawer, toggleDrawer } = useSidebarDrawer();
 
@@ -350,9 +358,11 @@ export default function Sidebar() {
 
         <View style={styles.divider} />
 
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const active =
-            pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path));
+            item.path === '/admin'
+              ? pathname.startsWith('/admin')
+              : pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path));
           return (
             <Pressable
               key={item.key}

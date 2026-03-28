@@ -4,6 +4,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, type ReactNode } from 'react';
 import 'react-native-reanimated';
 import { Platform, Pressable, View } from 'react-native';
@@ -38,6 +39,10 @@ export default function RootLayout() {
   useEffect(() => {
     if (error) throw error;
   }, [error]);
+
+  useEffect(() => {
+    WebBrowser.maybeCompleteAuthSession();
+  }, []);
 
   useEffect(() => {
     if (loaded) {
@@ -115,6 +120,7 @@ function WebAuthenticatedShell({
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
             <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
+            <Stack.Screen name="admin" options={{ headerShown: true, title: 'Admin' }} />
             <Stack.Screen name="deck-review" options={{ headerShown: true }} />
             <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
             <Stack.Screen name="deck-study" options={{ headerShown: true }} />
@@ -187,6 +193,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
       <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
+      <Stack.Screen name="admin" options={{ headerShown: true, title: 'Admin' }} />
       <Stack.Screen name="deck-review" options={{ headerShown: true }} />
       <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
       <Stack.Screen name="deck-study" options={{ headerShown: true }} />

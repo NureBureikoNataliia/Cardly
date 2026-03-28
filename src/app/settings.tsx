@@ -16,6 +16,18 @@ import { Text, View } from '@/src/components/Themed';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { supabase } from '@/src/lib/supabase';
+import type { User } from '@supabase/supabase-js';
+
+function authProviderLabel(user: User | null, t: (key: string) => string): string {
+  if (!user) return '—';
+  const ids = user.identities ?? [];
+  const providers = new Set(ids.map((i) => i.provider));
+  if (providers.has('google')) return t('authProviderGoogle');
+  if (providers.has('email')) return t('authProviderEmail');
+  const meta = user.app_metadata?.provider;
+  if (meta === 'email') return t('authProviderEmail');
+  return typeof meta === 'string' ? meta : '—';
+}
 
 export default function SettingsScreen() {
   const { t } = useLanguage();
@@ -328,12 +340,9 @@ export default function SettingsScreen() {
 
           <RNView style={styles.infoRow}>
             <RNView style={styles.infoRowText}>
-              <Text style={styles.infoLabel}>{t('connectedAccount')}</Text>
+              <Text style={styles.infoLabel}>{t('authSignInMethod')}</Text>
+              <Text style={styles.infoValue}>{authProviderLabel(user, t)}</Text>
               <Text style={styles.infoSubText}>{t('connectedAccountHint')}</Text>
-            </RNView>
-            <RNView style={styles.socialPill}>
-              <Text style={styles.socialIcon}>G</Text>
-              <Text style={styles.socialText}>{t('googleSignIn')}</Text>
             </RNView>
           </RNView>
 
@@ -589,25 +598,6 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontSize: 14,
     fontWeight: '600',
-  },
-  socialPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 999,
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  socialIcon: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#db4437',
-  },
-  socialText: {
-    fontSize: 16,
-    color: '#111827',
   },
   deleteInlineBlock: {
     gap: 10,

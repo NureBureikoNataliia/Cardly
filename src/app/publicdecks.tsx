@@ -13,12 +13,21 @@ import {
 
 
 import { Deck } from "@/assets/data/decks";
+import DeckComplaintModal from "@/src/components/DeckComplaintModal";
 import ListOfDecks from "@/src/components/ListOfDecks";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
+import { compareDeckTitles } from "@/src/lib/deckSort";
 import { supabase } from "@/src/lib/supabase";
 
-type SortKey = "newest" | "oldest" | "title" | "cards";
+type SortKey =
+  | "newest"
+  | "oldest"
+  | "titleAsc"
+  | "titleDesc"
+  | "ratingAsc"
+  | "ratingDesc"
+  | "cards";
 
 export default function PublicDecksScreen() {
   const router = useRouter();
@@ -34,6 +43,7 @@ export default function PublicDecksScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("newest");
+  const [complaintDeck, setComplaintDeck] = useState<Deck | null>(null);
 
   const loadDecks = useCallback(async () => {
     if (!user?.id) {
@@ -141,21 +151,46 @@ export default function PublicDecksScreen() {
         );
       })
       .sort((a, b) => {
-        if (sortBy === "oldest")
+        if (sortBy === "oldest") {
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-        if (sortBy === "title")
-          return (a.title ?? "").localeCompare(b.title ?? "", undefined, { sensitivity: "base" });
-        if (sortBy === "cards")
+        }
+        if (sortBy === "titleAsc") {
+          return compareDeckTitles(a, b);
+        }
+        if (sortBy === "titleDesc") {
+          return compareDeckTitles(b, a);
+        }
+        if (sortBy === "ratingDesc" || sortBy === "ratingAsc") {
+          const countA = ratingCountByDeckId[a.deck_id] ?? 0;
+          const countB = ratingCountByDeckId[b.deck_id] ?? 0;
+          const avgA = countA > 0 ? (ratingByDeckId[a.deck_id] ?? 0) : null;
+          const avgB = countB > 0 ? (ratingByDeckId[b.deck_id] ?? 0) : null;
+          if (avgA === null && avgB === null) {
+            return compareDeckTitles(a, b);
+          }
+          if (avgA === null) return 1;
+          if (avgB === null) return -1;
+          const diff = sortBy === "ratingDesc" ? avgB - avgA : avgA - avgB;
+          if (diff !== 0) {
+            return diff > 0 ? 1 : -1;
+          }
+          return compareDeckTitles(a, b);
+        }
+        if (sortBy === "cards") {
           return (cardCounts[b.deck_id] ?? 0) - (cardCounts[a.deck_id] ?? 0);
+        }
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [decks, searchQuery, sortBy, cardCounts]);
+  }, [decks, searchQuery, sortBy, cardCounts, ratingByDeckId, ratingCountByDeckId]);
 
   const sortOptions: { key: SortKey; label: string }[] = [
     { key: "newest", label: t("newest") },
     { key: "oldest", label: t("oldest") },
-    { key: "title",  label: t("title")  },
-    { key: "cards",  label: t("cards")  },
+    { key: "titleAsc", label: t("sortTitleAZ") },
+    { key: "titleDesc", label: t("sortTitleZA") },
+    { key: "ratingDesc", label: t("sortRatingDesc") },
+    { key: "ratingAsc", label: t("sortRatingAsc") },
+    { key: "cards", label: t("cards") },
   ];
 
   const listHeader = (
@@ -234,9 +269,16 @@ export default function PublicDecksScreen() {
           ratingCountByDeckId={ratingCountByDeckId}
           onPressDeck={handlePressDeck}
           readOnly
+          onReportDeck={(d) => setComplaintDeck(d)}
           listHeaderComponent={listHeader}
         />
       )}
+      <DeckComplaintModal
+        visible={complaintDeck !== null}
+        deck={complaintDeck}
+        reporterId={user?.id ?? null}
+        onClose={() => setComplaintDeck(null)}
+      />
     </View>
   );
 }
@@ -316,7 +358,6 @@ const styles = StyleSheet.create({
     // @ts-ignore — web-only
     outlineWidth: 0,
     outlineStyle: 'none',
-    paddingVertical: 0,
   },
   controlBlock: {
     gap: 6,

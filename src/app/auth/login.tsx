@@ -20,7 +20,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
 
@@ -33,13 +33,27 @@ export default function LoginScreen() {
     setLoading(true);
     setError('');
 
-    const { error } = await signIn(email, password);
+    const { error, isAdmin: adminFlag } = await signIn(email, password);
 
     if (error) {
       setError(error.message);
       setLoading(false);
     } else {
-      router.replace('/(tabs)');
+      router.replace((adminFlag ? '/admin' : '/(tabs)') as never);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setLoading(true);
+    setError('');
+    const { error: oauthError, isAdmin: adminFlag } = await signInWithGoogle();
+    setLoading(false);
+    if (oauthError) {
+      setError(oauthError.message ?? String(oauthError));
+      return;
+    }
+    if (Platform.OS !== 'web') {
+      router.replace((adminFlag ? '/admin' : '/(tabs)') as never);
     }
   };
 
@@ -90,6 +104,14 @@ export default function LoginScreen() {
             ) : (
               <Text style={styles.buttonText}>{t('signIn')}</Text>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.googleButton, loading && styles.buttonDisabled]}
+            onPress={handleGoogle}
+            disabled={loading}
+          >
+            <Text style={styles.googleButtonText}>{t('googleSignIn')}</Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -159,6 +181,20 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  googleButton: {
+    marginTop: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  googleButtonText: {
+    color: '#1e293b',
     fontSize: 16,
     fontWeight: '600',
   },

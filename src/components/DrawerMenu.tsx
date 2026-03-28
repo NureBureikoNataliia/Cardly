@@ -4,7 +4,7 @@
  */
 import Feather from '@expo/vector-icons/Feather';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
@@ -15,21 +15,29 @@ export interface DrawerMenuProps {
   onClose: () => void;
 }
 
-const NAV_ITEMS = [
-  { key: 'yourDecks',   icon: 'layers',      path: '/'            },
-  { key: 'publicDecks', icon: 'globe',        path: '/publicdecks' },
-  { key: 'statistics',  icon: 'bar-chart-2',  path: '/statistics'  },
-  { key: 'settings',    icon: 'settings',     path: '/settings'    },
-  { key: 'help',        icon: 'help-circle',  path: '/help'        },
-] as const;
-
 export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { signOut, isAdmin } = useAuth();
   const { t } = useLanguage();
   const anim = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
   const [logoutModal, setLogoutModal] = useState(false);
+
+  const navItems = useMemo(() => {
+    const items: { key: string; icon: string; path: string }[] = [
+      { key: 'yourDecks', icon: 'layers', path: '/' },
+      { key: 'publicDecks', icon: 'globe', path: '/publicdecks' },
+    ];
+    if (isAdmin) {
+      items.push({ key: 'adminPanel', icon: 'shield', path: '/admin' });
+    }
+    items.push(
+      { key: 'statistics', icon: 'bar-chart-2', path: '/statistics' },
+      { key: 'settings', icon: 'settings', path: '/settings' },
+      { key: 'help', icon: 'help-circle', path: '/help' },
+    );
+    return items;
+  }, [isAdmin]);
 
   useEffect(() => {
     if (visible) setMounted(true);
@@ -69,7 +77,7 @@ export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
       <Animated.View style={[styles.container, { transform: [{ translateX }] }]}>
         <Text style={styles.header}>{t('menu')}</Text>
 
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <Pressable
             key={item.key}
             style={styles.item}
