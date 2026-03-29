@@ -28,6 +28,7 @@ export default function MainScreen() {
   const { user, loading: authLoading } = useAuth();
   const { t } = useLanguage();
   const [decks, setDecks] = useState<Deck[]>([]);
+  const [collaboratedDeckIds, setCollaboratedDeckIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,14 +56,16 @@ export default function MainScreen() {
     setLoading(true);
     setError(null);
 
-    const [{ data: decksData, error: decksError }, { data: cardsData }] = await Promise.all([
-      supabase
-        .from('decks')
-        .select('*')
-        .eq('creator_id', user.id)
-        .order('created_at', { ascending: false }),
-      supabase.from('cards').select('deck_id'),
-    ]);
+    const [{ data: decksData, error: decksError }, { data: cardsData }, { data: collabData }] =
+      await Promise.all([
+        supabase
+          .from('decks')
+          .select('*')
+          .eq('creator_id', user.id)
+          .order('created_at', { ascending: false }),
+        supabase.from('cards').select('deck_id'),
+        supabase.rpc('get_collaborated_decks'),
+      ]);
 
     if (decksError) {
       setError('Failed to load decks');
@@ -74,7 +77,14 @@ export default function MainScreen() {
       return;
     }
 
-    const deckList = (decksData ?? []) as Deck[];
+    // Merge own decks + collaborated decks (avoid duplicates)
+    const ownDecks = (decksData ?? []) as Deck[];
+    const collabDecks = (collabData ?? []) as Deck[];
+    const collabIds = new Set(collabDecks.map((d) => d.deck_id));
+    const uniqueCollabDecks = collabDecks.filter((d) => !ownDecks.some((o) => o.deck_id === d.deck_id));
+    const deckList = [...ownDecks, ...uniqueCollabDecks];
+    setCollaboratedDeckIds(collabIds);
+
     const deckIds = deckList.map((d) => d.deck_id);
     setDecks(deckList);
 
@@ -137,10 +147,18 @@ export default function MainScreen() {
   };
 
   const handleEditDeck = (deck: Deck) => {
+    if (collaboratedDeckIds.has(deck.deck_id)) {
+      setErrorModal(t('collaboratorCannotEdit'));
+      return;
+    }
     router.push(`/add-deck?deckId=${deck.deck_id}`);
   };
 
   const handleDeleteDeck = (deck: Deck) => {
+    if (collaboratedDeckIds.has(deck.deck_id)) {
+      setErrorModal(t('collaboratorCannotEdit'));
+      return;
+    }
     setDeckToDelete(deck);
   };
 
@@ -245,6 +263,7 @@ export default function MainScreen() {
           cardCounts={cardCounts}
           ratingByDeckId={ratingByDeckId}
           ratingCountByDeckId={ratingCountByDeckId}
+          collaboratedDeckIds={collaboratedDeckIds}
           onPressDeck={handlePressDeck}
           onEditDeck={handleEditDeck}
           onDeleteDeck={handleDeleteDeck}

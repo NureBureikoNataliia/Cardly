@@ -7,6 +7,7 @@ export interface Card {
   front_media_url: string | null;
   back_media_url: string | null;
   notes: string | null;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
   // Spaced repetition (Anki/SM-2)

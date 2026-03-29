@@ -18,6 +18,7 @@ import { Deck } from '@/assets/data/decks';
 import { supabase } from '@/src/lib/supabase';
 import ConfirmModal from '@/src/components/ConfirmModal';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useAuth } from '@/src/contexts/AuthContext';
 
 export default function AddCardScreen() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function AddCardScreen() {
   const deckId = Array.isArray(params.deckId) ? params.deckId[0] : (typeof params.deckId === 'string' ? params.deckId : null);
   const cardId = Array.isArray(params.cardId) ? params.cardId[0] : (typeof params.cardId === 'string' ? params.cardId : null);
   const { t } = useLanguage();
+  const { user } = useAuth();
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -114,6 +116,7 @@ export default function AddCardScreen() {
             front_media_url: frontMedia,
             back_media_url: backMedia,
             notes: notes.trim() || null,
+            created_by: user?.id ?? null,
           });
 
       if (upsertError) {

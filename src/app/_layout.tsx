@@ -11,6 +11,7 @@ import { Platform, Pressable, View } from 'react-native';
 
 import { useColorScheme } from '@/src/components/useColorScheme';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
+import NotificationBell from '@/src/components/NotificationBell';
 import Sidebar, { AppLogo } from '@/src/components/Sidebar';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { LanguageProvider } from '@/src/contexts/LanguageContext';
@@ -162,7 +163,8 @@ function RootLayoutNav() {
   const showSidebar = isWeb && !!session && !loading && !inAuthGroup;
 
   const sharedHeaderRight = () => (
-    <View style={{ marginRight: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+    <View style={{ marginRight: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <NotificationBell />
       <LanguageDropdown />
       <Pressable onPress={() => router.push('/modal')}>
         {({ pressed }) => (

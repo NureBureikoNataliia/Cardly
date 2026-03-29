@@ -12,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   useWindowDimensions,
@@ -23,6 +24,24 @@ import ConfirmModal from "@/src/components/ConfirmModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 
 const scrollPositions: Record<string, number> = {};
+
+type Collaborator = {
+  deck_id: string;
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  role: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string | null;
+};
+
+type UserSearchResult = {
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+};
 
 export default function DeckDetailScreen() {
   const router = useRouter();
@@ -47,6 +66,19 @@ export default function DeckDetailScreen() {
   const [hasCopy, setHasCopy] = useState<boolean | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // ── Collaborators ──
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [collabOpen, setCollabOpen] = useState(false);
+  const [collaboratorSearch, setCollaboratorSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [collaboratorToRemove, setCollaboratorToRemove] = useState<Collaborator | null>(null);
+
+  // ── Members map: userId → displayName (for card author labels) ──
+  const [membersMap, setMembersMap] = useState<Record<string, string>>({});
 
   const loadData = useCallback(async () => {
     if (!deckId) { setError(t("deckNotFound")); setLoading(false); return; }
@@ -75,6 +107,98 @@ export default function DeckDetailScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // ── Load collaborators ──
+  const loadCollaborators = useCallback(async () => {
+    if (!deckId) return;
+    const { data } = await supabase.rpc("get_deck_collaborators", { p_deck_id: deckId });
+    if (data) setCollaborators(data as Collaborator[]);
+  }, [deckId]);
+
+  useEffect(() => { loadCollaborators(); }, [loadCollaborators]);
+
+  // ── Build membersMap: userId → displayName ──
+  useEffect(() => {
+    if (!deck || !user) return;
+    const map: Record<string, string> = {};
+    // current user always known
+    map[user.id] = (user.user_metadata?.username as string | undefined)
+      ?? user.email?.split('@')[0]
+      ?? 'me';
+    // accepted collaborators
+    collaborators.forEach((c) => {
+      if (c.status === 'accepted' || c.status == null) {
+        map[c.user_id] = c.display_name || c.username;
+      }
+    });
+    setMembersMap(map);
+    // fetch owner's name if not already in map (viewing as collaborator)
+    if (deck.creator_id && !map[deck.creator_id]) {
+      supabase
+        .rpc('get_user_display_name', { p_user_id: deck.creator_id })
+        .then(({ data }) => {
+          if (data) setMembersMap((prev) => ({ ...prev, [deck.creator_id]: data as string }));
+        });
+    }
+  }, [deck, user, collaborators]);
+
+  // ── Search users by username ──
+  const handleSearchUser = useCallback(async (query: string) => {
+    setCollaboratorSearch(query);
+    if (query.trim().length < 2) { setSearchResults([]); return; }
+    setIsSearching(true);
+    const { data } = await supabase.rpc("find_user_by_username", { search_username: query.trim() });
+    setIsSearching(false);
+    setSearchResults((data as UserSearchResult[]) ?? []);
+  }, []);
+
+  // ── Invite collaborator ──
+  const handleInvite = useCallback(async (targetUserId: string, targetUsername?: string) => {
+    if (!deckId || isInviting) return;
+    const existing = collaborators.find((c) => c.user_id === targetUserId);
+    if (existing?.status === 'accepted') {
+      setInviteMsg({ text: t("inviteAlready"), ok: false });
+      return;
+    }
+    if (existing?.status === 'pending') {
+      setInviteMsg({ text: t("inviteAlreadyPending"), ok: false });
+      return;
+    }
+    setIsInviting(true);
+    setInviteMsg(null);
+    const { error } = await supabase.from("deck_collaborators").insert({
+      deck_id: deckId,
+      user_id: targetUserId,
+      role: "editor",
+      status: "pending",
+      invited_by: user?.id,
+    });
+    setIsInviting(false);
+    if (error) {
+      setInviteMsg({ text: error.message || t("inviteError"), ok: false });
+    } else {
+      const name = targetUsername ? `@${targetUsername}` : "";
+      setInviteMsg({ text: `${t("inviteSuccess")}${name ? ` → ${name}` : ""}`, ok: true });
+      setCollaboratorSearch("");
+      setSearchResults([]);
+      loadCollaborators();
+    }
+  }, [deckId, collaborators, isInviting, user?.id, t, loadCollaborators]);
+
+  // ── Remove collaborator ──
+  const handleRemoveCollaborator = useCallback(async () => {
+    if (!collaboratorToRemove) return;
+    const row = collaboratorToRemove;
+    setCollaboratorToRemove(null);
+    await supabase
+      .from("deck_collaborators")
+      .delete()
+      .eq("deck_id", row.deck_id)
+      .eq("user_id", row.user_id);
+    setCollaborators((prev) =>
+      prev.filter((c) => !(c.deck_id === row.deck_id && c.user_id === row.user_id))
+    );
+  }, [collaboratorToRemove]);
+
   useFocusEffect(
     useCallback(() => {
       loadData().then(() => {
@@ -96,7 +220,12 @@ export default function DeckDetailScreen() {
     : totalCards;
 
   const isOwner = deck && user && deck.creator_id === user.id;
-  const isPublicFromOther = !isOwner && deck?.is_public;
+  // treat missing status (old DB without status column) as 'accepted' for backward compat
+  const isCollaborator = !isOwner && collaborators.some(
+    (c) => c.user_id === user?.id && c.status !== 'pending' && c.status !== 'declined'
+  );
+  const canEdit = isOwner || isCollaborator;
+  const isPublicFromOther = !canEdit && deck?.is_public;
 
   const checkHasCopy = useCallback(async () => {
     if (!deck || !user || isOwner) return;
@@ -273,8 +402,16 @@ export default function DeckDetailScreen() {
           {/* ════════════ ACTIONS ════════════ */}
           <View style={styles.actions}>
 
-            {/* Primary row: Review + Study (owner only) */}
-            {isOwner && (
+            {/* Co-author badge */}
+            {isCollaborator && (
+              <View style={styles.collaboratorBadge}>
+                <Feather name="users" size={14} color="#6366f1" />
+                <Text style={styles.collaboratorBadgeTxt}>{t("youAreCollaborator")}</Text>
+              </View>
+            )}
+
+            {/* Primary row: Review + Study */}
+            {canEdit && (
               <View style={styles.actionRowPrimary}>
                 <ActionBtn
                   icon="book-open"
@@ -295,7 +432,7 @@ export default function DeckDetailScreen() {
 
             {/* Secondary row */}
             <View style={styles.actionRowSecondary}>
-              {isOwner && (
+              {canEdit && (
                 <ActionBtn
                   icon="plus-circle"
                   label={t("addCard")}
@@ -363,7 +500,7 @@ export default function DeckDetailScreen() {
                   <Feather name="credit-card" size={32} color="#c7d2fe" />
                 </View>
                 <Text style={styles.emptyCardsTitle}>{t("noCardsInDeck")}</Text>
-                {isOwner && (
+                {canEdit && (
                   <TouchableOpacity
                     style={styles.emptyCardsBtn}
                     onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
@@ -380,8 +517,13 @@ export default function DeckDetailScreen() {
                     key={card.card_id}
                     card={card}
                     index={index}
-                    isOwner={!!isOwner}
+                    isOwner={!!canEdit}
                     numCols={numCols}
+                    createdByName={
+                      card.created_by
+                        ? (membersMap[card.created_by] ?? null)
+                        : (deck ? (membersMap[deck.creator_id] ?? null) : null)
+                    }
                     onEdit={() => router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`)}
                     onDelete={() => handleDeleteCard(card)}
                     t={t}
@@ -391,8 +533,165 @@ export default function DeckDetailScreen() {
             )}
           </View>
 
+          {/* ════════════ COLLABORATORS SECTION (owner only) ════════════ */}
+          {isOwner && (
+            <View style={styles.collabSection}>
+              {/* Toggle button */}
+              <TouchableOpacity
+                style={styles.collabToggleBtn}
+                onPress={() => {
+                  setCollabOpen(v => !v);
+                  setInviteMsg(null);
+                  setSearchResults([]);
+                  setCollaboratorSearch("");
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.collabToggleLeft}>
+                  <View style={styles.collabToggleIcon}>
+                    <Feather name="users" size={16} color="#6366f1" />
+                  </View>
+                  <Text style={styles.collabToggleTitle}>{t("collaborators")}</Text>
+                  {collaborators.filter(c => c.status !== 'pending' && c.status !== 'declined').length > 0 && (
+                    <View style={styles.collabToggleBadge}>
+                      <Text style={styles.collabToggleBadgeTxt}>
+                        {collaborators.filter(c => c.status !== 'pending' && c.status !== 'declined').length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Feather name={collabOpen ? "chevron-up" : "chevron-down"} size={18} color="#6b7280" />
+              </TouchableOpacity>
+
+              {/* Expandable content */}
+              {collabOpen && (
+                <View style={styles.collabBody}>
+                  {/* Invite input */}
+                  <View style={styles.inviteRow}>
+                    <View style={styles.inviteInputWrap}>
+                      <Feather name="search" size={15} color={collaboratorSearch.length > 0 ? "#6366f1" : "#b0b8c8"} />
+                      <TextInput
+                        style={styles.inviteInput}
+                        placeholder={t("searchByUsername")}
+                        placeholderTextColor="#c4cbd8"
+                        value={collaboratorSearch}
+                        onChangeText={handleSearchUser}
+                        autoCapitalize="none"
+                      />
+                      {isSearching && <ActivityIndicator size="small" color="#6366f1" />}
+                      {collaboratorSearch.length > 0 && !isSearching && (
+                        <Pressable onPress={() => { setCollaboratorSearch(""); setSearchResults([]); }} hitSlop={8}>
+                          <Feather name="x" size={15} color="#b0b8c8" />
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Search results */}
+                  {searchResults.length > 0 && (
+                    <View style={styles.searchResultsList}>
+                      {searchResults.map((u) => {
+                        const existing = collaborators.find((c) => c.user_id === u.user_id);
+                        const isPending = existing?.status === 'pending';
+                        const isAccepted = existing?.status === 'accepted';
+                        const isDisabled = isPending || isAccepted || isInviting;
+                        return (
+                          <View key={u.user_id} style={styles.searchResultItem}>
+                            <View style={styles.searchResultAvatar}>
+                              {u.avatar_url
+                                ? <Image source={{ uri: u.avatar_url }} style={styles.searchResultAvatarImg} />
+                                : <Text style={styles.searchResultAvatarTxt}>{(u.username ?? "?")[0].toUpperCase()}</Text>
+                              }
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.searchResultName}>{u.display_name || u.username}</Text>
+                              <Text style={styles.searchResultUsername}>@{u.username}</Text>
+                            </View>
+                            <TouchableOpacity
+                              style={[
+                                styles.inviteBtn,
+                                isAccepted && styles.inviteBtnDone,
+                                isPending && styles.inviteBtnPending,
+                              ]}
+                              onPress={() => !isDisabled && handleInvite(u.user_id, u.username)}
+                              disabled={isDisabled}
+                            >
+                              <Feather
+                                name={isAccepted ? "check" : isPending ? "clock" : "user-plus"}
+                                size={14}
+                                color={isAccepted ? "#059669" : isPending ? "#d97706" : "#fff"}
+                              />
+                              <Text style={[
+                                styles.inviteBtnTxt,
+                                isAccepted && styles.inviteBtnTxtDone,
+                                isPending && styles.inviteBtnTxtPending,
+                              ]}>
+                                {isAccepted ? t("inviteAlready") : isPending ? t("invitePending") : t("invite")}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {/* Invite message */}
+                  {inviteMsg && (
+                    <View style={[styles.inviteMsg, inviteMsg.ok ? styles.inviteMsgOk : styles.inviteMsgErr]}>
+                      <Feather name={inviteMsg.ok ? "check-circle" : "alert-circle"} size={14} color={inviteMsg.ok ? "#059669" : "#dc2626"} />
+                      <Text style={[styles.inviteMsgTxt, inviteMsg.ok ? styles.inviteMsgTxtOk : styles.inviteMsgTxtErr]}>{inviteMsg.text}</Text>
+                    </View>
+                  )}
+
+                  {/* Collaborators list — only accepted */}
+                  {collaborators.filter(c => c.status !== 'pending' && c.status !== 'declined').length === 0 ? (
+                    <Text style={styles.noCollabTxt}>{t("noCollaborators")}</Text>
+                  ) : (
+                    <View style={styles.collabList}>
+                      {collaborators
+                        .filter(c => c.status !== 'pending' && c.status !== 'declined')
+                        .map((c) => (
+                          <View key={`${c.deck_id}_${c.user_id}`} style={styles.collabItem}>
+                            <View style={styles.collabAvatar}>
+                              {c.avatar_url
+                                ? <Image source={{ uri: c.avatar_url }} style={styles.collabAvatarImg} />
+                                : <Text style={styles.collabAvatarTxt}>{(c.username ?? "?")[0].toUpperCase()}</Text>
+                              }
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.collabName}>{c.display_name || c.username}</Text>
+                              <Text style={styles.collabMeta}>@{c.username}</Text>
+                            </View>
+                            <Pressable
+                              style={styles.collabRemoveBtn}
+                              onPress={() => setCollaboratorToRemove(c)}
+                              hitSlop={8}
+                            >
+                              <Feather name="user-x" size={15} color="#dc2626" />
+                            </Pressable>
+                          </View>
+                        ))}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
         </View>
       </ScrollView>
+
+      <ConfirmModal
+        visible={Boolean(collaboratorToRemove)}
+        title={t("removeCollaborator")}
+        message={t("removeCollaboratorConfirm")}
+        confirmText={t("removeCollaborator")}
+        cancelText={t("cancel")}
+        destructive
+        icon="user-x"
+        onConfirm={handleRemoveCollaborator}
+        onCancel={() => setCollaboratorToRemove(null)}
+      />
 
       <ConfirmModal
         visible={Boolean(cardToDelete)}
@@ -465,11 +764,12 @@ function ActionBtn({
 }
 
 /* ─── CardTile ─── */
-function CardTile({ card, index, isOwner, numCols, onEdit, onDelete, t }: {
+function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDelete, t }: {
   card: Card;
   index: number;
   isOwner: boolean;
   numCols: number;
+  createdByName: string | null;
   onEdit: () => void;
   onDelete: () => void;
   t: (k: string) => string;
@@ -479,9 +779,17 @@ function CardTile({ card, index, isOwner, numCols, onEdit, onDelete, t }: {
 
   return (
     <View style={[styles.cardTile, numCols === 2 && styles.cardTileHalf]}>
-      {/* Number badge */}
-      <View style={[styles.cardNumBadge, { backgroundColor: `${accent}18` }]}>
-        <Text style={[styles.cardNumTxt, { color: accent }]}>{index + 1}</Text>
+      {/* Number badge + author */}
+      <View style={styles.cardTileHeader}>
+        <View style={[styles.cardNumBadge, { backgroundColor: `${accent}18` }]}>
+          <Text style={[styles.cardNumTxt, { color: accent }]}>{index + 1}</Text>
+        </View>
+        {createdByName ? (
+          <View style={styles.cardAuthorRow}>
+            <Feather name="user" size={10} color="#9ca3af" />
+            <Text style={styles.cardAuthorTxt}>{createdByName}</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Front */}
@@ -656,11 +964,21 @@ const styles = StyleSheet.create({
   },
   cardTileHalf: { flex: 1, minWidth: "47%", marginHorizontal: 4 },
 
+  cardTileHeader: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", marginBottom: 10,
+  },
   cardNumBadge: {
     alignSelf: "flex-start", paddingHorizontal: 9, paddingVertical: 3,
-    borderRadius: 999, marginBottom: 10,
+    borderRadius: 999,
   },
   cardNumTxt: { fontSize: 12, fontWeight: "700" },
+  cardAuthorRow: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "#f3f4f6", borderRadius: 8,
+    paddingHorizontal: 7, paddingVertical: 3,
+  },
+  cardAuthorTxt: { fontSize: 11, color: "#6b7280", fontWeight: "500" },
 
   cardMedia: { width: "100%", height: 100, borderRadius: 10, marginBottom: 8, backgroundColor: "#f3f4f6" },
 
@@ -679,4 +997,122 @@ const styles = StyleSheet.create({
   cardActEdit: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, backgroundColor: "rgba(99,102,241,0.08)" },
   cardActEditTxt: { fontSize: 13, color: "#6366f1", fontWeight: "600" },
   cardActDel: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(220,38,38,0.07)" },
+
+  /* ── Collaborator badge (for co-authors) ── */
+  collaboratorBadge: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "rgba(99,102,241,0.08)", borderWidth: 1, borderColor: "rgba(99,102,241,0.2)",
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+  },
+  collaboratorBadgeTxt: { fontSize: 14, color: "#6366f1", fontWeight: "600" },
+
+  /* ── Collaborators section ── */
+  collabSection: {
+    marginHorizontal: 16, marginTop: 24,
+    backgroundColor: "#fff", borderRadius: 16,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 10, elevation: 2,
+    overflow: "hidden",
+  },
+  collabToggleBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  collabToggleLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  collabToggleIcon: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: "#EEF2FF",
+    justifyContent: "center", alignItems: "center",
+  },
+  collabToggleTitle: { fontSize: 15, fontWeight: "700", color: "#111827" },
+  collabToggleBadge: {
+    minWidth: 20, height: 20, borderRadius: 10,
+    backgroundColor: "#6366f1",
+    justifyContent: "center", alignItems: "center",
+    paddingHorizontal: 5,
+  },
+  collabToggleBadgeTxt: { fontSize: 11, fontWeight: "700", color: "#fff" },
+  collabBody: {
+    borderTopWidth: 1, borderTopColor: "#f3f4f6",
+    padding: 16, gap: 12,
+  },
+  inviteRow: { gap: 8 },
+  inviteInputWrap: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#f7f8fb", borderRadius: 12,
+    borderWidth: 1.5, borderColor: "#e8eaee",
+    paddingHorizontal: 12, paddingVertical: 10,
+  },
+  inviteInput: {
+    flex: 1, fontSize: 14, color: "#111827", paddingVertical: 0,
+    // @ts-ignore
+    outlineWidth: 0, outlineStyle: "none",
+  },
+  searchResultsList: {
+    borderRadius: 12, borderWidth: 1, borderColor: "#e8eaee",
+    overflow: "hidden",
+  },
+  searchResultItem: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: "#f3f4f6",
+    backgroundColor: "#fff",
+  },
+  searchResultAvatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "rgba(99,102,241,0.12)",
+    alignItems: "center", justifyContent: "center", overflow: "hidden",
+  },
+  searchResultAvatarImg: { width: 36, height: 36, borderRadius: 18 },
+  searchResultAvatarTxt: { fontSize: 15, fontWeight: "700", color: "#6366f1" },
+  searchResultName: { fontSize: 14, fontWeight: "600", color: "#111827" },
+  searchResultUsername: { fontSize: 12, color: "#9ca3af" },
+  inviteBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#6366f1", borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 7,
+  },
+  inviteBtnDone: { backgroundColor: "rgba(5,150,105,0.1)", borderWidth: 1, borderColor: "rgba(5,150,105,0.25)" },
+  inviteBtnPending: { backgroundColor: "rgba(217,119,6,0.1)", borderWidth: 1, borderColor: "rgba(217,119,6,0.25)" },
+  inviteBtnTxt: { fontSize: 13, fontWeight: "600", color: "#fff" },
+  inviteBtnTxtDone: { color: "#059669" },
+  inviteBtnTxtPending: { color: "#d97706" },
+  inviteMsg: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9,
+  },
+  inviteMsgOk: { backgroundColor: "#f0fdf4", borderWidth: 1, borderColor: "rgba(5,150,105,0.2)" },
+  inviteMsgErr: { backgroundColor: "#fef2f2", borderWidth: 1, borderColor: "rgba(220,38,38,0.2)" },
+  inviteMsgTxt: { fontSize: 13, fontWeight: "500" },
+  inviteMsgTxtOk: { color: "#059669" },
+  inviteMsgTxtErr: { color: "#dc2626" },
+  noCollabTxt: { fontSize: 14, color: "#9ca3af", textAlign: "center", paddingVertical: 12 },
+  collabList: { gap: 2 },
+  collabItem: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 10, paddingHorizontal: 4,
+    borderBottomWidth: 1, borderBottomColor: "#f3f4f6",
+  },
+  collabAvatar: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: "rgba(99,102,241,0.12)",
+    alignItems: "center", justifyContent: "center", overflow: "hidden",
+  },
+  collabAvatarPending: { backgroundColor: "rgba(217,119,6,0.12)", opacity: 0.75 },
+  collabAvatarImg: { width: 38, height: 38, borderRadius: 19 },
+  collabAvatarTxt: { fontSize: 16, fontWeight: "700", color: "#6366f1" },
+  collabName: { fontSize: 14, fontWeight: "600", color: "#111827" },
+  collabMeta: { fontSize: 12, color: "#9ca3af" },
+  collabRemoveBtn: {
+    width: 34, height: 34, borderRadius: 8,
+    backgroundColor: "rgba(220,38,38,0.07)",
+    alignItems: "center", justifyContent: "center",
+  },
+  pendingBadge: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    backgroundColor: "rgba(217,119,6,0.1)",
+    borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2,
+    borderWidth: 1, borderColor: "rgba(217,119,6,0.25)",
+  },
+  pendingBadgeTxt: { fontSize: 10, fontWeight: "600", color: "#d97706" },
 });

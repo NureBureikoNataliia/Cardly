@@ -29,6 +29,8 @@ export interface ListOfDecksProps {
   /** When set with readOnly (e.g. public decks), shows ⋮ → report flow. */
   onReportDeck?: (deck: Deck) => void;
   listHeaderComponent?: React.ReactElement | null;
+  /** Set of deck_ids where user is a collaborator (not owner) */
+  collaboratedDeckIds?: Set<string>;
 }
 
 function DeckCardInner({
@@ -38,6 +40,7 @@ function DeckCardInner({
   ratingCount,
   hasCover,
   isGrid,
+  isCollaborated,
   onPress,
   onEdit,
   onDelete,
@@ -51,6 +54,7 @@ function DeckCardInner({
   ratingCount: number;
   hasCover: boolean;
   isGrid: boolean;
+  isCollaborated: boolean;
   onPress: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -108,9 +112,17 @@ function DeckCardInner({
           </View>
           <View style={[styles.cardBody, isGrid && styles.cardBodyGrid]}>
             <View style={isGrid ? styles.titleSlot : undefined}>
-              <Text style={styles.title} numberOfLines={2}>
-                {item.title}
-              </Text>
+              <View style={styles.titleRow}>
+                <Text style={[styles.title, { flex: 1 }]} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                {isCollaborated && (
+                  <View style={styles.collabBadge}>
+                    <Feather name="users" size={10} color="#6366f1" />
+                    <Text style={styles.collabBadgeTxt}>{t('collaborators')}</Text>
+                  </View>
+                )}
+              </View>
             </View>
             {(item.description || isGrid) && (
               <View style={isGrid ? styles.descriptionSlot : undefined}>
@@ -202,6 +214,7 @@ export function ListOfDecks({
   readOnly = false,
   onReportDeck,
   listHeaderComponent = null,
+  collaboratedDeckIds,
 }: ListOfDecksProps) {
   const { t } = useLanguage();
   const { width } = useWindowDimensions();
@@ -216,8 +229,8 @@ export function ListOfDecks({
     const ratingCount = ratingCountByDeckId[item.deck_id] ?? 0;
     const ratingAvg = ratingByDeckId[item.deck_id] ?? 0;
     const hasCover = Boolean(item.cover_image_url);
-
     const isGrid = numColumns > 1;
+    const isCollaborated = collaboratedDeckIds?.has(item.deck_id) ?? false;
 
     return (
       <View style={isGrid ? styles.gridCell : undefined}>
@@ -228,6 +241,7 @@ export function ListOfDecks({
           ratingCount={ratingCount}
           hasCover={hasCover}
           isGrid={isGrid}
+          isCollaborated={isCollaborated}
           onPress={() => onPressDeck?.(item)}
           onEdit={() => onEditDeck?.(item)}
           onDelete={() => onDeleteDeck?.(item)}
@@ -360,6 +374,27 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     padding: 4,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  collabBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 2,
+    flexShrink: 0,
+  },
+  collabBadgeTxt: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#6366f1',
   },
   title: {
     fontSize: 17,
