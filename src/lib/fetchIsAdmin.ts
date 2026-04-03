@@ -7,9 +7,12 @@ function readAdminColumn(row: Record<string, unknown> | null | undefined): boole
 }
 
 /**
- * Resolves admin flag from `public.users` (then `public.profiles`).
- * Tries auth id on `user_id` / `id`, then **email** on `users` so Google OAuth (different auth uid
- * than the row created for email/password) still matches the same `users` row.
+ * Resolves admin flag.
+ *
+ * Priority:
+ *  1. `public.get_my_admin_status()` RPC (SECURITY DEFINER — bypasses UUID mismatch)
+ *  2. Direct query of `public.users` by `user_id`
+ *  3. Direct query of `public.users` by `email`
  */
 export async function fetchIsAdmin(
   userId: string | undefined,
@@ -17,6 +20,17 @@ export async function fetchIsAdmin(
 ): Promise<boolean> {
   if (!userId) return false;
 
+  // 1. Use the reliable SECURITY DEFINER RPC (works after sync migration)
+  try {
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_my_admin_status');
+    if (!rpcError && typeof rpcData === 'boolean') {
+      return rpcData;
+    }
+  } catch {
+    // RPC not yet deployed – fall through to legacy checks below
+  }
+
+  // 2. Legacy: query public.users by user_id
   for (const col of ['user_id', 'id'] as const) {
     const { data, error } = await supabase.from('users').select('*').eq(col, userId).maybeSingle();
     if (error) continue;
@@ -24,6 +38,7 @@ export async function fetchIsAdmin(
     if (data) return false;
   }
 
+  // 3. Legacy: query public.users by email
   const normalizedEmail = email?.trim().toLowerCase();
   if (normalizedEmail) {
     const { data: byEmail, error: emailErr } = await supabase
@@ -34,15 +49,6 @@ export async function fetchIsAdmin(
     if (!emailErr && byEmail) {
       return readAdminColumn(byEmail as Record<string, unknown>);
     }
-  }
-
-  const { data: prof, error: profErr } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
-  if (!profErr && prof) {
-    return readAdminColumn(prof as Record<string, unknown>);
   }
 
   return false;
