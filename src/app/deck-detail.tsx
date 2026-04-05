@@ -1,416 +1,1118 @@
 import { Deck } from "@/assets/data/decks";
 import { Card } from "@/assets/data/cards";
-import { Text, View } from "@/src/components/Themed";
 import Feather from "@expo/vector-icons/Feather";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
+  ActivityIndicator,
   Image,
+  Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
+  Text,
+  TextInput,
   TouchableOpacity,
-  useColorScheme,
+  View,
+  useWindowDimensions,
 } from "react-native";
 import { supabase } from "@/src/lib/supabase";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
+import ConfirmModal from "@/src/components/ConfirmModal";
+import { useLanguage } from "@/src/contexts/LanguageContext";
+
+const scrollPositions: Record<string, number> = {};
+
+type Collaborator = {
+  deck_id: string;
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  role: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string | null;
+};
+
+type UserSearchResult = {
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+};
 
 export default function DeckDetailScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-  const colorScheme = useColorScheme();
   const params = useLocalSearchParams();
   const deckId = typeof params.id === "string" ? params.id : null;
+  const { t } = useLanguage();
+  const { width: windowWidth } = useWindowDimensions();
 
+  const { user } = useAuth();
   const [deck, setDeck] = useState<Deck | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
+  const [progressMap, setProgressMap] = useState<
+    Map<string, import("@/src/lib/userCardProgress").UserCardProgress>
+  >(new Map());
   const [totalCards, setTotalCards] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCards, setShowCards] = useState(false);
+  const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
+  const [errorModal, setErrorModal] = useState<string | null>(null);
+  const [isCopying, setIsCopying] = useState(false);
+  const [hasCopy, setHasCopy] = useState<boolean | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  // ── Collaborators ──
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [collabOpen, setCollabOpen] = useState(false);
+  const [collaboratorSearch, setCollaboratorSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [collaboratorToRemove, setCollaboratorToRemove] = useState<Collaborator | null>(null);
+
+  // ── Members map: userId → displayName (for card author labels) ──
+  const [membersMap, setMembersMap] = useState<Record<string, string>>({});
 
   const loadData = useCallback(async () => {
-    if (!deckId) {
-      setError("Deck not found");
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
+    if (!deckId) { setError(t("deckNotFound")); setLoading(false); return; }
+    setLoading(true); setError(null);
 
     const [{ data: deckData, error: deckError }, { data: cardsData, error: cardsError }] =
       await Promise.all([
-        supabase
-          .from("decks")
-          .select("*")
-          .eq("deck_id", deckId)
-          .single(),
-        supabase
-          .from("cards")
-          .select("*")
-          .eq("deck_id", deckId)
-          .order("created_at", { ascending: true }),
+        supabase.from("decks").select("*").eq("deck_id", deckId).single(),
+        supabase.from("cards").select("*").eq("deck_id", deckId).order("created_at", { ascending: false }),
       ]);
 
     if (deckError || cardsError) {
-      setError("Failed to load deck");
+      setError(t("failedToLoadDeck"));
     } else {
       setDeck(deckData as Deck);
       const list = (cardsData as Card[]) ?? [];
       setCards(list);
       setTotalCards(list.length);
+      if (user?.id) {
+        const progress = await fetchUserProgressForDeck(user.id, list.map((c) => c.card_id));
+        setProgressMap(progress);
+      }
     }
-
     setLoading(false);
+  }, [deckId, t, user?.id]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // ── Load collaborators ──
+  const loadCollaborators = useCallback(async () => {
+    if (!deckId) return;
+    const { data } = await supabase.rpc("get_deck_collaborators", { p_deck_id: deckId });
+    if (data) setCollaborators(data as Collaborator[]);
   }, [deckId]);
 
+  useEffect(() => { loadCollaborators(); }, [loadCollaborators]);
+
+  // ── Build membersMap: userId → displayName ──
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (!deck || !user) return;
+    const map: Record<string, string> = {};
+    // current user always known
+    map[user.id] = (user.user_metadata?.username as string | undefined)
+      ?? user.email?.split('@')[0]
+      ?? 'me';
+    // accepted collaborators
+    collaborators.forEach((c) => {
+      if (c.status === 'accepted' || c.status == null) {
+        map[c.user_id] = c.display_name || c.username;
+      }
+    });
+    setMembersMap(map);
+    // fetch owner's name if not already in map (viewing as collaborator)
+    if (deck.creator_id && !map[deck.creator_id]) {
+      supabase
+        .rpc('get_user_display_name', { p_user_id: deck.creator_id })
+        .then(({ data }) => {
+          if (data) setMembersMap((prev) => ({ ...prev, [deck.creator_id]: data as string }));
+        });
+    }
+  }, [deck, user, collaborators]);
+
+  // ── Search users by username ──
+  const handleSearchUser = useCallback(async (query: string) => {
+    setCollaboratorSearch(query);
+    if (query.trim().length < 2) { setSearchResults([]); return; }
+    setIsSearching(true);
+    const { data } = await supabase.rpc("find_user_by_username", { search_username: query.trim() });
+    setIsSearching(false);
+    setSearchResults((data as UserSearchResult[]) ?? []);
+  }, []);
+
+  // ── Invite collaborator ──
+  const handleInvite = useCallback(async (targetUserId: string, targetUsername?: string) => {
+    if (!deckId || isInviting) return;
+    const existing = collaborators.find((c) => c.user_id === targetUserId);
+    if (existing?.status === 'accepted') {
+      setInviteMsg({ text: t("inviteAlready"), ok: false });
+      return;
+    }
+    if (existing?.status === 'pending') {
+      setInviteMsg({ text: t("inviteAlreadyPending"), ok: false });
+      return;
+    }
+    setIsInviting(true);
+    setInviteMsg(null);
+    const { error } = await supabase.from("deck_collaborators").insert({
+      deck_id: deckId,
+      user_id: targetUserId,
+      role: "editor",
+      status: "pending",
+      invited_by: user?.id,
+    });
+    setIsInviting(false);
+    if (error) {
+      setInviteMsg({ text: error.message || t("inviteError"), ok: false });
+    } else {
+      const name = targetUsername ? `@${targetUsername}` : "";
+      setInviteMsg({ text: `${t("inviteSuccess")}${name ? ` → ${name}` : ""}`, ok: true });
+      setCollaboratorSearch("");
+      setSearchResults([]);
+      loadCollaborators();
+    }
+  }, [deckId, collaborators, isInviting, user?.id, t, loadCollaborators]);
+
+  // ── Remove collaborator ──
+  const handleRemoveCollaborator = useCallback(async () => {
+    if (!collaboratorToRemove) return;
+    const row = collaboratorToRemove;
+    setCollaboratorToRemove(null);
+    await supabase
+      .from("deck_collaborators")
+      .delete()
+      .eq("deck_id", row.deck_id)
+      .eq("user_id", row.user_id);
+    setCollaborators((prev) =>
+      prev.filter((c) => !(c.deck_id === row.deck_id && c.user_id === row.user_id))
+    );
+  }, [collaboratorToRemove]);
 
   useFocusEffect(
     useCallback(() => {
-      // Refresh data whenever the screen gains focus (e.g. after adding a card)
-      loadData();
-    }, [loadData])
+      loadData().then(() => {
+        if (deckId && scrollPositions[deckId] > 0) {
+          const y = scrollPositions[deckId];
+          let attempts = 0;
+          const attemptScroll = () => {
+            if (scrollViewRef.current) scrollViewRef.current.scrollTo({ y, animated: false });
+            else if (attempts < 20) { attempts++; setTimeout(attemptScroll, 50); }
+          };
+          setTimeout(attemptScroll, 150);
+        }
+      });
+    }, [loadData, deckId])
   );
 
-  // For now, we'll show a portion of cards as "due for review today"
-  // In a real app, this would be based on spaced repetition scheduling
-  const dueToday = Math.ceil(totalCards * 0.3);
+  const dueToday = user
+    ? getDueTodayCountForUser(cards.map((c) => c.card_id), progressMap)
+    : totalCards;
 
-  const handleDeleteCard = (card: Card) => {
-    Alert.alert(
-      "Delete card",
-      "Are you sure you want to delete this card?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            const { error } = await supabase
-              .from("cards")
-              .delete()
-              .eq("card_id", card.card_id);
+  const isOwner = deck && user && deck.creator_id === user.id;
+  // treat missing status (old DB without status column) as 'accepted' for backward compat
+  const isCollaborator = !isOwner && collaborators.some(
+    (c) => c.user_id === user?.id && c.status !== 'pending' && c.status !== 'declined'
+  );
+  const canEdit = isOwner || isCollaborator;
+  const isPublicFromOther = !canEdit && deck?.is_public;
 
-            if (!error) {
-              setCards((prev) => prev.filter((c) => c.card_id !== card.card_id));
-              setTotalCards((prev) => Math.max(0, prev - 1));
-            } else {
-              Alert.alert("Error", "Failed to delete card. Please try again.");
-            }
-          },
-        },
-      ]
-    );
+  const checkHasCopy = useCallback(async () => {
+    if (!deck || !user || isOwner) return;
+    const { data } = await supabase
+      .from("decks").select("deck_id")
+      .eq("creator_id", user.id).eq("original_deck_id", deck.deck_id).limit(1);
+    setHasCopy((data?.length ?? 0) > 0);
+  }, [deck, user, isOwner]);
+
+  useEffect(() => { if (isPublicFromOther) checkHasCopy(); }, [isPublicFromOther, checkHasCopy]);
+
+  const handleAddToMyAccount = async () => {
+    if (!deck || !user || isCopying || hasCopy) return;
+    setIsCopying(true); setError(null);
+    try {
+      const { data: newDeck, error: deckErr } = await supabase.from("decks").insert({
+        creator_id: user.id, title: deck.title, description: deck.description,
+        cover_image_url: deck.cover_image_url, is_public: false, original_deck_id: deck.deck_id,
+      }).select("deck_id").single();
+      if (deckErr) { setErrorModal(deckErr.message ?? t("failedToLoadData")); setIsCopying(false); return; }
+      if (cards.length > 0) {
+        const { error: cardsErr } = await supabase.from("cards").insert(
+          cards.map((c) => ({ deck_id: newDeck.deck_id, card_type: c.card_type ?? "basic",
+            front_text: c.front_text, back_text: c.back_text,
+            front_media_url: c.front_media_url, back_media_url: c.back_media_url, notes: c.notes }))
+        );
+        if (cardsErr) { setErrorModal(cardsErr.message ?? t("failedToLoadData")); setIsCopying(false); return; }
+      }
+      setHasCopy(true);
+      router.replace(`/deck-detail?id=${newDeck.deck_id}`);
+    } catch (err) {
+      setErrorModal(err instanceof Error ? err.message : t("unexpectedError"));
+    } finally { setIsCopying(false); }
   };
 
-  const handleEditCard = (card: Card) => {
-    router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`);
+  const handleUpdateFromOriginal = async () => {
+    if (!deck || !deck.original_deck_id || isUpdating) return;
+    setIsUpdating(true); setError(null);
+    try {
+      const { data: originalCards, error: fetchErr } = await supabase.from("cards")
+        .select("front_text, back_text, notes, card_type, front_media_url, back_media_url")
+        .eq("deck_id", deck.original_deck_id);
+      if (fetchErr) { setErrorModal(fetchErr.message ?? t("failedToLoadData")); setIsUpdating(false); return; }
+      const existingKeys = new Set(cards.map((c) => `${c.front_text}\0${c.back_text}`));
+      const toAdd = (originalCards ?? []).filter((oc) => !existingKeys.has(`${oc.front_text}\0${oc.back_text}`));
+      if (toAdd.length === 0) { setErrorModal(t("noNewCards")); setIsUpdating(false); return; }
+      const { error: insertErr } = await supabase.from("cards").insert(
+        toAdd.map((c) => ({ deck_id: deck.deck_id, card_type: c.card_type ?? "basic",
+          front_text: c.front_text, back_text: c.back_text,
+          front_media_url: c.front_media_url, back_media_url: c.back_media_url, notes: c.notes }))
+      );
+      if (insertErr) { setErrorModal(insertErr.message ?? t("failedToLoadData")); setIsUpdating(false); return; }
+      await loadData();
+    } catch (err) {
+      setErrorModal(err instanceof Error ? err.message : t("unexpectedError"));
+    } finally { setIsUpdating(false); }
   };
 
+  const handleDeleteCard = (card: Card) => setCardToDelete(card);
+
+  const performDeleteCard = async () => {
+    if (!cardToDelete) return;
+    const card = cardToDelete;
+    setCardToDelete(null);
+    const { error } = await supabase.from("cards").delete().eq("card_id", card.card_id);
+    if (error) { setErrorModal(error.message || t("failedToDeleteCard")); return; }
+    setCards((prev) => prev.filter((c) => c.card_id !== card.card_id));
+    setTotalCards((prev) => Math.max(0, prev - 1));
+  };
 
   useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-      tabBarStyle: { display: "none" },
-    });
+    navigation.setOptions({ title: t("appName") });
+    return () => { navigation.setOptions({ headerShown: undefined, tabBarStyle: undefined }); };
+  }, [navigation, t]);
 
-    return () => {
-      navigation.setOptions({
-        headerShown: undefined,
-        tabBarStyle: undefined,
-      });
-    };
-  }, [navigation]);
+  const isCopiedDeck = Boolean(deck?.original_deck_id);
 
+  /* ── responsive grid: 2 cols on wide, 1 on narrow ── */
+  const numCols = Platform.OS === "web" && windowWidth >= 860 ? 2 : 1;
+
+  /* ── loading ── */
   if (loading) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.deckTitle}>Loading deck...</Text>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
   }
 
   if (error || !deck) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.deckTitle}>{error ?? "Deck not found"}</Text>
+      <View style={styles.center}>
+        <Feather name="alert-circle" size={40} color="#d1d5db" />
+        <Text style={styles.errorMsg}>{error ?? t("deckNotFound")}</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Text style={styles.backBtnTxt}>{t("goBack")}</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
+  /* ── progress % ── */
+  const progressPct = totalCards > 0 ? Math.round(((totalCards - dueToday) / totalCards) * 100) : 0;
+
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-      contentInsetAdjustmentBehavior="never"
-    >
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          style={styles.backButton}
-        >
-          <Feather name="arrow-left" size={22} color="#111827" />
-        </TouchableOpacity>
-      </View>
+    <>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.root}
+        contentContainerStyle={styles.contentOuter}
+        onScroll={(e) => { if (deckId) scrollPositions[deckId] = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={100}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.pageWrap}>
 
-      {deck.cover_image_url && (
-        <View style={styles.deckImageWrapper}>
-          <Image
-            source={{ uri: deck.cover_image_url }}
-            style={styles.deckImage}
-            resizeMode="cover"
-          />
-        </View>
-      )}
+          {/* ════════════ HERO ════════════ */}
+          <View style={styles.hero}>
+            {deck.cover_image_url ? (
+              <>
+                <Image source={{ uri: deck.cover_image_url }} style={styles.heroImage} resizeMode="cover" />
+                <View style={styles.heroOverlay} />
+              </>
+            ) : (
+              <View style={styles.heroGradient} />
+            )}
 
-      <Text style={[styles.deckTitle, !deck.cover_image_url && styles.deckTitleNoImage]}>
-        {deck.title}
-      </Text>
-
-      {deck.description && (
-        <Text style={styles.description}>{deck.description}</Text>
-      )}
-
-      <View style={styles.statsCard}>
-        <View style={styles.statRow}>
-          <Text style={styles.statLabel}>Due today</Text>
-          <Text style={styles.statNumber}>{dueToday}</Text>
-        </View>
-        <View style={[styles.divider]} />
-        <View style={styles.statRow}>
-          <Text style={[styles.statLabel]}>
-            Total cards
-          </Text>
-          <Text style={styles.statNumber}>{totalCards}</Text>
-        </View>
-      </View>
-
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.button, styles.repeatButton]}
-          onPress={() => setShowCards((prev) => !prev)}
-          accessibilityRole="button"
-          accessibilityLabel="Review cards"
-        >
-          <Feather size={24} color="#fff" />
-          <Text style={styles.buttonText}>Review Cards</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.button, styles.addButton]}
-          onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
-          accessibilityRole="button"
-          accessibilityLabel="Add card"
-        >
-          <Feather name="plus" size={24} color="#fff" />
-          <Text style={styles.buttonText}>Add Card</Text>
-        </TouchableOpacity>
-      </View>
-
-      {showCards && (
-        <View style={styles.cardsListContainer}>
-          {cards.length === 0 ? (
-            <Text style={styles.emptyCardsText}>No cards in this deck yet.</Text>
-          ) : (
-            cards.map((card) => (
-              <View key={card.card_id} style={styles.cardItem}>
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardFront}>{card.front_text}</Text>
-                  <Text style={styles.cardBack}>{card.back_text}</Text>
-                  {card.notes ? <Text style={styles.cardNotes}>{card.notes}</Text> : null}
-                </View>
-                <View style={styles.cardActions}>
-                  <TouchableOpacity
-                    style={[styles.cardActionButton, styles.cardEditButton]}
-                    onPress={() => handleEditCard(card)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Edit card"
-                  >
-                    <Feather name="edit-2" size={16} color="#2563eb" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.cardActionButton, styles.cardDeleteButton]}
-                    onPress={() => handleDeleteCard(card)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Delete card"
-                  >
-                    <Feather name="trash-2" size={16} color="#dc2626" />
-                  </TouchableOpacity>
-                </View>
+            {/* Badge row */}
+            <View style={styles.heroBadgeRow}>
+              <View style={[styles.badge, deck.is_public ? styles.badgePublic : styles.badgePrivate]}>
+                <Feather name={deck.is_public ? "globe" : "lock"} size={11} color={deck.is_public ? "#059669" : "#9ca3af"} />
+                <Text style={[styles.badgeTxt, deck.is_public ? styles.badgeTxtPublic : styles.badgeTxtPrivate]}>
+                  {deck.is_public ? t("public") : t("private")}
+                </Text>
               </View>
-            ))
+              {isCopiedDeck && (
+                <View style={styles.badgeCopy}>
+                  <Feather name="copy" size={11} color="#8b5cf6" />
+                  <Text style={styles.badgeTxtCopy}>{t("copied")}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Title + description */}
+            <Text style={[styles.heroTitle, deck.cover_image_url && styles.heroTitleOnCover]}>
+              {deck.title}
+            </Text>
+            {deck.description ? (
+              <Text style={[styles.heroDesc, deck.cover_image_url && styles.heroDescOnCover]}>
+                {deck.description}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* ════════════ STATS ROW ════════════ */}
+          <View style={styles.statsRow}>
+            <StatChip icon="layers" value={totalCards} label={t("totalCards")} color="#6366f1" />
+            <View style={styles.statsDivider} />
+            <StatChip icon="clock" value={dueToday} label={t("dueToday")} color="#d97706" />
+            <View style={styles.statsDivider} />
+            <StatChip icon="check-circle" value={`${progressPct}%`} label={t("learned") ?? "Вивчено"} color="#059669" />
+          </View>
+
+          {/* ────── Progress bar ────── */}
+          {totalCards > 0 && (
+            <View style={styles.progressWrap}>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
+              </View>
+              <Text style={styles.progressLabel}>{progressPct}% {t("learned") ?? "вивчено"}</Text>
+            </View>
           )}
+
+          {/* ════════════ ACTIONS ════════════ */}
+          <View style={styles.actions}>
+
+            {/* Co-author badge */}
+            {isCollaborator && (
+              <View style={styles.collaboratorBadge}>
+                <Feather name="users" size={14} color="#6366f1" />
+                <Text style={styles.collaboratorBadgeTxt}>{t("youAreCollaborator")}</Text>
+              </View>
+            )}
+
+            {/* Primary row: Review + Study */}
+            {canEdit && (
+              <View style={styles.actionRowPrimary}>
+                <ActionBtn
+                  icon="book-open"
+                  label={t("reviewCards")}
+                  bg="#6366f1"
+                  onPress={() => router.push(`/deck-review?id=${deck.deck_id}`)}
+                  flex
+                />
+                <ActionBtn
+                  icon="trending-up"
+                  label={t("studying")}
+                  bg="#059669"
+                  onPress={() => router.push(`/deck-study?id=${deck.deck_id}`)}
+                  flex
+                />
+              </View>
+            )}
+
+            {/* Secondary row */}
+            <View style={styles.actionRowSecondary}>
+              {canEdit && (
+                <ActionBtn
+                  icon="plus-circle"
+                  label={t("addCard")}
+                  bg="#fff"
+                  textColor="#6366f1"
+                  border
+                  borderColor="rgba(99,102,241,0.25)"
+                  onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
+                  flex
+                />
+              )}
+              {user && (
+                <ActionBtn
+                  icon="star"
+                  label={t("rateComment")}
+                  bg="#fff"
+                  textColor="#d97706"
+                  border
+                  borderColor="rgba(217,119,6,0.25)"
+                  onPress={() => router.push(`/deck-rate?id=${deck.deck_id}`)}
+                  flex
+                />
+              )}
+            </View>
+
+            {/* Copy/update row */}
+            {isOwner && isCopiedDeck && (
+              <ActionBtn
+                icon="refresh-cw"
+                label={isUpdating ? `${t("saving")}...` : t("updateFromOriginal")}
+                bg="#eef0ff"
+                textColor="#6366f1"
+                border
+                borderColor="rgba(99,102,241,0.2)"
+                onPress={handleUpdateFromOriginal}
+                disabled={isUpdating}
+                fullWidth
+              />
+            )}
+            {isPublicFromOther && (
+              <ActionBtn
+                icon={hasCopy ? "check" : "download"}
+                label={hasCopy ? t("alreadyInCollection") : (isCopying ? `${t("saving")}...` : t("addToMyAccount"))}
+                bg={hasCopy ? "#f0fdf4" : "#6366f1"}
+                textColor={hasCopy ? "#059669" : "#fff"}
+                border={!!hasCopy}
+                borderColor="rgba(5,150,105,0.3)"
+                onPress={handleAddToMyAccount}
+                disabled={hasCopy === true || isCopying}
+                fullWidth
+              />
+            )}
+          </View>
+
+          {/* ════════════ CARDS SECTION ════════════ */}
+          <View style={styles.cardsSection}>
+            <View style={styles.cardsSectionHeader}>
+              <Text style={styles.cardsSectionTitle}>{t("cards")}</Text>
+              <Text style={styles.cardsSectionCount}>{totalCards}</Text>
+            </View>
+
+            {cards.length === 0 ? (
+              <View style={styles.emptyCards}>
+                <View style={styles.emptyCardsIcon}>
+                  <Feather name="credit-card" size={32} color="#c7d2fe" />
+                </View>
+                <Text style={styles.emptyCardsTitle}>{t("noCardsInDeck")}</Text>
+                {canEdit && (
+                  <TouchableOpacity
+                    style={styles.emptyCardsBtn}
+                    onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
+                  >
+                    <Feather name="plus" size={16} color="#fff" />
+                    <Text style={styles.emptyCardsBtnTxt}>{t("addCard")}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <View style={[styles.cardsGrid, numCols === 2 && styles.cardsGridTwo]}>
+                {cards.map((card, index) => (
+                  <CardTile
+                    key={card.card_id}
+                    card={card}
+                    index={index}
+                    isOwner={!!canEdit}
+                    numCols={numCols}
+                    createdByName={
+                      card.created_by
+                        ? (membersMap[card.created_by] ?? null)
+                        : (deck ? (membersMap[deck.creator_id] ?? null) : null)
+                    }
+                    onEdit={() => router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`)}
+                    onDelete={() => handleDeleteCard(card)}
+                    t={t}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* ════════════ COLLABORATORS SECTION (owner only) ════════════ */}
+          {isOwner && (
+            <View style={styles.collabSection}>
+              {/* Toggle button */}
+              <TouchableOpacity
+                style={styles.collabToggleBtn}
+                onPress={() => {
+                  setCollabOpen(v => !v);
+                  setInviteMsg(null);
+                  setSearchResults([]);
+                  setCollaboratorSearch("");
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.collabToggleLeft}>
+                  <View style={styles.collabToggleIcon}>
+                    <Feather name="users" size={16} color="#6366f1" />
+                  </View>
+                  <Text style={styles.collabToggleTitle}>{t("collaborators")}</Text>
+                  {collaborators.filter(c => c.status !== 'pending' && c.status !== 'declined').length > 0 && (
+                    <View style={styles.collabToggleBadge}>
+                      <Text style={styles.collabToggleBadgeTxt}>
+                        {collaborators.filter(c => c.status !== 'pending' && c.status !== 'declined').length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Feather name={collabOpen ? "chevron-up" : "chevron-down"} size={18} color="#6b7280" />
+              </TouchableOpacity>
+
+              {/* Expandable content */}
+              {collabOpen && (
+                <View style={styles.collabBody}>
+                  {/* Invite input */}
+                  <View style={styles.inviteRow}>
+                    <View style={styles.inviteInputWrap}>
+                      <Feather name="search" size={15} color={collaboratorSearch.length > 0 ? "#6366f1" : "#b0b8c8"} />
+                      <TextInput
+                        style={styles.inviteInput}
+                        placeholder={t("searchByUsername")}
+                        placeholderTextColor="#c4cbd8"
+                        value={collaboratorSearch}
+                        onChangeText={handleSearchUser}
+                        autoCapitalize="none"
+                      />
+                      {isSearching && <ActivityIndicator size="small" color="#6366f1" />}
+                      {collaboratorSearch.length > 0 && !isSearching && (
+                        <Pressable onPress={() => { setCollaboratorSearch(""); setSearchResults([]); }} hitSlop={8}>
+                          <Feather name="x" size={15} color="#b0b8c8" />
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Search results */}
+                  {searchResults.length > 0 && (
+                    <View style={styles.searchResultsList}>
+                      {searchResults.map((u) => {
+                        const existing = collaborators.find((c) => c.user_id === u.user_id);
+                        const isPending = existing?.status === 'pending';
+                        const isAccepted = existing?.status === 'accepted';
+                        const isDisabled = isPending || isAccepted || isInviting;
+                        return (
+                          <View key={u.user_id} style={styles.searchResultItem}>
+                            <View style={styles.searchResultAvatar}>
+                              {u.avatar_url
+                                ? <Image source={{ uri: u.avatar_url }} style={styles.searchResultAvatarImg} />
+                                : <Text style={styles.searchResultAvatarTxt}>{(u.username ?? "?")[0].toUpperCase()}</Text>
+                              }
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.searchResultName}>{u.display_name || u.username}</Text>
+                              <Text style={styles.searchResultUsername}>@{u.username}</Text>
+                            </View>
+                            <TouchableOpacity
+                              style={[
+                                styles.inviteBtn,
+                                isAccepted && styles.inviteBtnDone,
+                                isPending && styles.inviteBtnPending,
+                              ]}
+                              onPress={() => !isDisabled && handleInvite(u.user_id, u.username)}
+                              disabled={isDisabled}
+                            >
+                              <Feather
+                                name={isAccepted ? "check" : isPending ? "clock" : "user-plus"}
+                                size={14}
+                                color={isAccepted ? "#059669" : isPending ? "#d97706" : "#fff"}
+                              />
+                              <Text style={[
+                                styles.inviteBtnTxt,
+                                isAccepted && styles.inviteBtnTxtDone,
+                                isPending && styles.inviteBtnTxtPending,
+                              ]}>
+                                {isAccepted ? t("inviteAlready") : isPending ? t("invitePending") : t("invite")}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {/* Invite message */}
+                  {inviteMsg && (
+                    <View style={[styles.inviteMsg, inviteMsg.ok ? styles.inviteMsgOk : styles.inviteMsgErr]}>
+                      <Feather name={inviteMsg.ok ? "check-circle" : "alert-circle"} size={14} color={inviteMsg.ok ? "#059669" : "#dc2626"} />
+                      <Text style={[styles.inviteMsgTxt, inviteMsg.ok ? styles.inviteMsgTxtOk : styles.inviteMsgTxtErr]}>{inviteMsg.text}</Text>
+                    </View>
+                  )}
+
+                  {/* Collaborators list — only accepted */}
+                  {collaborators.filter(c => c.status !== 'pending' && c.status !== 'declined').length === 0 ? (
+                    <Text style={styles.noCollabTxt}>{t("noCollaborators")}</Text>
+                  ) : (
+                    <View style={styles.collabList}>
+                      {collaborators
+                        .filter(c => c.status !== 'pending' && c.status !== 'declined')
+                        .map((c) => (
+                          <View key={`${c.deck_id}_${c.user_id}`} style={styles.collabItem}>
+                            <View style={styles.collabAvatar}>
+                              {c.avatar_url
+                                ? <Image source={{ uri: c.avatar_url }} style={styles.collabAvatarImg} />
+                                : <Text style={styles.collabAvatarTxt}>{(c.username ?? "?")[0].toUpperCase()}</Text>
+                              }
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.collabName}>{c.display_name || c.username}</Text>
+                              <Text style={styles.collabMeta}>@{c.username}</Text>
+                            </View>
+                            <Pressable
+                              style={styles.collabRemoveBtn}
+                              onPress={() => setCollaboratorToRemove(c)}
+                              hitSlop={8}
+                            >
+                              <Feather name="user-x" size={15} color="#dc2626" />
+                            </Pressable>
+                          </View>
+                        ))}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
         </View>
-      )}
-    </ScrollView>
+      </ScrollView>
+
+      <ConfirmModal
+        visible={Boolean(collaboratorToRemove)}
+        title={t("removeCollaborator")}
+        message={t("removeCollaboratorConfirm")}
+        confirmText={t("removeCollaborator")}
+        cancelText={t("cancel")}
+        destructive
+        icon="user-x"
+        onConfirm={handleRemoveCollaborator}
+        onCancel={() => setCollaboratorToRemove(null)}
+      />
+
+      <ConfirmModal
+        visible={Boolean(cardToDelete)}
+        title={t("deleteCard")} message={t("deleteCardConfirm")}
+        confirmText={t("delete")} cancelText={t("cancel")}
+        destructive icon="trash-2"
+        onConfirm={performDeleteCard} onCancel={() => setCardToDelete(null)}
+      />
+      <ConfirmModal
+        visible={Boolean(errorModal)}
+        title={t("error")} message={errorModal ?? ""}
+        confirmText={t("ok")} cancelText={null}
+        onConfirm={() => setErrorModal(null)} onCancel={() => setErrorModal(null)}
+      />
+    </>
   );
 }
 
+/* ─── StatChip ─── */
+function StatChip({ icon, value, label, color }: {
+  icon: keyof typeof Feather.glyphMap;
+  value: number | string;
+  label: string;
+  color: string;
+}) {
+  return (
+    <View style={styles.statChip}>
+      <View style={[styles.statChipIcon, { backgroundColor: `${color}18` }]}>
+        <Feather name={icon} size={15} color={color} />
+      </View>
+      <Text style={[styles.statChipValue, { color }]}>{value}</Text>
+      <Text style={styles.statChipLabel}>{label}</Text>
+    </View>
+  );
+}
+
+/* ─── ActionBtn ─── */
+function ActionBtn({
+  icon, label, bg, textColor = "#fff", border, borderColor, onPress, disabled, flex, fullWidth,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  bg: string;
+  textColor?: string;
+  border?: boolean;
+  borderColor?: string;
+  onPress: () => void;
+  disabled?: boolean;
+  flex?: boolean;
+  fullWidth?: boolean;
+}) {
+  return (
+    <TouchableOpacity
+      style={[
+        styles.actionBtn,
+        { backgroundColor: bg },
+        border && { borderWidth: 1.5, borderColor: borderColor ?? textColor },
+        flex && { flex: 1 },
+        fullWidth && { width: "100%" },
+        disabled && styles.actionBtnDisabled,
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.8}
+    >
+      <Feather name={icon} size={18} color={textColor} />
+      <Text style={[styles.actionBtnTxt, { color: textColor }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+/* ─── CardTile ─── */
+function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDelete, t }: {
+  card: Card;
+  index: number;
+  isOwner: boolean;
+  numCols: number;
+  createdByName: string | null;
+  onEdit: () => void;
+  onDelete: () => void;
+  t: (k: string) => string;
+}) {
+  const accentColors = ["#4255ff", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"];
+  const accent = accentColors[index % accentColors.length];
+
+  return (
+    <View style={[styles.cardTile, numCols === 2 && styles.cardTileHalf]}>
+      {/* Number badge + author */}
+      <View style={styles.cardTileHeader}>
+        <View style={[styles.cardNumBadge, { backgroundColor: `${accent}18` }]}>
+          <Text style={[styles.cardNumTxt, { color: accent }]}>{index + 1}</Text>
+        </View>
+        {createdByName ? (
+          <View style={styles.cardAuthorRow}>
+            <Feather name="user" size={10} color="#9ca3af" />
+            <Text style={styles.cardAuthorTxt}>{createdByName}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* Front */}
+      {card.front_media_url ? (
+        <Image source={{ uri: card.front_media_url }} style={styles.cardMedia} resizeMode="contain" />
+      ) : null}
+      <Text style={styles.cardFront} numberOfLines={4}>{card.front_text}</Text>
+
+      {/* Divider with arrow */}
+      <View style={styles.cardDividerRow}>
+        <View style={[styles.cardDividerLine, { backgroundColor: `${accent}30` }]} />
+        <View style={[styles.cardDividerArrow, { backgroundColor: `${accent}18` }]}>
+          <Feather name="arrow-down" size={11} color={accent} />
+        </View>
+        <View style={[styles.cardDividerLine, { backgroundColor: `${accent}30` }]} />
+      </View>
+
+      {/* Back */}
+      {card.back_media_url ? (
+        <Image source={{ uri: card.back_media_url }} style={styles.cardMedia} resizeMode="contain" />
+      ) : null}
+      <Text style={styles.cardBack} numberOfLines={4}>{card.back_text}</Text>
+
+      {/* Notes */}
+      {card.notes ? (
+        <View style={styles.cardNotesRow}>
+          <Feather name="file-text" size={12} color="#9ca3af" />
+          <Text style={styles.cardNotes} numberOfLines={2}>{card.notes}</Text>
+        </View>
+      ) : null}
+
+      {/* Actions */}
+      {isOwner && (
+        <View style={styles.cardActionsRow}>
+          <Pressable style={styles.cardActEdit} onPress={onEdit} hitSlop={6}>
+            <Feather name="edit-2" size={14} color="#4255ff" />
+            <Text style={styles.cardActEditTxt}>{t("edit")}</Text>
+          </Pressable>
+          <Pressable style={styles.cardActDel} onPress={onDelete} hitSlop={6}>
+            <Feather name="trash-2" size={14} color="#dc2626" />
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ═══════════════════ STYLES ═══════════════════ */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f3f4f6",
-  },
-  contentContainer: {
-    alignItems: "center",
-    paddingBottom: 24,
-  },
-  deckImage: {
+  root: { flex: 1, backgroundColor: "#f5f6fa" },
+  contentOuter: { alignItems: "center", paddingBottom: 40 },
+  pageWrap: { width: "100%", maxWidth: 1000, paddingHorizontal: 0 },
+
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: "#f5f6fa" },
+  errorMsg: { fontSize: 16, color: "#6b7280", textAlign: "center", paddingHorizontal: 32 },
+  backBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, backgroundColor: "#eef0ff" },
+  backBtnTxt: { color: "#6366f1", fontWeight: "600" },
+
+  /* ── HERO ── */
+  hero: {
     width: "100%",
-    height: 200,
-  },
-  deckImageWrapper: {
-    width: "100%",
-    marginTop: -16,
-  },
-  headerRow: {
-    position: "absolute",
-    top: 16,
-    left: 12,
-    right: 12,
-    zIndex: 10,
-  },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  deckTitle: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 12,
-    marginTop: 24,
-    textAlign: "center",
-    paddingHorizontal: 16,
-  },  deckTitleNoImage: {
-    marginTop: 60,
-  },  description: {
-    fontSize: 16,
-    marginBottom: 24,
-    lineHeight: 22,
-    opacity: 0.7,
-    textAlign: "center",
-    paddingHorizontal: 16,
-  },
-  statsCard: {
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 32,
-    width: "80%",
-    maxWidth: 280,
-    backgroundColor: "transparent",
-  },
-  statRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-    backgroundColor: "transparent",
-  },
-  divider: {
-    height: 1,
-    marginVertical: 8,
-    backgroundColor: "#ccc",
-  },
-  statNumber: {
-    fontSize: 16,
-    fontWeight: "bold",
-     backgroundColor: "transparent",
-  },
-  statLabel: {
-    fontSize: 14,
-    opacity: 0.7,
-     backgroundColor: "transparent",
-  },
-  buttonContainer: {
-    gap: 12,
-    paddingHorizontal: 16,
-    width: "100%",
-  },
-  button: {
-    flexDirection: "row",
-    paddingVertical: 16,
+    minHeight: 160,
+    backgroundColor: "#C6E3ED",
+    justifyContent: "flex-end",
     paddingHorizontal: 20,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-  },
-  repeatButton: {
-    backgroundColor: "#66BB6A",
-  },
-  addButton: {
-    backgroundColor: "#64B5F6",
-  },
-  buttonText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  cardsListContainer: {
-    width: "100%",
-    paddingHorizontal: 16,
-    paddingTop: 16,
     paddingBottom: 24,
-    gap: 8,
+    paddingTop: 36,
+    overflow: "hidden",
+    position: "relative",
   },
-  emptyCardsText: {
-    textAlign: "center",
-    opacity: 0.7,
+  heroImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+  heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.38)" },
+  heroGradient: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#C6E3ED",
   },
-  cardItem: {
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+  /* decorative soft circle */
+  heroBadgeRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
+  badge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
   },
-  cardFront: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
+  badgePublic: { backgroundColor: "rgba(5,150,105,0.12)", borderWidth: 1, borderColor: "rgba(5,150,105,0.25)" },
+  badgePrivate: { backgroundColor: "rgba(71,85,105,0.1)", borderWidth: 1, borderColor: "rgba(71,85,105,0.2)" },
+  badgeTxt: { fontSize: 12, fontWeight: "600" },
+  badgeTxtPublic: { color: "#047857" },
+  badgeTxtPrivate: { color: "#475569" },
+  badgeCopy: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(99,102,241,0.1)", borderWidth: 1, borderColor: "rgba(99,102,241,0.22)",
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
   },
-  cardBack: {
-    fontSize: 15,
-    marginBottom: 4,
+  badgeTxtCopy: { fontSize: 12, fontWeight: "600", color: "#4f46e5" },
+  heroTitle: { fontSize: 26, fontWeight: "800", color: "#1e293b", letterSpacing: 0.1 },
+  heroTitleOnCover: { color: "#fff", textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  heroDesc: { marginTop: 6, fontSize: 14, color: "#334155", lineHeight: 20 },
+  heroDescOnCover: { color: "rgba(255,255,255,0.85)", textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+
+  /* ── STATS ── */
+  statsRow: {
+    flexDirection: "row", alignItems: "center",
+    marginHorizontal: 16, marginTop: 16,
+    backgroundColor: "#fff",
+    borderRadius: 16, paddingVertical: 14, paddingHorizontal: 8,
+    shadowColor: "#4255ff", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
   },
-  cardNotes: {
-    fontSize: 13,
-    color: "#6b7280",
+  statsDivider: { width: 1, height: 40, backgroundColor: "#f0f1f5" },
+  statChip: { flex: 1, alignItems: "center", gap: 4 },
+  statChipIcon: {
+    width: 32, height: 32, borderRadius: 10,
+    alignItems: "center", justifyContent: "center",
   },
-  cardContent: {
-    flex: 1,
-    paddingRight: 8,
+  statChipValue: { fontSize: 18, fontWeight: "800" },
+  statChipLabel: { fontSize: 11, color: "#9ca3af", fontWeight: "500" },
+
+  /* ── PROGRESS ── */
+  progressWrap: { marginHorizontal: 16, marginTop: 12, gap: 6 },
+  progressTrack: { height: 6, borderRadius: 999, backgroundColor: "#e8eaee", overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 999, backgroundColor: "#059669" },
+  progressLabel: { fontSize: 12, color: "#9ca3af", textAlign: "right" },
+
+  /* ── ACTIONS ── */
+  actions: { marginHorizontal: 16, marginTop: 16, gap: 10 },
+  actionRowPrimary: { flexDirection: "row", gap: 10 },
+  actionRowSecondary: { flexDirection: "row", gap: 10 },
+  actionBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, paddingVertical: 14, paddingHorizontal: 16,
+    borderRadius: 14, minHeight: 50,
+    shadowColor: "#6366f1", shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08, shadowRadius: 8, elevation: 2,
   },
-  cardActions: {
-    flexDirection: "row",
-    gap: 4,
+  actionBtnDisabled: { opacity: 0.5, shadowOpacity: 0 },
+  actionBtnTxt: { fontSize: 15, fontWeight: "700" },
+
+  /* ── CARDS SECTION ── */
+  cardsSection: { marginHorizontal: 16, marginTop: 24 },
+  cardsSectionHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    marginBottom: 14,
   },
-  cardActionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#e5e7eb",
+  cardsSectionTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
+  cardsSectionCount: {
+    fontSize: 13, color: "#6366f1", fontWeight: "600",
+    backgroundColor: "rgba(99,102,241,0.1)", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999,
   },
-  cardEditButton: {},
-  cardDeleteButton: {},
+
+  /* ── Empty state ── */
+  emptyCards: { alignItems: "center", paddingVertical: 40, gap: 12 },
+  emptyCardsIcon: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: "rgba(99,102,241,0.08)", alignItems: "center", justifyContent: "center",
+  },
+  emptyCardsTitle: { fontSize: 16, color: "#9ca3af" },
+  emptyCardsBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "#6366f1", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, marginTop: 4,
+  },
+  emptyCardsBtnTxt: { color: "#fff", fontWeight: "600" },
+
+  /* ── Cards Grid ── */
+  cardsGrid: { gap: 10 },
+  cardsGridTwo: { flexDirection: "row", flexWrap: "wrap" },
+
+  /* ── Card Tile ── */
+  cardTile: {
+    backgroundColor: "#fff",
+    borderRadius: 16, padding: 16, marginBottom: 10,
+    shadowColor: "#4255ff", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 10, elevation: 2,
+  },
+  cardTileHalf: { flex: 1, minWidth: "47%", marginHorizontal: 4 },
+
+  cardTileHeader: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", marginBottom: 10,
+  },
+  cardNumBadge: {
+    alignSelf: "flex-start", paddingHorizontal: 9, paddingVertical: 3,
+    borderRadius: 999,
+  },
+  cardNumTxt: { fontSize: 12, fontWeight: "700" },
+  cardAuthorRow: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "#f3f4f6", borderRadius: 8,
+    paddingHorizontal: 7, paddingVertical: 3,
+  },
+  cardAuthorTxt: { fontSize: 11, color: "#6b7280", fontWeight: "500" },
+
+  cardMedia: { width: "100%", height: 100, borderRadius: 10, marginBottom: 8, backgroundColor: "#f3f4f6" },
+
+  cardFront: { fontSize: 17, fontWeight: "700", color: "#111827", lineHeight: 24 },
+
+  cardDividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 12, gap: 8 },
+  cardDividerLine: { flex: 1, height: 1 },
+  cardDividerArrow: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+
+  cardBack: { fontSize: 15, color: "#4b5563", lineHeight: 22 },
+
+  cardNotesRow: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 10 },
+  cardNotes: { flex: 1, fontSize: 13, color: "#9ca3af", fontStyle: "italic", lineHeight: 18 },
+
+  cardActionsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#f3f4f6" },
+  cardActEdit: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, backgroundColor: "rgba(99,102,241,0.08)" },
+  cardActEditTxt: { fontSize: 13, color: "#6366f1", fontWeight: "600" },
+  cardActDel: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(220,38,38,0.07)" },
+
+  /* ── Collaborator badge (for co-authors) ── */
+  collaboratorBadge: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "rgba(99,102,241,0.08)", borderWidth: 1, borderColor: "rgba(99,102,241,0.2)",
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+  },
+  collaboratorBadgeTxt: { fontSize: 14, color: "#6366f1", fontWeight: "600" },
+
+  /* ── Collaborators section ── */
+  collabSection: {
+    marginHorizontal: 16, marginTop: 24,
+    backgroundColor: "#fff", borderRadius: 16,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 10, elevation: 2,
+    overflow: "hidden",
+  },
+  collabToggleBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  collabToggleLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  collabToggleIcon: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: "#EEF2FF",
+    justifyContent: "center", alignItems: "center",
+  },
+  collabToggleTitle: { fontSize: 15, fontWeight: "700", color: "#111827" },
+  collabToggleBadge: {
+    minWidth: 20, height: 20, borderRadius: 10,
+    backgroundColor: "#6366f1",
+    justifyContent: "center", alignItems: "center",
+    paddingHorizontal: 5,
+  },
+  collabToggleBadgeTxt: { fontSize: 11, fontWeight: "700", color: "#fff" },
+  collabBody: {
+    borderTopWidth: 1, borderTopColor: "#f3f4f6",
+    padding: 16, gap: 12,
+  },
+  inviteRow: { gap: 8 },
+  inviteInputWrap: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#f7f8fb", borderRadius: 12,
+    borderWidth: 1.5, borderColor: "#e8eaee",
+    paddingHorizontal: 12, paddingVertical: 10,
+  },
+  inviteInput: {
+    flex: 1, fontSize: 14, color: "#111827", paddingVertical: 0,
+    // @ts-ignore
+    outlineWidth: 0, outlineStyle: "none",
+  },
+  searchResultsList: {
+    borderRadius: 12, borderWidth: 1, borderColor: "#e8eaee",
+    overflow: "hidden",
+  },
+  searchResultItem: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: "#f3f4f6",
+    backgroundColor: "#fff",
+  },
+  searchResultAvatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "rgba(99,102,241,0.12)",
+    alignItems: "center", justifyContent: "center", overflow: "hidden",
+  },
+  searchResultAvatarImg: { width: 36, height: 36, borderRadius: 18 },
+  searchResultAvatarTxt: { fontSize: 15, fontWeight: "700", color: "#6366f1" },
+  searchResultName: { fontSize: 14, fontWeight: "600", color: "#111827" },
+  searchResultUsername: { fontSize: 12, color: "#9ca3af" },
+  inviteBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#6366f1", borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 7,
+  },
+  inviteBtnDone: { backgroundColor: "rgba(5,150,105,0.1)", borderWidth: 1, borderColor: "rgba(5,150,105,0.25)" },
+  inviteBtnPending: { backgroundColor: "rgba(217,119,6,0.1)", borderWidth: 1, borderColor: "rgba(217,119,6,0.25)" },
+  inviteBtnTxt: { fontSize: 13, fontWeight: "600", color: "#fff" },
+  inviteBtnTxtDone: { color: "#059669" },
+  inviteBtnTxtPending: { color: "#d97706" },
+  inviteMsg: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9,
+  },
+  inviteMsgOk: { backgroundColor: "#f0fdf4", borderWidth: 1, borderColor: "rgba(5,150,105,0.2)" },
+  inviteMsgErr: { backgroundColor: "#fef2f2", borderWidth: 1, borderColor: "rgba(220,38,38,0.2)" },
+  inviteMsgTxt: { fontSize: 13, fontWeight: "500" },
+  inviteMsgTxtOk: { color: "#059669" },
+  inviteMsgTxtErr: { color: "#dc2626" },
+  noCollabTxt: { fontSize: 14, color: "#9ca3af", textAlign: "center", paddingVertical: 12 },
+  collabList: { gap: 2 },
+  collabItem: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 10, paddingHorizontal: 4,
+    borderBottomWidth: 1, borderBottomColor: "#f3f4f6",
+  },
+  collabAvatar: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: "rgba(99,102,241,0.12)",
+    alignItems: "center", justifyContent: "center", overflow: "hidden",
+  },
+  collabAvatarPending: { backgroundColor: "rgba(217,119,6,0.12)", opacity: 0.75 },
+  collabAvatarImg: { width: 38, height: 38, borderRadius: 19 },
+  collabAvatarTxt: { fontSize: 16, fontWeight: "700", color: "#6366f1" },
+  collabName: { fontSize: 14, fontWeight: "600", color: "#111827" },
+  collabMeta: { fontSize: 12, color: "#9ca3af" },
+  collabRemoveBtn: {
+    width: 34, height: 34, borderRadius: 8,
+    backgroundColor: "rgba(220,38,38,0.07)",
+    alignItems: "center", justifyContent: "center",
+  },
+  pendingBadge: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    backgroundColor: "rgba(217,119,6,0.1)",
+    borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2,
+    borderWidth: 1, borderColor: "rgba(217,119,6,0.25)",
+  },
+  pendingBadgeTxt: { fontSize: 10, fontWeight: "600", color: "#d97706" },
 });
