@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import { formatScheduleLabel } from "@/src/lib/formatScheduleLabel";
 import {
   applyRatingToProgressRow,
@@ -59,8 +60,12 @@ export default function DeckStudyScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const deckId = typeof params.id === "string" ? params.id : null;
+  const todayParam = params.today;
+  const todayStr = Array.isArray(todayParam) ? todayParam[0] : todayParam;
+  const includeScheduledToday = todayStr === "1" || todayStr === "true";
   const { t } = useLanguage();
   const { user } = useAuth();
+  const { settings: studySettings } = useStudySettings();
 
   const [queue, setQueue] = useState<DueCard[]>([]);
   const [settings, setSettings] = useState<AppSpacedRepetitionSettingsRow | null>(null);
@@ -78,7 +83,10 @@ export default function DeckStudyScreen() {
     setLoading(true);
     const [{ data: settingsData, error: settingsError }, dueList] = await Promise.all([
       supabase.from("app_spaced_repetition_settings").select("*").eq("id", 1).single(),
-      loadDueCardsForDeck(deckId),
+      loadDueCardsForDeck(deckId, {
+        includeScheduledToday,
+        srsDayStartHour: studySettings.srsDayStartHour,
+      }),
     ]);
 
     if (settingsError || !settingsData) {
@@ -92,7 +100,7 @@ export default function DeckStudyScreen() {
     setShowBack(false);
     setSessionComplete(false);
     setLoading(false);
-  }, [deckId, user?.id, t]);
+  }, [deckId, user?.id, t, includeScheduledToday, studySettings.srsDayStartHour]);
 
   useEffect(() => {
     loadSession();
@@ -100,9 +108,9 @@ export default function DeckStudyScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: t("studying"),
+      title: includeScheduledToday ? t("studyAllTodayTitle") : t("studying"),
     });
-  }, [navigation, t]);
+  }, [navigation, t, includeScheduledToday]);
 
   const current = queue[0] ?? null;
   const total = queue.length;

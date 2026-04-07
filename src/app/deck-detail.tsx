@@ -21,6 +21,7 @@ import type { TextStyle } from "react-native";
 
 import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
@@ -224,9 +225,30 @@ export default function DeckDetailScreen() {
     }, [loadData, deckId])
   );
 
-  const dueToday = user
-    ? getDueTodayCountForUser(cards.map((c) => c.card_id), progressMap)
-    : totalCards;
+  const { settings: studySettings } = useStudySettings();
+
+  const dueToday = useMemo(() => {
+    if (!user) return totalCards;
+    return getDueTodayCountForUser(
+      cards.map((c) => c.card_id),
+      progressMap,
+      new Date(),
+      studySettings.srsDayStartHour
+    );
+  }, [user, totalCards, cards, progressMap, studySettings.srsDayStartHour]);
+
+  const dueNowCount = useMemo(() => {
+    if (!user) return 0;
+    const now = Date.now();
+    return cards.filter((c) => {
+      const p = progressMap.get(c.card_id);
+      if (!p) return true;
+      if (p.due_date == null) return true;
+      const t = new Date(p.due_date).getTime();
+      if (Number.isNaN(t)) return true;
+      return t <= now;
+    }).length;
+  }, [user, cards, progressMap]);
 
   const isOwner = deck && user && deck.creator_id === user.id;
   // treat missing status (old DB without status column) as 'accepted' for backward compat
@@ -445,7 +467,32 @@ export default function DeckDetailScreen() {
                   icon="trending-up"
                   label={t("studying")}
                   bg="#059669"
-                  onPress={() => router.push(`/deck-study?id=${deck.deck_id}`)}
+                  onPress={() => {
+                    const onlyLaterToday = Boolean(user && dueNowCount === 0 && dueToday > 0);
+                    router.push({
+                      pathname: "/deck-study",
+                      params: onlyLaterToday
+                        ? { id: deck.deck_id, today: "1" }
+                        : { id: deck.deck_id },
+                    });
+                  }}
+                  flex
+                />
+              </View>
+            )}
+
+            {canEdit && user && dueToday > 0 && dueToday > dueNowCount && dueNowCount > 0 && (
+              <View style={styles.actionRowPrimary}>
+                <ActionBtn
+                  icon="zap"
+                  label={t("studyAllToday")}
+                  bg="#ecfdf5"
+                  textColor="#047857"
+                  border
+                  borderColor="rgba(4,120,87,0.35)"
+                  onPress={() =>
+                    router.push({ pathname: "/deck-study", params: { id: deck.deck_id, today: "1" } })
+                  }
                   flex
                 />
               </View>

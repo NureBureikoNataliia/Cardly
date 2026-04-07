@@ -4,6 +4,7 @@ import {
   DEFAULT_STUDY_SETTINGS,
   type StudySettings,
 } from "@/src/lib/spacedRepetition";
+import { normalizeSrsDayStartHour } from "@/src/lib/srsDayBoundary";
 
 const STORAGE_KEY = "@cardly_study_settings";
 
@@ -23,7 +24,13 @@ export function StudySettingsProvider({ children }: { children: React.ReactNode 
       if (stored) {
         try {
           const parsed = JSON.parse(stored) as Partial<StudySettings>;
-          setSettings((prev) => ({ ...DEFAULT_STUDY_SETTINGS, ...prev, ...parsed }));
+          setSettings({
+            ...DEFAULT_STUDY_SETTINGS,
+            ...parsed,
+            srsDayStartHour: normalizeSrsDayStartHour(
+              parsed.srsDayStartHour ?? DEFAULT_STUDY_SETTINGS.srsDayStartHour
+            ),
+          });
         } catch (_) {
           // Keep defaults
         }
@@ -33,8 +40,11 @@ export function StudySettingsProvider({ children }: { children: React.ReactNode 
 
   const updateSettings = useCallback(async (partial: Partial<StudySettings>) => {
     setSettings((prev) => {
-      const next = { ...DEFAULT_STUDY_SETTINGS, ...prev, ...partial };
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      const next = { ...prev, ...partial };
+      if (partial.srsDayStartHour !== undefined) {
+        next.srsDayStartHour = normalizeSrsDayStartHour(partial.srsDayStartHour);
+      }
+      void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;
     });
   }, []);

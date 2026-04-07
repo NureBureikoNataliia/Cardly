@@ -6,10 +6,12 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } fro
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 
 import { Deck } from '@/assets/data/decks';
+import { getNextSrsDayBoundary, getSrsDayStart } from '@/src/lib/srsDayBoundary';
 import { supabase } from '@/src/lib/supabase';
 import { Text, View } from '@/src/components/Themed';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useStudySettings } from '@/src/contexts/StudySettingsContext';
 
 type RatingRow = {
   user_id: string;
@@ -89,16 +91,23 @@ function parseTime(iso: string | undefined): number {
   return Number.isNaN(t) ? 0 : t;
 }
 
-function inDateFilter(iso: string | undefined, filter: DateFilter): boolean {
+function inDateFilter(
+  iso: string | undefined,
+  filter: DateFilter,
+  srsDayStartHour: number
+): boolean {
   if (filter === 'all' || !iso) return true;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return true;
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const srsStart = getSrsDayStart(now, srsDayStartHour).getTime();
   const t = d.getTime();
-  if (filter === 'today') return t >= startOfToday;
+  if (filter === 'today') {
+    const end = getNextSrsDayBoundary(now, srsDayStartHour).getTime();
+    return t >= srsStart && t < end;
+  }
   if (filter === 'week') {
-    const weekAgo = startOfToday - 7 * 24 * 60 * 60 * 1000;
+    const weekAgo = srsStart - 7 * 24 * 60 * 60 * 1000;
     return t >= weekAgo;
   }
   if (filter === 'month') {
@@ -251,6 +260,7 @@ export default function DeckRateScreen() {
 
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { settings: studySettings } = useStudySettings();
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [loading, setLoading] = useState(true);
@@ -397,14 +407,16 @@ export default function DeckRateScreen() {
   const feedEntries = useMemo(() => buildFeedEntries(ratingRows, comments), [ratingRows, comments]);
 
   const filteredFeed = useMemo(() => {
-    let list = feedEntries.filter((e) => inDateFilter(entryActivityIso(e), feedDateFilter));
+    let list = feedEntries.filter((e) =>
+      inDateFilter(entryActivityIso(e), feedDateFilter, studySettings.srsDayStartHour)
+    );
     list = [...list].sort((a, b) => {
       const ta = entryActivityAt(a);
       const tb = entryActivityAt(b);
       return feedSort === 'newest' ? tb - ta : ta - tb;
     });
     return list;
-  }, [feedEntries, feedDateFilter, feedSort]);
+  }, [feedEntries, feedDateFilter, feedSort, studySettings.srsDayStartHour]);
 
   const canSubmit = useMemo(() => {
     if (!user) return false;

@@ -15,6 +15,7 @@ import ConfirmModal from '@/src/components/ConfirmModal';
 import { Text, View } from '@/src/components/Themed';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useStudySettings } from '@/src/contexts/StudySettingsContext';
 import { supabase } from '@/src/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 
@@ -46,7 +47,10 @@ export default function SettingsScreen() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [editingField, setEditingField] = useState<'avatar' | 'username' | 'email' | null>(null);
-  const [activeSection, setActiveSection] = useState<'account' | 'notifications'>('account');
+  const [activeSection, setActiveSection] = useState<'account' | 'notifications' | 'learning'>(
+    'account'
+  );
+  const { settings: studySettings, updateSettings } = useStudySettings();
 
   useEffect(() => {
     if (!user) return;
@@ -184,6 +188,16 @@ export default function SettingsScreen() {
               ]}
             >
               {t('notificationsTab')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.topMenuTab, activeSection === 'learning' && styles.topMenuTabActive]}
+            onPress={() => setActiveSection('learning')}
+          >
+            <Text
+              style={[styles.topMenuTabText, activeSection === 'learning' && styles.topMenuTabTextActive]}
+            >
+              {t('learningTab')}
             </Text>
           </TouchableOpacity>
         </RNView>
@@ -367,10 +381,45 @@ export default function SettingsScreen() {
         {message ? <Text style={styles.successText}>{message}</Text> : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
-      ) : (
+      ) : activeSection === 'notifications' ? (
         <View style={styles.card}>
           <Text style={styles.sectionHeader}>{t('notificationsTab')}</Text>
           <Text style={styles.infoSubText}>{t('notificationsPlaceholder')}</Text>
+        </View>
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.sectionHeader}>{t('studySettings')}</Text>
+          <Text style={styles.fieldLabel}>{t('srsDayStartTitle')}</Text>
+          <Text style={styles.infoSubText}>{t('srsDayStartHint')}</Text>
+          <RNView style={styles.srsHourRow}>
+            <TouchableOpacity
+              style={styles.srsHourButton}
+              onPress={() =>
+                void updateSettings({
+                  srsDayStartHour: (studySettings.srsDayStartHour + 23) % 24,
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={t('srsDayStartTitle')}
+            >
+              <Feather name="minus" size={22} color="#111827" />
+            </TouchableOpacity>
+            <Text style={styles.srsHourValue} accessibilityLiveRegion="polite">
+              {String(studySettings.srsDayStartHour).padStart(2, '0')}:00
+            </Text>
+            <TouchableOpacity
+              style={styles.srsHourButton}
+              onPress={() =>
+                void updateSettings({
+                  srsDayStartHour: (studySettings.srsDayStartHour + 1) % 24,
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={t('srsDayStartTitle')}
+            >
+              <Feather name="plus" size={22} color="#111827" />
+            </TouchableOpacity>
+          </RNView>
         </View>
       )}
 
@@ -630,5 +679,30 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#dc2626',
     fontSize: 14,
+  },
+  srsHourRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginTop: 12,
+  },
+  srsHourButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  srsHourValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+    minWidth: 88,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
 });

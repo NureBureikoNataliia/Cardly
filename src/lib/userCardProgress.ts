@@ -1,4 +1,9 @@
 import { supabase } from "@/src/lib/supabase";
+import {
+  getNextSrsDayBoundary,
+  normalizeSrsDayStartHour,
+  SRS_DAY_START_HOUR_LOCAL,
+} from "@/src/lib/srsDayBoundary";
 import { scheduleCard, type Rating, type StudySettings } from "./spacedRepetition";
 
 export interface UserCardProgress {
@@ -44,19 +49,22 @@ export function isCardDueForUser(
 }
 
 /**
- * Count cards due today for a user (no progress or due_date <= end of today)
+ * Count cards due in the current SRS day (Anki-style: day rolls at `srsDayStartHour` local).
+ * Includes no progress, null due, and any due_date on or before the next boundary.
  */
 export function getDueTodayCountForUser(
   cardIds: string[],
-  progressMap: Map<string, UserCardProgress>
+  progressMap: Map<string, UserCardProgress>,
+  now: Date = new Date(),
+  srsDayStartHour: number = SRS_DAY_START_HOUR_LOCAL
 ): number {
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
+  const hour = normalizeSrsDayStartHour(srsDayStartHour);
+  const endOfSrsDay = getNextSrsDayBoundary(now, hour);
   return cardIds.filter((cardId) => {
     const p = progressMap.get(cardId);
     if (!p) return true;
     if (p.due_date == null) return true;
-    return new Date(p.due_date) <= endOfToday;
+    return new Date(p.due_date) <= endOfSrsDay;
   }).length;
 }
 

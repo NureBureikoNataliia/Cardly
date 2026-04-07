@@ -110,6 +110,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     copied: 'Copied',
     coverPreview: 'Cover preview',
     studying: 'Studying',
+    studyAllToday: 'Study all due today',
+    studyAllTodayTitle: "Today's queue",
     rateComment: 'Rate & Comment',
     ratings: 'ratings',
     noRatingsYet: 'No ratings yet',
@@ -253,6 +255,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     settingsMenuSubtitle: 'Manage all your settings.',
     accountSettingsTab: 'Account settings',
     notificationsTab: 'Notifications',
+    learningTab: 'Study',
+    srsDayStartTitle: 'SRS day starts at (local time)',
+    srsDayStartHint:
+      'This is when your study day switches to the next one. Before this time, the app still counts it as “yesterday” for scheduling. That changes how many cards are due today and which cards are included when you study everything scheduled for today.',
     notificationsPlaceholder: 'Notification settings will appear here.',
     help: 'Help',
     // Misc
@@ -391,6 +397,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     copied: 'Скопійовано',
     coverPreview: 'Перегляд обкладинки',
     studying: 'Вивчення',
+    studyAllToday: 'Усі на сьогодні',
+    studyAllTodayTitle: 'Черга на сьогодні',
     rateComment: 'Оцінка та коментар',
     ratings: 'оцінок',
     noRatingsYet: 'Поки немає оцінок',
@@ -534,6 +542,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     settingsMenuSubtitle: 'Керуйте всіма своїми налаштуваннями.',
     accountSettingsTab: 'Налаштування акаунту',
     notificationsTab: 'Повідомлення',
+    learningTab: 'Навчання',
+    srsDayStartTitle: 'Початок SRS-дня (за місцевим часом)',
+    srsDayStartHint:
+      'Це момент, коли навчальний день переходить у наступний. До цієї години програма ще вважає це «вчора» для розкладу. Від цього залежить, скільки карток показується «на сьогодні» і що потрапляє в режим «вивчити все за сьогодні».',
     notificationsPlaceholder: 'Тут зʼявляться налаштування повідомлень.',
     help: 'Допомога',
     // Misc

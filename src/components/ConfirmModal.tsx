@@ -23,8 +23,8 @@ export interface ConfirmModalProps {
 }
 
 /**
- * Красиве модальне вікно для підтвердження або повідомлення.
- * Якщо cancelText не вказано — показує тільки кнопку OK.
+ * Modal for confirmations or simple messages.
+ * If `cancelText` is omitted, only the OK button is shown.
  */
 export function ConfirmModal({
   visible,
