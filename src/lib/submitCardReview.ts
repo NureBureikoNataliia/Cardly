@@ -8,14 +8,14 @@ function appendNetworkFailureHint(detail: string): string {
     return detail;
   }
   if (Platform.OS === "web") {
-    return `${detail}\n\nExpo Web: часто мешают блокировщики, расширения или режим инкогнито. Попробуй Chrome без расширений или тот же сценарий в Expo Go на телефоне (iOS/Android).`;
+    return `${detail}\n\nExpo Web: ad blockers, extensions, or incognito mode often block requests. Try Chrome without extensions, or the same flow in Expo Go on a device (iOS/Android).`;
   }
-  return `${detail}\n\nПроверь интернет и VPN. Убедись, что в .env EXPO_PUBLIC_SUPABASE_URL=https://….supabase.co и после правок выполнен перезапуск: npx expo start -c`;
+  return `${detail}\n\nCheck network and VPN. Ensure .env has EXPO_PUBLIC_SUPABASE_URL=https://….supabase.co and restart Expo after changes: npx expo start -c`;
 }
 
 /**
- * Достаёт причину из FunctionsFetchError: поле `context` — это нативная ошибка fetch,
- * JSON.stringify от неё даёт `{}`, поэтому в UI казалось пусто.
+ * Extracts the real cause from FunctionsFetchError: `context` is the native fetch error;
+ * JSON.stringify on it yields `{}`, so the UI looked empty.
  */
 function enrichInvokeError(error: unknown): Error {
   if (!(error && typeof error === "object")) {
@@ -36,7 +36,7 @@ function enrichInvokeError(error: unknown): Error {
     const raw =
       detail && detail !== "{}"
         ? detail
-        : "Сеть недоступна, неверный EXPO_PUBLIC_SUPABASE_URL, или запрос заблокирован (VPN/файрвол).";
+        : "Network unavailable, invalid EXPO_PUBLIC_SUPABASE_URL, or request blocked (VPN/firewall).";
     const hint = appendNetworkFailureHint(raw);
     return new Error(`${e.message}\n→ ${hint}`);
   }
@@ -44,7 +44,7 @@ function enrichInvokeError(error: unknown): Error {
 }
 
 /**
- * FunctionsHttpError.context — это `Response`; тело с сервера содержит реальную причину (error/details).
+ * FunctionsHttpError.context is a `Response`; the body contains the real reason (error/details).
  */
 async function enrichHttpInvokeError(error: unknown): Promise<Error> {
   if (!(error && typeof error === "object")) {
@@ -88,16 +88,16 @@ async function enrichHttpInvokeError(error: unknown): Promise<Error> {
 
   const hint =
     status === 503 || /failed to start/i.test(detail)
-      ? "\n(503: смотри логи Edge Function в Dashboard; часто — деплой или импорты.)"
+      ? "\n(503: check Edge Function logs in the Dashboard; often deploy or import issues.)"
       : status >= 500
-        ? "\n(5xx: миграция БД / RLS — docs/SUPABASE_MANUAL_STEPS.md.)"
+        ? "\n(5xx: DB migration / RLS — see docs/SUPABASE_MANUAL_STEPS.md.)"
         : "";
 
-  return new Error(`HTTP ${status} от Edge Function\n${detail || "(пустое тело)"}${hint}`);
+  return new Error(`HTTP ${status} from Edge Function\n${detail || "(empty body)"}${hint}`);
 }
 
 /**
- * Вызывает Edge Function `submit-card-review` (серверный SRS).
+ * Invokes the `submit-card-review` Edge Function (server-side SRS).
  */
 export async function submitCardReviewInvoke(cardId: string, rating: SubmitCardReviewRating) {
   const result = await supabase.functions.invoke("submit-card-review", {

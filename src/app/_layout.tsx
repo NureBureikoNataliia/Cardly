@@ -24,11 +24,11 @@ export {
 } from 'expo-router';
 
 export const unstable_settings = {
-  // При перезагрузке начальным маршрутом будет (tabs)
+  // After reload, the initial route is (tabs)
   initialRouteName: '(tabs)',
 };
 
-// Предотвращаем автоматическое скрытие сплэш-скрина
+// Keep the splash screen visible until we hide it explicitly
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -55,7 +55,7 @@ export default function RootLayout() {
     return null;
   }
 
-  // Оборачиваем навигацию в провайдер данных о пользователе
+  // Wrap navigation in auth / language / study-settings providers
   return (
     <LanguageProvider>
       <StudySettingsProvider>

@@ -11,10 +11,10 @@ const storage = Platform.OS === "web" ? undefined : AsyncStorage;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage,
-    // Вмикаємо збереження сесії як на web, так і на native
+    // Persist session on both web and native
     persistSession: true,
     autoRefreshToken: true,
-    // На web дозволяємо детектити сесію в URL (для magic link тощо)
+    // On web, detect session from URL (e.g. magic links)
     detectSessionInUrl: Platform.OS === "web",
   },
 });

@@ -6,7 +6,7 @@ const config = getDefaultConfig(projectRoot);
 
 config.watchFolders = [path.resolve(projectRoot, "packages")];
 
-// Workspace package: стабільний резолв (зокрема Windows + npm link до packages/srs).
+// Workspace package: stable resolution (especially Windows + npm link to packages/srs).
 config.resolver.extraNodeModules = {
   "@cardly/srs": path.resolve(projectRoot, "packages/srs"),
 };
