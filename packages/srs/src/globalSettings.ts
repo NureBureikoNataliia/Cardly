@@ -2,7 +2,7 @@ import {
   ANKI_DEFAULT_EASE_PERMILLE,
   AnkiSchedulerConfig,
   defaultAnkiSchedulerConfig,
-} from "./ankiScheduler.ts";
+} from "./ankiScheduler";
 
 /**
  * App-wide spaced repetition settings (same for every deck).

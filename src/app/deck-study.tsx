@@ -1,77 +1,102 @@
-import { Card } from "@/assets/data/cards";
-import { Text, View } from "@/src/components/Themed";
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
+  Alert,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
+  Text,
   TouchableOpacity,
+  View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useAuth } from "@/src/contexts/AuthContext";
-import { type Rating } from "@/src/lib/spacedRepetition";
+import { formatScheduleLabel } from "@/src/lib/formatScheduleLabel";
 import {
-  fetchUserProgressForDeck,
-  isCardDueForUser,
-  saveProgressAfterRating,
-} from "@/src/lib/userCardProgress";
-import { useStudySettings } from "@/src/contexts/StudySettingsContext";
+  applyRatingToProgressRow,
+  appSettingsRowToGlobal,
+  delayDaysForReview,
+  progressRowToSnapshot,
+} from "@cardly/srs/dbMapping";
+import type { AppSpacedRepetitionSettingsRow } from "@cardly/srs/dbTypes";
+import { scheduleAfterAnswer } from "@cardly/srs/cardScheduling";
+import {
+  loadDueCardsForDeck,
+  type DueCard,
+} from "@/src/lib/reviewQueue";
+import {
+  submitCardReviewInvoke,
+  type SubmitCardReviewRating,
+} from "@/src/lib/submitCardReview";
+
+const RATINGS: SubmitCardReviewRating[] = ["again", "hard", "good", "easy"];
+
+/** Same-session learning: show card again before this many seconds elapse (Anki-like intraday queue). */
+const SESSION_REQUEUE_MAX_SECONDS = 20 * 60;
+
+type ApiSubmitOutcome = {
+  phase: string;
+  learning_step_index: number;
+  interval_days: number;
+  due_in_seconds_from_now: number | null;
+  ease_permille: number;
+};
+
+function shouldRequeueInSession(outcome: ApiSubmitOutcome | undefined): boolean {
+  const s = outcome?.due_in_seconds_from_now;
+  if (s == null || s <= 0) return false;
+  return s <= SESSION_REQUEUE_MAX_SECONDS;
+}
 
 export default function DeckStudyScreen() {
   const router = useRouter();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const deckId = typeof params.id === "string" ? params.id : null;
   const { t } = useLanguage();
   const { user } = useAuth();
-  const { settings: studySettings } = useStudySettings();
 
-  const [cards, setCards] = useState<Card[]>([]);
-  const [progressMap, setProgressMap] = useState<Map<string, import("@/src/lib/userCardProgress").UserCardProgress>>(new Map());
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [queue, setQueue] = useState<DueCard[]>([]);
+  const [settings, setSettings] = useState<AppSpacedRepetitionSettingsRow | null>(null);
   const [showBack, setShowBack] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [sessionComplete, setSessionComplete] = useState(false);
+  /** Prevents double-submit before the next frame (optimistic queue updates immediately). */
+  const rateLockRef = useRef(false);
 
-  const loadCards = useCallback(async () => {
+  const loadSession = useCallback(async () => {
     if (!deckId || !user?.id) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    const { data: cardsData, error: cardsError } = await supabase
-      .from("cards")
-      .select("*")
-      .eq("deck_id", deckId)
-      .order("created_at", { ascending: false });
+    const [{ data: settingsData, error: settingsError }, dueList] = await Promise.all([
+      supabase.from("app_spaced_repetition_settings").select("*").eq("id", 1).single(),
+      loadDueCardsForDeck(deckId),
+    ]);
 
-    if (cardsError || !cardsData) {
-      setLoading(false);
-      return;
+    if (settingsError || !settingsData) {
+      Alert.alert(t("error"), "SRS settings not found. Apply DB migrations.");
+      setSettings(null);
+    } else {
+      setSettings(settingsData as AppSpacedRepetitionSettingsRow);
     }
 
-    const allCards = cardsData as Card[];
-    const cardIds = allCards.map((c) => c.card_id);
-    const progress = await fetchUserProgressForDeck(user.id, cardIds);
-    setProgressMap(progress);
-
-    const dueCards = allCards.filter((c) => isCardDueForUser(progress.get(c.card_id)));
-    setCards(dueCards);
-    setCurrentIndex(0);
+    setQueue(dueList);
     setShowBack(false);
     setSessionComplete(false);
     setLoading(false);
-  }, [deckId, user?.id]);
+  }, [deckId, user?.id, t]);
 
   useEffect(() => {
-    loadCards();
-  }, [loadCards]);
+    loadSession();
+  }, [loadSession]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -79,42 +104,71 @@ export default function DeckStudyScreen() {
     });
   }, [navigation, t]);
 
-  const currentCard = cards[currentIndex];
-  const total = cards.length;
-  const cardCounterText = t("cardXOfY")
-    .replace("{current}", String(currentIndex + 1))
-    .replace("{total}", String(total));
+  const current = queue[0] ?? null;
+  const total = queue.length;
 
-  const handleRate = async (rating: Rating) => {
-    if (!currentCard || saving || !user?.id) return;
-
-    setSaving(true);
-    const currentProgress = progressMap.get(currentCard.card_id);
-    const { error } = await saveProgressAfterRating(
-      user.id,
-      currentCard.card_id,
-      rating,
-      currentProgress,
-      studySettings
-    );
-    setSaving(false);
-
-    if (error) return;
-
-    if (rating === 1) {
-      const rest = cards.filter((_, i) => i !== currentIndex);
-      setCards([...rest, currentCard]);
-      setShowBack(false);
-      if (rest.length > 0) {
-        setCurrentIndex(0);
-      }
-    } else {
-      const rest = cards.filter((_, i) => i !== currentIndex);
-      setCards(rest);
-      setCurrentIndex(0);
-      setShowBack(false);
-      if (rest.length === 0) setSessionComplete(true);
+  const intervalLabels = useMemo(() => {
+    if (!showBack || !current || !settings) return null;
+    const snapshot = progressRowToSnapshot(current.progress);
+    const global = appSettingsRowToGlobal(settings);
+    const delay = delayDaysForReview(current.progress.due_date, new Date());
+    const out: Record<SubmitCardReviewRating, string> = {
+      again: "",
+      hard: "",
+      good: "",
+      easy: "",
+    };
+    for (const r of RATINGS) {
+      const o = scheduleAfterAnswer(snapshot, r, delay, global);
+      out[r] = formatScheduleLabel(o);
     }
+    return out;
+  }, [showBack, current, settings]);
+
+  const handleRate = (rating: SubmitCardReviewRating) => {
+    if (!current || !user?.id || !settings) return;
+    if (rateLockRef.current) return;
+    rateLockRef.current = true;
+
+    const card = current.card;
+    const cardId = card.card_id;
+
+    const { progress: optimisticProgress, outcome } = applyRatingToProgressRow(
+      current.progress,
+      rating,
+      settings,
+    );
+
+    const apiOutcome: ApiSubmitOutcome = {
+      phase: outcome.phase,
+      learning_step_index: outcome.learningStepIndex,
+      interval_days: outcome.intervalDays,
+      due_in_seconds_from_now: outcome.dueInSecondsFromNow,
+      ease_permille: outcome.easePermille,
+    };
+    const requeue = shouldRequeueInSession(apiOutcome);
+
+    setQueue((q) => {
+      const [, ...rest] = q;
+      if (requeue) {
+        return [...rest, { card, progress: optimisticProgress }];
+      }
+      const next = rest;
+      if (next.length === 0) setSessionComplete(true);
+      return next;
+    });
+    setShowBack(false);
+
+    queueMicrotask(() => {
+      rateLockRef.current = false;
+    });
+
+    void submitCardReviewInvoke(cardId, rating).then((result) => {
+      if (result.error) {
+        Alert.alert(t("error"), result.error.message ?? "Request failed");
+        loadSession();
+      }
+    });
   };
 
   const handleCardPress = () => {
@@ -132,7 +186,7 @@ export default function DeckStudyScreen() {
   if (!user) {
     return (
       <View style={styles.container}>
-        <Text style={styles.emptyText}>{t("mustBeLoggedIn")}</Text>
+        <Text style={styles.emptyText}>{t("mustBeLoggedInStudy")}</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
         </TouchableOpacity>
@@ -140,14 +194,11 @@ export default function DeckStudyScreen() {
     );
   }
 
-  if (cards.length === 0 && !sessionComplete) {
+  if (queue.length === 0 && !sessionComplete) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
         <Text style={styles.emptyText}>{t("noCardsToReview")}</Text>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
         </TouchableOpacity>
       </View>
@@ -156,86 +207,95 @@ export default function DeckStudyScreen() {
 
   if (sessionComplete) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.completeCard}>
           <Feather name="check-circle" size={64} color="#66BB6A" />
           <Text style={styles.completeTitle}>{t("reviewComplete")}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  const currentCard = current.card;
+  const cardCounterText = t("cardXOfY")
+    .replace("{current}", "1")
+    .replace("{total}", String(total));
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
       <Text style={styles.counter}>{cardCounterText}</Text>
 
-      <TouchableOpacity
-        style={styles.card}
-        onPress={handleCardPress}
-        activeOpacity={1}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollInner}
+        keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.cardInner}>
-          <Text style={styles.cardTitle}>
-            {showBack ? currentCard.back_text : currentCard.front_text}
-          </Text>
-          {showBack && currentCard.notes ? (
-            <Text style={styles.cardNotes}>{currentCard.notes}</Text>
-          ) : null}
-          {!showBack && (
-            <Text style={styles.hint}>{t("showAnswer")}</Text>
-          )}
-        </View>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={handleCardPress} activeOpacity={1}>
+          <View style={styles.cardInner}>
+            {showBack && currentCard.back_media_url ? (
+              <Image
+                source={{ uri: currentCard.back_media_url }}
+                style={styles.cardMedia}
+                resizeMode="contain"
+              />
+            ) : !showBack && currentCard.front_media_url ? (
+              <Image
+                source={{ uri: currentCard.front_media_url }}
+                style={styles.cardMedia}
+                resizeMode="contain"
+              />
+            ) : null}
+
+            <Text style={styles.cardTitle}>
+              {showBack ? currentCard.back_text : currentCard.front_text}
+            </Text>
+            {showBack && currentCard.notes ? (
+              <Text style={styles.cardNotes}>{currentCard.notes}</Text>
+            ) : null}
+            {!showBack && <Text style={styles.hint}>{t("showAnswer")}</Text>}
+          </View>
+        </TouchableOpacity>
+      </ScrollView>
 
       {showBack ? (
         <View style={styles.ratingButtons}>
-          <TouchableOpacity
-            style={[styles.ratingBtn, styles.againBtn]}
-            onPress={() => handleRate(1)}
-            disabled={saving}
-          >
-            <Text style={styles.ratingBtnText}>{t("again")}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.ratingBtn, styles.hardBtn]}
-            onPress={() => handleRate(2)}
-            disabled={saving}
-          >
-            <Text style={styles.ratingBtnText}>{t("hard")}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.ratingBtn, styles.goodBtn]}
-            onPress={() => handleRate(3)}
-            disabled={saving}
-          >
-            <Text style={styles.ratingBtnText}>{t("good")}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.ratingBtn, styles.easyBtn]}
-            onPress={() => handleRate(4)}
-            disabled={saving}
-          >
-            <Text style={styles.ratingBtnText}>{t("easy")}</Text>
-          </TouchableOpacity>
+          {RATINGS.map((rating) => (
+            <Pressable
+              key={rating}
+              style={({ pressed }) => [
+                styles.ratingBtn,
+                rating === "again"
+                  ? styles.btn_again
+                  : rating === "hard"
+                    ? styles.btn_hard
+                    : rating === "good"
+                      ? styles.btn_good
+                      : styles.btn_easy,
+                pressed && styles.ratingPressed,
+              ]}
+              onPress={() => handleRate(rating)}
+            >
+              <Text style={styles.ratingBtnText}>{t(rating)}</Text>
+              {intervalLabels ? (
+                <Text style={styles.intervalHint}>{intervalLabels[rating]}</Text>
+              ) : null}
+            </Pressable>
+          ))}
         </View>
-      ) : (
-        <Text style={styles.ratingHint}>{t("showAnswer")}</Text>
-      )}
-
-      {saving && (
-        <ActivityIndicator size="small" color="#4255ff" style={styles.loader} />
-      )}
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 16,
+  },
   container: {
     flex: 1,
     backgroundColor: "#f3f4f6",
@@ -243,14 +303,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  scroll: {
+    flex: 1,
+  },
+  scrollInner: {
+    paddingBottom: 16,
+  },
   loadingText: {
     fontSize: 18,
-    opacity: 0.7,
+    color: "#6b7280",
   },
   emptyText: {
     fontSize: 18,
+    color: "#4b5563",
     textAlign: "center",
-    opacity: 0.8,
     marginBottom: 24,
   },
   backButton: {
@@ -283,10 +349,10 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   counter: {
-    position: "absolute",
-    top: 80,
+    alignSelf: "center",
     fontSize: 14,
-    opacity: 0.7,
+    color: "#6b7280",
+    marginBottom: 12,
   },
   card: {
     width: "100%",
@@ -310,7 +376,7 @@ const styles = StyleSheet.create({
   },
   cardMedia: {
     width: "100%",
-    height: 140,
+    height: 160,
     borderRadius: 10,
     marginBottom: 12,
     backgroundColor: "#f3f4f6",
@@ -334,44 +400,47 @@ const styles = StyleSheet.create({
     color: "#9ca3af",
     marginTop: 16,
   },
-  ratingHint: {
-    fontSize: 14,
-    color: "#9ca3af",
-    marginTop: 24,
-  },
   ratingButtons: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginTop: 28,
+    gap: 8,
+    marginTop: 8,
     width: "100%",
-    justifyContent: "center",
+    justifyContent: "space-between",
   },
   ratingBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 12,
+    flexGrow: 1,
+    flexBasis: "22%",
     minWidth: 72,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    borderRadius: 12,
     alignItems: "center",
   },
-  againBtn: {
+  ratingPressed: {
+    opacity: 0.85,
+  },
+  btn_again: {
     backgroundColor: "#ef4444",
   },
-  hardBtn: {
+  btn_hard: {
     backgroundColor: "#f59e0b",
   },
-  goodBtn: {
+  btn_good: {
     backgroundColor: "#22c55e",
   },
-  easyBtn: {
+  btn_easy: {
     backgroundColor: "#3b82f6",
   },
   ratingBtnText: {
     color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
   },
-  loader: {
-    marginTop: 16,
+  intervalHint: {
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 4,
   },
 });

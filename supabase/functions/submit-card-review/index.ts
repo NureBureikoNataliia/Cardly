@@ -1,6 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { scheduleAfterAnswer } from "../_shared/spaced-repetition/cardScheduling.ts";
-import type { ReviewRating } from "../_shared/spaced-repetition/ankiScheduler.ts";
+import { scheduleAfterAnswer } from "@cardly/srs/cardScheduling";
+import type { ReviewRating } from "@cardly/srs/ankiScheduler";
 import {
   appSettingsRowToGlobal,
   delayDaysForReview,
@@ -8,8 +8,8 @@ import {
   nextRepetitionsCount,
   progressRowToSnapshot,
   scheduleOutcomeToProgressPatch,
-} from "../_shared/spaced-repetition/dbMapping.ts";
-import type { AppSpacedRepetitionSettingsRow, UserCardProgressRow } from "../_shared/spaced-repetition/dbTypes.ts";
+} from "@cardly/srs/dbMapping";
+import type { AppSpacedRepetitionSettingsRow, UserCardProgressRow } from "@cardly/srs/dbTypes";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",

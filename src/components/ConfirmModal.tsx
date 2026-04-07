@@ -1,14 +1,14 @@
-import React from 'react';
+import React from "react";
 import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+    Modal,
+    Pressable,
+    StyleSheet,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
-import { Text } from './Themed';
-import Feather from '@expo/vector-icons/Feather';
+import Feather from "@expo/vector-icons/Feather";
+import { Text } from "./Themed";
 
 export interface ConfirmModalProps {
   visible: boolean;
@@ -31,11 +31,11 @@ export function ConfirmModal({
   title,
   message,
   confirmText,
-  cancelText = 'Cancel',
+  cancelText = "Cancel",
   destructive = false,
   onConfirm,
   onCancel,
-  icon = 'alert-circle',
+  icon = "alert-circle",
 }: ConfirmModalProps) {
   const hasCancel = Boolean(cancelText);
 
@@ -50,12 +50,20 @@ export function ConfirmModal({
         style={styles.overlay}
         onPress={hasCancel ? onCancel : onConfirm}
       >
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-          <View style={[styles.iconWrapper, destructive && styles.iconWrapperDestructive]}>
+        <Pressable
+          style={styles.modalCard}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View
+            style={[
+              styles.iconWrapper,
+              destructive && styles.iconWrapperDestructive,
+            ]}
+          >
             <Feather
               name={icon}
               size={32}
-              color={destructive ? '#dc2626' : '#4255ff'}
+              color={destructive ? "#dc2626" : "#4255ff"}
             />
           </View>
           <Text style={styles.title}>{title}</Text>
@@ -92,19 +100,19 @@ export function ConfirmModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 24,
   },
   modalCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 20,
     padding: 24,
-    width: '100%',
+    width: "100%",
     maxWidth: 360,
-    alignItems: 'center',
-    shadowColor: '#000',
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 24,
@@ -114,61 +122,61 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(66, 85, 255, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(66, 85, 255, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 16,
   },
   iconWrapperDestructive: {
-    backgroundColor: 'rgba(220, 38, 38, 0.12)',
+    backgroundColor: "rgba(220, 38, 38, 0.12)",
   },
   title: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#1f2937',
+    fontWeight: "700",
+    color: "#1f2937",
     marginBottom: 8,
   },
   message: {
     fontSize: 16,
-    color: '#6b7280',
+    color: "#6b7280",
     lineHeight: 24,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 24,
   },
   buttons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
-    width: '100%',
+    width: "100%",
   },
   button: {
     flex: 1,
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   cancelButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: "#f3f4f6",
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#4b5563',
+    fontWeight: "600",
+    color: "#4b5563",
   },
   confirmButton: {
-    backgroundColor: '#4255ff',
+    backgroundColor: "#4255ff",
   },
   confirmButtonDestructive: {
-    backgroundColor: '#dc2626',
+    backgroundColor: "#dc2626",
   },
   confirmButtonFull: {
     flex: 1,
   },
   confirmButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: "600",
+    color: "#fff",
   },
 });
 

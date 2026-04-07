@@ -1,8 +1,3 @@
-/**
- * User card progress - integrates with user_card_progress table
- * Used for spaced repetition (Studying) - per-user progress
- */
-
 import { supabase } from "@/src/lib/supabase";
 import { scheduleCard, type Rating, type StudySettings } from "./spacedRepetition";
 
@@ -10,11 +5,12 @@ export interface UserCardProgress {
   user_id: string;
   card_id: string;
   status: string;
-  due_date: string;
-  interval_days: number;
-  ease_factor: number;
-  repetitions: number;
-  last_reviewed_at: string;
+  due_date: string | null;
+  interval_days: number | null;
+  ease_factor: number | null;
+  repetitions: number | null;
+  last_reviewed_at: string | null;
+  learning_step_index?: number | null;
 }
 
 /**
@@ -43,6 +39,7 @@ export function isCardDueForUser(
   now: Date = new Date()
 ): boolean {
   if (!progress) return true;
+  if (progress.due_date == null) return true;
   return new Date(progress.due_date) <= now;
 }
 
@@ -58,6 +55,7 @@ export function getDueTodayCountForUser(
   return cardIds.filter((cardId) => {
     const p = progressMap.get(cardId);
     if (!p) return true;
+    if (p.due_date == null) return true;
     return new Date(p.due_date) <= endOfToday;
   }).length;
 }
@@ -75,9 +73,9 @@ export async function saveProgressAfterRating(
   const current = currentProgress
     ? {
         next_review_at: currentProgress.due_date,
-        interval_days: currentProgress.interval_days,
-        ease_factor: currentProgress.ease_factor,
-        repetitions: currentProgress.repetitions,
+        interval_days: currentProgress.interval_days ?? undefined,
+        ease_factor: currentProgress.ease_factor ?? undefined,
+        repetitions: currentProgress.repetitions ?? undefined,
       }
     : undefined;
 

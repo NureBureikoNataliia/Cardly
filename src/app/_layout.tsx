@@ -122,7 +122,6 @@ function WebAuthenticatedShell({
             <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
             <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
             <Stack.Screen name="admin" options={{ headerShown: true, title: 'Admin' }} />
-            <Stack.Screen name="deck-review" options={{ headerShown: true }} />
             <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
             <Stack.Screen name="deck-study" options={{ headerShown: true }} />
             <Stack.Screen name="settings" options={{ headerShown: true }} />
@@ -196,7 +195,6 @@ function RootLayoutNav() {
       <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
       <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
       <Stack.Screen name="admin" options={{ headerShown: true, title: 'Admin' }} />
-      <Stack.Screen name="deck-review" options={{ headerShown: true }} />
       <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
       <Stack.Screen name="deck-study" options={{ headerShown: true }} />
       <Stack.Screen name="settings" options={{ headerShown: true }} />

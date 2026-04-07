@@ -17,6 +17,8 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import type { TextStyle } from "react-native";
+
 import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
@@ -24,6 +26,12 @@ import ConfirmModal from "@/src/components/ConfirmModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 
 const scrollPositions: Record<string, number> = {};
+
+/** Web: hide browser default focus outline (RN TextStyle typings omit outlineStyle "none"). */
+const webTextInputNoOutline: TextStyle | undefined =
+  Platform.OS === "web"
+    ? ({ outlineWidth: 0, outlineStyle: "none" } as unknown as TextStyle)
+    : undefined;
 
 type Collaborator = {
   deck_id: string;
@@ -69,6 +77,7 @@ export default function DeckDetailScreen() {
 
   // ── Collaborators ──
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [learnedInfoOpen, setLearnedInfoOpen] = useState(false);
   const [collabOpen, setCollabOpen] = useState(false);
   const [collaboratorSearch, setCollaboratorSearch] = useState("");
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
@@ -386,7 +395,14 @@ export default function DeckDetailScreen() {
             <View style={styles.statsDivider} />
             <StatChip icon="clock" value={dueToday} label={t("dueToday")} color="#d97706" />
             <View style={styles.statsDivider} />
-            <StatChip icon="check-circle" value={`${progressPct}%`} label={t("learned") ?? "Вивчено"} color="#059669" />
+            <StatChip
+              icon="check-circle"
+              value={`${progressPct}%`}
+              label={t("learned")}
+              color="#059669"
+              onInfoPress={() => setLearnedInfoOpen(true)}
+              infoAccessibilityLabel={t("learnedPercentInfoTitle")}
+            />
           </View>
 
           {/* ────── Progress bar ────── */}
@@ -395,7 +411,19 @@ export default function DeckDetailScreen() {
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
               </View>
-              <Text style={styles.progressLabel}>{progressPct}% {t("learned") ?? "вивчено"}</Text>
+              <View style={styles.progressLabelRow}>
+                <Text style={styles.progressLabel}>
+                  {progressPct}% {t("learned")}
+                </Text>
+                <Pressable
+                  onPress={() => setLearnedInfoOpen(true)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("learnedPercentInfoTitle")}
+                >
+                  <Feather name="info" size={14} color="#9ca3af" />
+                </Pressable>
+              </View>
             </View>
           )}
 
@@ -410,16 +438,9 @@ export default function DeckDetailScreen() {
               </View>
             )}
 
-            {/* Primary row: Review + Study */}
+            {/* Primary: Study */}
             {canEdit && (
               <View style={styles.actionRowPrimary}>
-                <ActionBtn
-                  icon="book-open"
-                  label={t("reviewCards")}
-                  bg="#6366f1"
-                  onPress={() => router.push(`/deck-review?id=${deck.deck_id}`)}
-                  flex
-                />
                 <ActionBtn
                   icon="trending-up"
                   label={t("studying")}
@@ -487,52 +508,6 @@ export default function DeckDetailScreen() {
             )}
           </View>
 
-          {/* ════════════ CARDS SECTION ════════════ */}
-          <View style={styles.cardsSection}>
-            <View style={styles.cardsSectionHeader}>
-              <Text style={styles.cardsSectionTitle}>{t("cards")}</Text>
-              <Text style={styles.cardsSectionCount}>{totalCards}</Text>
-            </View>
-
-            {cards.length === 0 ? (
-              <View style={styles.emptyCards}>
-                <View style={styles.emptyCardsIcon}>
-                  <Feather name="credit-card" size={32} color="#c7d2fe" />
-                </View>
-                <Text style={styles.emptyCardsTitle}>{t("noCardsInDeck")}</Text>
-                {canEdit && (
-                  <TouchableOpacity
-                    style={styles.emptyCardsBtn}
-                    onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
-                  >
-                    <Feather name="plus" size={16} color="#fff" />
-                    <Text style={styles.emptyCardsBtnTxt}>{t("addCard")}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : (
-              <View style={[styles.cardsGrid, numCols === 2 && styles.cardsGridTwo]}>
-                {cards.map((card, index) => (
-                  <CardTile
-                    key={card.card_id}
-                    card={card}
-                    index={index}
-                    isOwner={!!canEdit}
-                    numCols={numCols}
-                    createdByName={
-                      card.created_by
-                        ? (membersMap[card.created_by] ?? null)
-                        : (deck ? (membersMap[deck.creator_id] ?? null) : null)
-                    }
-                    onEdit={() => router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`)}
-                    onDelete={() => handleDeleteCard(card)}
-                    t={t}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
-
           {/* ════════════ COLLABORATORS SECTION (owner only) ════════════ */}
           {isOwner && (
             <View style={styles.collabSection}>
@@ -571,7 +546,7 @@ export default function DeckDetailScreen() {
                     <View style={styles.inviteInputWrap}>
                       <Feather name="search" size={15} color={collaboratorSearch.length > 0 ? "#6366f1" : "#b0b8c8"} />
                       <TextInput
-                        style={styles.inviteInput}
+                        style={[styles.inviteInput, webTextInputNoOutline]}
                         placeholder={t("searchByUsername")}
                         placeholderTextColor="#c4cbd8"
                         value={collaboratorSearch}
@@ -678,8 +653,65 @@ export default function DeckDetailScreen() {
             </View>
           )}
 
+          {/* ════════════ CARDS SECTION ════════════ */}
+          <View style={styles.cardsSection}>
+            <View style={styles.cardsSectionHeader}>
+              <Text style={styles.cardsSectionTitle}>{t("cardsSectionTitle")}</Text>
+              <Text style={styles.cardsSectionCount}>{totalCards}</Text>
+            </View>
+
+            {cards.length === 0 ? (
+              <View style={styles.emptyCards}>
+                <View style={styles.emptyCardsIcon}>
+                  <Feather name="credit-card" size={32} color="#c7d2fe" />
+                </View>
+                <Text style={styles.emptyCardsTitle}>{t("noCardsInDeck")}</Text>
+                {canEdit && (
+                  <TouchableOpacity
+                    style={styles.emptyCardsBtn}
+                    onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
+                  >
+                    <Feather name="plus" size={16} color="#fff" />
+                    <Text style={styles.emptyCardsBtnTxt}>{t("addCard")}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <View style={[styles.cardsGrid, numCols === 2 && styles.cardsGridTwo]}>
+                {cards.map((card, index) => (
+                  <CardTile
+                    key={card.card_id}
+                    card={card}
+                    index={index}
+                    isOwner={!!canEdit}
+                    numCols={numCols}
+                    createdByName={
+                      card.created_by
+                        ? (membersMap[card.created_by] ?? null)
+                        : (deck ? (membersMap[deck.creator_id] ?? null) : null)
+                    }
+                    onEdit={() => router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`)}
+                    onDelete={() => handleDeleteCard(card)}
+                    t={t}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+
         </View>
       </ScrollView>
+
+      <ConfirmModal
+        visible={learnedInfoOpen}
+        title={t("learnedPercentInfoTitle")}
+        message={t("learnedPercentInfoBody")}
+        confirmText={t("ok")}
+        cancelText={null}
+        icon="info"
+        onConfirm={() => setLearnedInfoOpen(false)}
+        onCancel={() => setLearnedInfoOpen(false)}
+      />
 
       <ConfirmModal
         visible={Boolean(collaboratorToRemove)}
@@ -711,17 +743,36 @@ export default function DeckDetailScreen() {
 }
 
 /* ─── StatChip ─── */
-function StatChip({ icon, value, label, color }: {
+function StatChip({ icon, value, label, color, onInfoPress, infoAccessibilityLabel }: {
   icon: keyof typeof Feather.glyphMap;
   value: number | string;
   label: string;
   color: string;
+  onInfoPress?: () => void;
+  infoAccessibilityLabel?: string;
 }) {
   return (
     <View style={styles.statChip}>
-      <View style={[styles.statChipIcon, { backgroundColor: `${color}18` }]}>
-        <Feather name={icon} size={15} color={color} />
-      </View>
+      {onInfoPress ? (
+        <View style={styles.statChipIconWithInfo}>
+          <View style={[styles.statChipIcon, { backgroundColor: `${color}18` }]}>
+            <Feather name={icon} size={15} color={color} />
+          </View>
+          <Pressable
+            style={styles.statChipInfoHit}
+            onPress={onInfoPress}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={infoAccessibilityLabel ?? label}
+          >
+            <Feather name="info" size={14} color={color} />
+          </Pressable>
+        </View>
+      ) : (
+        <View style={[styles.statChipIcon, { backgroundColor: `${color}18` }]}>
+          <Feather name={icon} size={15} color={color} />
+        </View>
+      )}
       <Text style={[styles.statChipValue, { color }]}>{value}</Text>
       <Text style={styles.statChipLabel}>{label}</Text>
     </View>
@@ -899,6 +950,19 @@ const styles = StyleSheet.create({
   },
   statsDivider: { width: 1, height: 40, backgroundColor: "#f0f1f5" },
   statChip: { flex: 1, alignItems: "center", gap: 4 },
+  /** Main icon stays centered like other chips; info sits to the right, outside the centering width. */
+  statChipIconWithInfo: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statChipInfoHit: {
+    position: "absolute",
+    left: "100%",
+    marginLeft: 4,
+    height: 32,
+    justifyContent: "center",
+  },
   statChipIcon: {
     width: 32, height: 32, borderRadius: 10,
     alignItems: "center", justifyContent: "center",
@@ -910,7 +974,14 @@ const styles = StyleSheet.create({
   progressWrap: { marginHorizontal: 16, marginTop: 12, gap: 6 },
   progressTrack: { height: 6, borderRadius: 999, backgroundColor: "#e8eaee", overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 999, backgroundColor: "#059669" },
-  progressLabel: { fontSize: 12, color: "#9ca3af", textAlign: "right" },
+  progressLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 6,
+    alignSelf: "flex-end",
+  },
+  progressLabel: { fontSize: 12, color: "#9ca3af" },
 
   /* ── ACTIONS ── */
   actions: { marginHorizontal: 16, marginTop: 16, gap: 10 },
@@ -1045,8 +1116,6 @@ const styles = StyleSheet.create({
   },
   inviteInput: {
     flex: 1, fontSize: 14, color: "#111827", paddingVertical: 0,
-    // @ts-ignore
-    outlineWidth: 0, outlineStyle: "none",
   },
   searchResultsList: {
     borderRadius: 12, borderWidth: 1, borderColor: "#e8eaee",

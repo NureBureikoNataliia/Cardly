@@ -1,17 +1,17 @@
 import {
   ANKI_DEFAULT_EASE_PERMILLE,
   type ReviewRating,
-} from "./ankiScheduler.ts";
-import type { ScheduleOutcome } from "./cardScheduling.ts";
+} from "./ankiScheduler";
+import { scheduleAfterAnswer, type ScheduleOutcome } from "./cardScheduling";
 import type {
   AppSpacedRepetitionSettingsRow,
   DbProgressStatus,
   UserCardProgressRow,
-} from "./dbTypes.ts";
+} from "./dbTypes";
 import type {
   CardScheduleSnapshot,
   GlobalSpacedRepetitionSettings,
-} from "./globalSettings.ts";
+} from "./globalSettings";
 
 export const EASE_PERMILLE_FACTOR = 1000;
 
@@ -124,6 +124,34 @@ export function scheduleOutcomeToProgressPatch(
     ease_factor: permilleToEaseFactor(outcome.easePermille),
     learning_step_index: outcome.learningStepIndex,
     last_reviewed_at: reviewedAt.toISOString(),
+  };
+}
+
+/** Same math as Edge Function `submit-card-review` — for optimistic UI before the network returns. */
+export function applyRatingToProgressRow(
+  row: UserCardProgressRow,
+  rating: ReviewRating,
+  settings: AppSpacedRepetitionSettingsRow,
+  reviewedAt: Date = new Date()
+): { progress: UserCardProgressRow; outcome: ScheduleOutcome } {
+  const global = appSettingsRowToGlobal(settings);
+  const snapshot = progressRowToSnapshot(row);
+  const delayDays = delayDaysForReview(row.due_date, reviewedAt);
+  const outcome = scheduleAfterAnswer(snapshot, rating, delayDays, global);
+  const patch = scheduleOutcomeToProgressPatch(outcome, reviewedAt);
+  const repetitions = nextRepetitionsCount(row.repetitions, rating);
+  return {
+    progress: {
+      ...row,
+      status: patch.status,
+      due_date: patch.due_date,
+      interval_days: patch.interval_days,
+      ease_factor: patch.ease_factor,
+      learning_step_index: patch.learning_step_index,
+      last_reviewed_at: patch.last_reviewed_at,
+      repetitions,
+    },
+    outcome,
   };
 }
 

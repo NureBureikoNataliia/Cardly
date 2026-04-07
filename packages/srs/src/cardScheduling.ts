@@ -4,13 +4,13 @@ import {
   nextEasePermille,
   scheduleNextReview,
   type ReviewRating,
-} from "./ankiScheduler.ts";
+} from "./ankiScheduler";
 import {
   type CardScheduleSnapshot,
   type GlobalSpacedRepetitionSettings,
   defaultGlobalSpacedRepetitionSettings,
   validateGlobalSettings,
-} from "./globalSettings.ts";
+} from "./globalSettings";
 
 export interface ScheduleOutcome {
   phase: CardScheduleSnapshot["phase"];
