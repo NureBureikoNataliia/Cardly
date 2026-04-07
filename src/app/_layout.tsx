@@ -104,7 +104,7 @@ function WebAuthenticatedShell({
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1, flexDirection: 'row' }}>
         {!isCompact ? <Sidebar /> : null}
-        <View style={{ flex: 1, overflow: 'hidden' }}>
+        <View style={{ flex: 1, overflow: Platform.OS === 'web' ? 'visible' : 'hidden' }}>
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: '#fff' },

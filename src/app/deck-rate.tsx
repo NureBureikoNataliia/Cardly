@@ -3,12 +3,12 @@ import { User } from '@supabase/supabase-js';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { Deck } from '@/assets/data/decks';
 import { getNextSrsDayBoundary, getSrsDayStart } from '@/src/lib/srsDayBoundary';
 import { supabase } from '@/src/lib/supabase';
-import { Text, View } from '@/src/components/Themed';
+import { Text } from '@/src/components/Themed';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useStudySettings } from '@/src/contexts/StudySettingsContext';
@@ -167,6 +167,7 @@ function FilterChips({
       </View>
     </View>
   );
+
 }
 
 const chipStyles = StyleSheet.create({
@@ -227,25 +228,28 @@ async function buildDisplayNameMap(
   const out: Record<string, string> = {};
 
   if (unique.length > 0) {
-    const { data } = await supabase.from('users').select('user_id,username').in('user_id', unique);
-    for (const row of data ?? []) {
-      const r = row as { user_id: string; username: string | null };
-      if (r.user_id && r.username && String(r.username).trim()) {
-        out[r.user_id] = String(r.username).trim();
+    // Use SECURITY DEFINER RPC to read usernames from auth.users metadata
+    const { data } = await supabase.rpc('get_users_display_names', {
+      p_user_ids: unique,
+    });
+    for (const row of (data ?? []) as { user_id: string; display_name: string }[]) {
+      if (row.user_id && row.display_name?.trim()) {
+        out[row.user_id] = row.display_name.trim();
       }
     }
   }
 
+  // Always show current user's own name from their session metadata
   if (currentUser?.id) {
     const meta = (currentUser.user_metadata?.username as string | undefined)?.trim();
     const fromEmail = currentUser.email?.includes('@') ? currentUser.email.split('@')[0] : '';
     const selfLabel = meta || fromEmail || tYou;
-    out[currentUser.id] = out[currentUser.id] ?? selfLabel;
+    out[currentUser.id] = out[currentUser.id] || selfLabel;
   }
 
   for (const id of unique) {
     if (!out[id]) {
-      out[id] = `${tUnknown} (${id.slice(0, 8)}…)`;
+      out[id] = tUnknown;
     }
   }
 

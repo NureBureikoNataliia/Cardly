@@ -1,15 +1,15 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
-import { scheduleAfterAnswer } from "@cardly/srs/cardScheduling";
 import type { ReviewRating } from "@cardly/srs/ankiScheduler";
+import { scheduleAfterAnswer } from "@cardly/srs/cardScheduling";
 import {
-  appSettingsRowToGlobal,
-  delayDaysForReview,
-  initialUserCardProgressPayload,
-  nextRepetitionsCount,
-  progressRowToSnapshot,
-  scheduleOutcomeToProgressPatch,
+    appSettingsRowToGlobal,
+    delayDaysForReview,
+    initialUserCardProgressPayload,
+    nextRepetitionsCount,
+    progressRowToSnapshot,
+    scheduleOutcomeToProgressPatch,
 } from "@cardly/srs/dbMapping";
 import type { AppSpacedRepetitionSettingsRow, UserCardProgressRow } from "@cardly/srs/dbTypes";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  let body: { card_id?: string; rating?: unknown };
+  let body: { card_id?: string; deck_id?: string; rating?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -75,6 +75,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const cardId = body.card_id;
+  const deckId = body.deck_id;
   const rating = body.rating;
   if (!cardId || typeof cardId !== "string") {
     return new Response(JSON.stringify({ error: "card_id is required" }), {
@@ -165,6 +166,17 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: updateError.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Log the review for statistics (best-effort — don't fail the request if it errors)
+  if (deckId) {
+    const ratingNumeric: Record<string, number> = { again: 0, hard: 1, good: 2, easy: 3 };
+    await supabase.from("review_logs").insert({
+      user_id: user.id,
+      card_id: cardId,
+      deck_id: deckId,
+      rating: ratingNumeric[rating] ?? 2,
     });
   }
 

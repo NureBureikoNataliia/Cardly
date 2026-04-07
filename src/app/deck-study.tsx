@@ -171,7 +171,7 @@ export default function DeckStudyScreen() {
       rateLockRef.current = false;
     });
 
-    void submitCardReviewInvoke(cardId, rating).then((result) => {
+    void submitCardReviewInvoke(cardId, rating, deckId ?? undefined).then((result) => {
       if (result.error) {
         Alert.alert(t("error"), result.error.message ?? "Request failed");
         loadSession();

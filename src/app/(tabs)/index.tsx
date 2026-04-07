@@ -277,7 +277,7 @@ export default function MainScreen() {
               </RNView>
               <RNView style={styles.controlsContainer}>
                 <RNView style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
-                  <Feather name="search" size={16} color={searchFocused ? '#4255ff' : '#b0b8c8'} />
+                  <Feather name="search" size={16} color={searchFocused ? '#1a1a1a' : '#b0b8c8'} />
                   <TextInput
                     style={styles.searchInput}
                     value={searchQuery}
@@ -357,10 +357,10 @@ export default function MainScreen() {
 
       <ConfirmModal
         visible={Boolean(deckToDelete)}
-        title="Delete deck"
-        message="Are you sure you want to delete this deck? All cards in it will be deleted."
-        confirmText="Delete"
-        cancelText="Cancel"
+        title={t('deleteDeck')}
+        message={t('deleteDeckConfirm')}
+        confirmText={t('delete')}
+        cancelText={t('cancel')}
         destructive
         icon="trash-2"
         onConfirm={performDeleteDeck}
@@ -440,9 +440,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   searchContainerFocused: {
-    borderColor: '#4255ff',
+    borderColor: '#1a1a1a',
     backgroundColor: '#fff',
-    shadowColor: '#4255ff',
+    shadowColor: '#1a1a1a',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.14,
     shadowRadius: 8,

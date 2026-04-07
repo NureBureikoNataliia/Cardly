@@ -96,15 +96,45 @@ async function enrichHttpInvokeError(error: unknown): Promise<Error> {
   return new Error(`HTTP ${status} from Edge Function\n${detail || "(empty body)"}${hint}`);
 }
 
+const RATING_NUMERIC: Record<SubmitCardReviewRating, number> = {
+  again: 0,
+  hard: 1,
+  good: 2,
+  easy: 3,
+};
+
 /**
  * Invokes the `submit-card-review` Edge Function (server-side SRS).
+ * Also logs the review directly to `review_logs` from the client side
+ * (best-effort, does not fail the review if logging fails).
  */
-export async function submitCardReviewInvoke(cardId: string, rating: SubmitCardReviewRating) {
+export async function submitCardReviewInvoke(
+  cardId: string,
+  rating: SubmitCardReviewRating,
+  deckId?: string,
+) {
   const result = await supabase.functions.invoke("submit-card-review", {
-    body: { card_id: cardId, rating },
+    body: { card_id: cardId, deck_id: deckId, rating },
   });
   if (result.error) {
     return { ...result, error: await enrichHttpInvokeError(result.error) };
   }
+
+  // Логуємо перегляд для статистики (клієнтська сторона — гарантоване логування)
+  if (deckId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { error: logError } = await supabase.from('review_logs').insert({
+        user_id: user.id,
+        card_id: cardId,
+        deck_id: deckId,
+        rating: RATING_NUMERIC[rating],
+      });
+      if (__DEV__ && logError) {
+        console.warn('[review_logs] insert error:', logError.message, logError.details);
+      }
+    }
+  }
+
   return result;
 }

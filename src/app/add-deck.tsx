@@ -115,7 +115,7 @@ export default function AddDeckScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollOuter}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
       >
       <View style={styles.formContainer}>
 
@@ -367,7 +367,7 @@ function InputRow({
       <Feather
         name={icon}
         size={16}
-        color={focused ? '#4255ff' : '#b0b8c8'}
+        color={focused ? '#1a1a1a' : '#b0b8c8'}
         style={multiline ? { marginTop: 3 } : undefined}
       />
       {children}
@@ -512,9 +512,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   inputRowFocused: {
-    borderColor: '#4255ff',
+    borderColor: '#1a1a1a',
     backgroundColor: '#fff',
-    shadowColor: '#4255ff',
+    shadowColor: '#1a1a1a',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.14,
     shadowRadius: 8,

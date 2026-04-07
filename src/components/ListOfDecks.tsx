@@ -1,14 +1,14 @@
 import React, { useRef, useState } from 'react';
 import {
-  FlatList,
-  Image,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    FlatList,
+    Image,
+    Modal,
+    Platform,
+    Pressable,
+    StyleSheet,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from 'react-native';
 
 import { Deck } from '@/assets/data/decks';
@@ -265,7 +265,7 @@ export function ListOfDecks({
         ListHeaderComponent={listHeaderComponent}
         style={styles.list}
         contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
       />
     </View>
   );

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
+  ScrollView,
   Platform,
   ActivityIndicator,
 } from 'react-native';
@@ -65,63 +66,69 @@ export default function LoginScreen() {
       <View style={styles.langBtn}>
         <LanguageDropdown />
       </View>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <BookOpen size={48} color="#3b82f6" />
-          <Text style={styles.title}>{t('flashCardMaster')}</Text>
-          <Text style={styles.subtitle}>{t('learnSmarter')}</Text>
-        </View>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
+      >
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <BookOpen size={48} color="#3b82f6" />
+            <Text style={styles.title}>{t('flashCardMaster')}</Text>
+            <Text style={styles.subtitle}>{t('learnSmarter')}</Text>
+          </View>
 
-        <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder={t('email')}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            editable={!loading}
-          />
+          <View style={styles.form}>
+            <TextInput
+              style={styles.input}
+              placeholder={t('email')}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!loading}
+            />
 
-          <TextInput
-            style={styles.input}
-            placeholder={t('password')}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!loading}
-          />
+            <TextInput
+              style={styles.input}
+              placeholder={t('password')}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              editable={!loading}
+            />
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>{t('signIn')}</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.googleButton, loading && styles.buttonDisabled]}
-            onPress={handleGoogle}
-            disabled={loading}
-          >
-            <Text style={styles.googleButtonText}>{t('googleSignIn')}</Text>
-          </TouchableOpacity>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>{t('noAccount')} </Text>
-            <TouchableOpacity onPress={() => router.push('/auth/signup' as never)}>
-              <Text style={styles.linkText}>{t('signUp')}</Text>
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>{t('signIn')}</Text>
+              )}
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.googleButton, loading && styles.buttonDisabled]}
+              onPress={handleGoogle}
+              disabled={loading}
+            >
+              <Text style={styles.googleButtonText}>{t('googleSignIn')}</Text>
+            </TouchableOpacity>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>{t('noAccount')} </Text>
+              <TouchableOpacity onPress={() => router.push('/auth/signup' as never)}>
+                <Text style={styles.linkText}>{t('signUp')}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -137,10 +144,14 @@ const styles = StyleSheet.create({
     right: 24,
     zIndex: 10,
   },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   content: {
-    flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 32,
   },
   header: {
     alignItems: 'center',

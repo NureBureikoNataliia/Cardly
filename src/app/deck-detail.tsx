@@ -164,6 +164,20 @@ export default function DeckDetailScreen() {
   // ── Invite collaborator ──
   const handleInvite = useCallback(async (targetUserId: string, targetUsername?: string) => {
     if (!deckId || isInviting) return;
+
+    // Block inviting the owner of the original deck (to avoid duplicates in their "Your Decks")
+    if (deck?.original_deck_id) {
+      const { data: origDeck } = await supabase
+        .from("decks")
+        .select("creator_id")
+        .eq("deck_id", deck.original_deck_id)
+        .single();
+      if (origDeck?.creator_id === targetUserId) {
+        setInviteMsg({ text: t("cannotInviteOriginalCreator"), ok: false });
+        return;
+      }
+    }
+
     const existing = collaborators.find((c) => c.user_id === targetUserId);
     if (existing?.status === 'accepted') {
       setInviteMsg({ text: t("inviteAlready"), ok: false });
@@ -192,7 +206,7 @@ export default function DeckDetailScreen() {
       setSearchResults([]);
       loadCollaborators();
     }
-  }, [deckId, collaborators, isInviting, user?.id, t, loadCollaborators]);
+  }, [deckId, deck, collaborators, isInviting, user?.id, t, loadCollaborators]);
 
   // ── Remove collaborator ──
   const handleRemoveCollaborator = useCallback(async () => {
@@ -369,7 +383,7 @@ export default function DeckDetailScreen() {
         contentContainerStyle={styles.contentOuter}
         onScroll={(e) => { if (deckId) scrollPositions[deckId] = e.nativeEvent.contentOffset.y; }}
         scrollEventThrottle={100}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
       >
         <View style={styles.pageWrap}>
 
@@ -386,16 +400,32 @@ export default function DeckDetailScreen() {
 
             {/* Badge row */}
             <View style={styles.heroBadgeRow}>
-              <View style={[styles.badge, deck.is_public ? styles.badgePublic : styles.badgePrivate]}>
-                <Feather name={deck.is_public ? "globe" : "lock"} size={11} color={deck.is_public ? "#059669" : "#9ca3af"} />
-                <Text style={[styles.badgeTxt, deck.is_public ? styles.badgeTxtPublic : styles.badgeTxtPrivate]}>
+              <View style={[
+                styles.badge,
+                deck.cover_image_url
+                  ? styles.badgeOnCover
+                  : (deck.is_public ? styles.badgePublic : styles.badgePrivate),
+              ]}>
+                <Feather
+                  name={deck.is_public ? "globe" : "lock"}
+                  size={11}
+                  color={deck.cover_image_url ? "#fff" : (deck.is_public ? "#059669" : "#9ca3af")}
+                />
+                <Text style={[
+                  styles.badgeTxt,
+                  deck.cover_image_url
+                    ? styles.badgeTxtOnCover
+                    : (deck.is_public ? styles.badgeTxtPublic : styles.badgeTxtPrivate),
+                ]}>
                   {deck.is_public ? t("public") : t("private")}
                 </Text>
               </View>
               {isCopiedDeck && (
-                <View style={styles.badgeCopy}>
-                  <Feather name="copy" size={11} color="#8b5cf6" />
-                  <Text style={styles.badgeTxtCopy}>{t("copied")}</Text>
+                <View style={[styles.badgeCopy, deck.cover_image_url && styles.badgeOnCover]}>
+                  <Feather name="copy" size={11} color={deck.cover_image_url ? "#fff" : "#8b5cf6"} />
+                  <Text style={[styles.badgeTxtCopy, deck.cover_image_url && styles.badgeTxtOnCover]}>
+                    {t("copied")}
+                  </Text>
                 </View>
               )}
             </View>
@@ -972,9 +1002,11 @@ const styles = StyleSheet.create({
   },
   badgePublic: { backgroundColor: "rgba(5,150,105,0.12)", borderWidth: 1, borderColor: "rgba(5,150,105,0.25)" },
   badgePrivate: { backgroundColor: "rgba(71,85,105,0.1)", borderWidth: 1, borderColor: "rgba(71,85,105,0.2)" },
+  badgeOnCover: { backgroundColor: "rgba(0,0,0,0.52)", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
   badgeTxt: { fontSize: 12, fontWeight: "600" },
   badgeTxtPublic: { color: "#047857" },
   badgeTxtPrivate: { color: "#475569" },
+  badgeTxtOnCover: { color: "#fff", textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   badgeCopy: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "rgba(99,102,241,0.1)", borderWidth: 1, borderColor: "rgba(99,102,241,0.22)",
