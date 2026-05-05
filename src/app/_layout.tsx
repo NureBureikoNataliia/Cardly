@@ -8,7 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, type ReactNode } from 'react';
 import 'react-native-reanimated';
-import { Platform, Pressable, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import { useColorScheme } from '@/src/components/useColorScheme';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
@@ -81,28 +81,32 @@ function WebAuthenticatedShell({
 }) {
   const { isCompact, toggleDrawer } = useSidebarDrawer();
   const colorScheme = useColorScheme();
-  const headerBg = Colors[colorScheme].surface;
+  const headerBg = Colors[colorScheme].header;
   const headerText = Colors[colorScheme].text;
+  const headerTint = Colors[colorScheme].tint;
 
   const headerLeft = useCallback(
     (props: { canGoBack?: boolean } & Record<string, unknown>) => (
       <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
         {props.canGoBack ? (
+          // On nested screens: just the back button — no hamburger clutter
           <HeaderBackButton {...(props as any)} labelVisible={false} tintColor={headerText} />
-        ) : null}
-        <Pressable
-          onPress={toggleDrawer}
-          style={({ pressed }) => ({
-            paddingVertical: 6,
-            paddingHorizontal: 8,
-            marginLeft: props.canGoBack ? 0 : 4,
-            opacity: pressed ? 0.75 : 1,
-          })}
-          accessibilityRole="button"
-          accessibilityLabel="Open menu"
-        >
-          <Feather name="menu" size={24} color={headerText} />
-        </Pressable>
+        ) : (
+          // On root screens: hamburger to open the drawer
+          <Pressable
+            onPress={toggleDrawer}
+            style={({ pressed }) => ({
+              paddingVertical: 6,
+              paddingHorizontal: 8,
+              marginLeft: 4,
+              opacity: pressed ? 0.75 : 1,
+            })}
+            accessibilityRole="button"
+            accessibilityLabel="Open menu"
+          >
+            <Feather name="menu" size={24} color={headerTint} />
+          </Pressable>
+        )}
       </View>
     ),
     [toggleDrawer, headerText],
@@ -119,6 +123,15 @@ function WebAuthenticatedShell({
               headerShadowVisible: true,
               headerTintColor: headerText,
               headerTitleStyle: { fontSize: 18, fontWeight: '600' },
+              headerTitle: ({ children }: { children?: string }) => (
+                <Text
+                  numberOfLines={1}
+                  style={{ fontSize: 18, fontWeight: '600', color: headerText, flexShrink: 1, maxWidth: Platform.OS === 'web' ? undefined : 180 }}
+                >
+                  {children}
+                </Text>
+              ),
+              headerTitleContainerStyle: { flex: 1 },
               headerRight: sharedHeaderRight,
               headerLeft: isCompact ? headerLeft : undefined,
               animation: 'slide_from_right',
@@ -139,7 +152,7 @@ function WebAuthenticatedShell({
             <Stack.Screen name="help" options={{ headerShown: true }} />
             <Stack.Screen
               name="modal"
-              options={{ presentation: 'modal', title: 'Info', headerRight: undefined }}
+              options={{ presentation: 'modal', title: 'Info', headerRight: () => <View style={{ marginRight: 12 }}><LanguageDropdown /></View> }}
             />
           </Stack>
         </View>
@@ -154,8 +167,9 @@ function RootLayoutNav() {
   const { session, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const headerBg = Colors[colorScheme].surface;
+  const headerBg = Colors[colorScheme].header;
   const headerText = Colors[colorScheme].text;
+  const headerTint = Colors[colorScheme].tint;
 
   useEffect(() => {
     if (loading) return;
@@ -181,13 +195,23 @@ function RootLayoutNav() {
           <FontAwesome
             name="info-circle"
             size={25}
-            color={headerText}
+            color={headerTint}
             style={{ opacity: pressed ? 0.5 : 1 }}
           />
         )}
       </Pressable>
     </View>
   );
+
+  const makeHeaderTitle = (color: string) =>
+    ({ children }: { children?: string }) => (
+      <Text
+        numberOfLines={1}
+        style={{ fontSize: 18, fontWeight: '600', color, flexShrink: 1, maxWidth: Platform.OS === 'web' ? undefined : 180 }}
+      >
+        {children}
+      </Text>
+    );
 
   const stackNav = (
     <Stack
@@ -196,6 +220,8 @@ function RootLayoutNav() {
         headerShadowVisible: true,
         headerTintColor: headerText,
         headerTitleStyle: { fontSize: 18, fontWeight: '600' },
+        headerTitle: makeHeaderTitle(headerText),
+        headerTitleContainerStyle: { flex: 1 },
         headerRight: sharedHeaderRight,
         animation: 'slide_from_right',
       }}
@@ -215,7 +241,7 @@ function RootLayoutNav() {
       <Stack.Screen name="help" options={{ headerShown: true }} />
       <Stack.Screen
         name="modal"
-        options={{ presentation: 'modal', title: 'Info', headerRight: undefined }}
+        options={{ presentation: 'modal', title: 'Info', headerRight: () => <View style={{ marginRight: 12 }}><LanguageDropdown /></View> }}
       />
     </Stack>
   );

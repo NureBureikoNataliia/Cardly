@@ -15,6 +15,7 @@ import { Deck } from '@/assets/data/decks';
 import { Text } from '@/src/components/Themed';
 import { useColorScheme } from '@/src/components/useColorScheme';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 import Colors from '@/src/constants/Colors';
 import Feather from '@expo/vector-icons/Feather';
 
@@ -69,6 +70,7 @@ function DeckCardInner({
   const [imgError, setImgError] = useState(false);
   const menuButtonRef = useRef<View>(null);
   const cs = useColorScheme();
+  const C = useAppColors();
 
   const openMenu = () => {
     menuButtonRef.current?.measureInWindow((x, y, width, height) => {
@@ -122,11 +124,11 @@ function DeckCardInner({
           <View style={[styles.cardBody, isGrid && styles.cardBodyGrid]}>
             <View style={isGrid ? styles.titleSlot : undefined}>
               <View style={styles.titleRow}>
-                <Text style={[styles.title, { flex: 1 }]} numberOfLines={2}>
+                <Text style={[styles.title, { flex: 1, color: C.text }]} numberOfLines={2}>
                   {item.title}
                 </Text>
                 {isCollaborated && (
-                  <View style={styles.collabBadge}>
+                  <View style={[styles.collabBadge, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF' }]}>
                     <Feather name="users" size={10} color="#6366f1" />
                     <Text style={styles.collabBadgeTxt}>{t('collaborators')}</Text>
                   </View>
@@ -136,14 +138,14 @@ function DeckCardInner({
             {(item.description || isGrid) && (
               <View style={isGrid ? styles.descriptionSlot : undefined}>
                 <Text
-                  style={[styles.description, isGrid && styles.descriptionInGrid]}
+                  style={[styles.description, isGrid && styles.descriptionInGrid, { color: C.textSub }]}
                   numberOfLines={2}
                 >
                   {item.description ? item.description : '\u00a0'}
                 </Text>
               </View>
             )}
-            <Text style={styles.meta}>
+            <Text style={[styles.meta, { color: C.textMuted }]}>
               {count} {count !== 1 ? t('cards') : t('card')}
               {item.is_public ? ` • ${t('public')}` : ` • ${t('private')}`}
             </Text>
@@ -188,14 +190,14 @@ function DeckCardInner({
             <View style={[styles.menuCard, { left: menuLayout.x, top: menuLayout.y, backgroundColor: Colors[cs].surface }]}>
               {readOnly && onReportDeck ? (
                 <TouchableOpacity style={styles.menuItem} onPress={handleReport}>
-                  <Feather name="flag" size={18} color={Colors[cs].text} />
-                  <Text style={styles.menuItemText}>{t('reportBoard')}</Text>
+                  <Feather name="flag" size={18} color={C.text} />
+                  <Text style={[styles.menuItemText, { color: C.text }]}>{t('reportBoard')}</Text>
                 </TouchableOpacity>
               ) : (
                 <>
                   <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
-                    <Feather name="edit-2" size={18} color={Colors[cs].text} />
-                    <Text style={styles.menuItemText}>{t('editBoard')}</Text>
+                    <Feather name="edit-2" size={18} color={C.text} />
+                    <Text style={[styles.menuItemText, { color: C.text }]}>{t('editBoard')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleDelete}>
                     <Feather name="trash-2" size={18} color="#dc2626" />

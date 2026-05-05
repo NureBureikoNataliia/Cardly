@@ -71,7 +71,7 @@ export default function NotificationBell() {
   return (
     <View style={styles.wrap}>
       <TouchableOpacity style={styles.btn} onPress={() => setOpen(v => !v)} activeOpacity={0.7}>
-        <Feather name="bell" size={20} color="#4B5563" />
+        <Feather name="bell" size={20} color={C.tint} />
         {count > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{count > 9 ? '9+' : String(count)}</Text>

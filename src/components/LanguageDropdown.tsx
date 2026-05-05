@@ -9,6 +9,7 @@ import {
 
 import { Text } from './Themed';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 
 type Locale = 'en' | 'uk';
 
@@ -19,6 +20,7 @@ const LOCALES: { value: Locale; labelKey: string }[] = [
 
 export function LanguageDropdown() {
   const { locale, setLocale, t } = useLanguage();
+  const C = useAppColors();
   const [visible, setVisible] = useState(false);
   const [layout, setLayout] = useState<{ x: number; y: number } | null>(null);
   const buttonRef = useRef<View>(null);
@@ -39,15 +41,19 @@ export function LanguageDropdown() {
 
   const displayLabel = locale === 'en' ? 'EN' : 'УК';
 
+  const pillBg = C.isDark
+    ? 'rgba(165, 180, 252, 0.15)'
+    : 'rgba(224, 218, 255, 0.7)';
+
   return (
     <>
       <Pressable
         ref={buttonRef}
         onPress={openDropdown}
-        style={styles.button}
+        style={[styles.button, { backgroundColor: pillBg }]}
         hitSlop={8}
       >
-        <Text style={styles.buttonText}>{displayLabel}</Text>
+        <Text style={[styles.buttonText, { color: C.tint }]}>{displayLabel}</Text>
       </Pressable>
 
       <Modal
@@ -58,14 +64,14 @@ export function LanguageDropdown() {
       >
         <Pressable style={styles.overlay} onPress={() => setVisible(false)}>
           {layout && (
-            <View style={[styles.dropdown, { left: Math.max(8, layout.x), top: layout.y }]}>
+            <View style={[styles.dropdown, { left: Math.max(8, layout.x), top: layout.y, backgroundColor: C.surface, borderColor: C.border, borderWidth: 1 }]}>
               {LOCALES.map(({ value, labelKey }) => (
                 <TouchableOpacity
                   key={value}
-                  style={[styles.option, value === locale && styles.optionSelected]}
+                  style={[styles.option, value === locale && { backgroundColor: C.isDark ? 'rgba(165, 180, 252, 0.12)' : 'rgba(66, 85, 255, 0.08)' }]}
                   onPress={() => selectLocale(value)}
                 >
-                  <Text style={[styles.optionText, value === locale && styles.optionTextSelected]}>
+                  <Text style={[styles.optionText, { color: C.text }, value === locale && { color: C.tint, fontWeight: '600' }]}>
                     {t(labelKey)}
                   </Text>
                 </TouchableOpacity>
@@ -83,22 +89,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 14,
-    backgroundColor: 'rgba(224, 218, 255, 0.7)',
     outlineStyle: 'none',
     outlineWidth: 0,
-    shadowColor: 'rgba(167, 139, 250, 0.35)',
-    shadowOffset: { width: -1, height: -1 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
     elevation: 0,
   },
   buttonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#6366f1',
-    textShadowColor: 'rgba(99, 102, 241, 0.3)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 4,
   },
   overlay: {
     flex: 1,
@@ -106,7 +103,6 @@ const styles = StyleSheet.create({
   },
   dropdown: {
     position: 'absolute',
-    backgroundColor: '#fff',
     borderRadius: 12,
     paddingVertical: 6,
     minWidth: 140,
@@ -120,15 +116,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
-  optionSelected: {
-    backgroundColor: 'rgba(66, 85, 255, 0.08)',
-  },
   optionText: {
     fontSize: 16,
-    color: '#1f2937',
-  },
-  optionTextSelected: {
-    color: '#4255ff',
-    fontWeight: '600',
   },
 });

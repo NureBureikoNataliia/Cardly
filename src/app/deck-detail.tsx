@@ -24,6 +24,8 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
+import CardComplaintModal from "@/src/components/CardComplaintModal";
+import GenerateCardsModal from "@/src/components/GenerateCardsModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 
@@ -72,6 +74,8 @@ export default function DeckDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
+  const [reportCard, setReportCard] = useState<Card | null>(null);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [errorModal, setErrorModal] = useState<string | null>(null);
   const [isCopying, setIsCopying] = useState(false);
   const [hasCopy, setHasCopy] = useState<boolean | null>(null);
@@ -390,15 +394,13 @@ export default function DeckDetailScreen() {
         <View style={styles.pageWrap}>
 
           {/* ════════════ HERO ════════════ */}
-          <View style={styles.hero}>
+          <View style={[styles.hero, !deck.cover_image_url && { backgroundColor: C.isDark ? '#1a2535' : '#C6E3ED' }]}>
             {deck.cover_image_url ? (
               <>
                 <Image source={{ uri: deck.cover_image_url }} style={styles.heroImage} resizeMode="cover" />
                 <View style={styles.heroOverlay} />
               </>
-            ) : (
-              <View style={styles.heroGradient} />
-            )}
+            ) : null}
 
             {/* Badge row */}
             <View style={styles.heroBadgeRow}>
@@ -406,18 +408,20 @@ export default function DeckDetailScreen() {
                 styles.badge,
                 deck.cover_image_url
                   ? styles.badgeOnCover
-                  : (deck.is_public ? styles.badgePublic : styles.badgePrivate),
+                  : (deck.is_public
+                      ? { backgroundColor: C.isDark ? 'rgba(5,150,105,0.18)' : 'rgba(5,150,105,0.12)', borderWidth: 1, borderColor: C.isDark ? 'rgba(5,150,105,0.4)' : 'rgba(5,150,105,0.25)' }
+                      : { backgroundColor: C.isDark ? 'rgba(99,102,241,0.12)' : 'rgba(71,85,105,0.1)', borderWidth: 1, borderColor: C.isDark ? 'rgba(99,102,241,0.25)' : 'rgba(71,85,105,0.2)' }),
               ]}>
                 <Feather
                   name={deck.is_public ? "globe" : "lock"}
                   size={11}
-                  color={deck.cover_image_url ? "#fff" : (deck.is_public ? "#059669" : "#9ca3af")}
+                  color={deck.cover_image_url ? "#fff" : (deck.is_public ? "#059669" : C.textSub)}
                 />
                 <Text style={[
                   styles.badgeTxt,
                   deck.cover_image_url
                     ? styles.badgeTxtOnCover
-                    : (deck.is_public ? styles.badgeTxtPublic : styles.badgeTxtPrivate),
+                    : (deck.is_public ? styles.badgeTxtPublic : { color: C.textSub }),
                 ]}>
                   {deck.is_public ? t("public") : t("private")}
                 </Text>
@@ -541,6 +545,18 @@ export default function DeckDetailScreen() {
                   border
                   borderColor="rgba(99,102,241,0.25)"
                   onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
+                  flex
+                />
+              )}
+              {canEdit && (
+                <ActionBtn
+                  icon="zap"
+                  label={t("aiGenerateCards")}
+                  bg={C.isDark ? 'rgba(99,102,241,0.12)' : '#eef0ff'}
+                  textColor={C.tint}
+                  border
+                  borderColor="rgba(99,102,241,0.25)"
+                  onPress={() => setShowGenerateModal(true)}
                   flex
                 />
               )}
@@ -763,6 +779,7 @@ export default function DeckDetailScreen() {
                     card={card}
                     index={index}
                     isOwner={!!canEdit}
+                    canReport={isPublicFromOther && !!user}
                     numCols={numCols}
                     createdByName={
                       card.created_by
@@ -771,6 +788,7 @@ export default function DeckDetailScreen() {
                     }
                     onEdit={() => router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`)}
                     onDelete={() => handleDeleteCard(card)}
+                    onReport={() => setReportCard(card)}
                     t={t}
                   />
                 ))}
@@ -817,6 +835,30 @@ export default function DeckDetailScreen() {
         confirmText={t("ok")} cancelText={null}
         onConfirm={() => setErrorModal(null)} onCancel={() => setErrorModal(null)}
       />
+
+      <CardComplaintModal
+        visible={Boolean(reportCard)}
+        cardId={reportCard?.card_id ?? null}
+        deckId={deck?.deck_id ?? null}
+        cardFront={reportCard?.front_text ?? null}
+        deckTitle={deck?.title ?? null}
+        reporterId={user?.id ?? null}
+        onClose={() => setReportCard(null)}
+      />
+
+      {deck && (
+        <GenerateCardsModal
+          visible={showGenerateModal}
+          deckId={deck.deck_id}
+          deckTitle={deck.title ?? undefined}
+          deckDescription={deck.description}
+          onClose={() => setShowGenerateModal(false)}
+          onSaved={() => {
+            setShowGenerateModal(false);
+            loadData();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -894,14 +936,16 @@ function ActionBtn({
 }
 
 /* ─── CardTile ─── */
-function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDelete, t }: {
+function CardTile({ card, index, isOwner, canReport, numCols, createdByName, onEdit, onDelete, onReport, t }: {
   card: Card;
   index: number;
   isOwner: boolean;
+  canReport?: boolean;
   numCols: number;
   createdByName: string | null;
   onEdit: () => void;
   onDelete: () => void;
+  onReport?: () => void;
   t: (k: string) => string;
 }) {
   const C = useAppColors();
@@ -953,15 +997,23 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
       ) : null}
 
       {/* Actions */}
-      {isOwner && (
+      {(isOwner || canReport) && (
         <View style={[styles.cardActionsRow, { borderTopColor: C.borderLight }]}>
-          <Pressable style={styles.cardActEdit} onPress={onEdit} hitSlop={6}>
-            <Feather name="edit-2" size={14} color="#4255ff" />
-            <Text style={styles.cardActEditTxt}>{t("edit")}</Text>
-          </Pressable>
-          <Pressable style={styles.cardActDel} onPress={onDelete} hitSlop={6}>
-            <Feather name="trash-2" size={14} color="#dc2626" />
-          </Pressable>
+          {isOwner ? (
+            <>
+              <Pressable style={styles.cardActEdit} onPress={onEdit} hitSlop={6}>
+                <Feather name="edit-2" size={14} color="#4255ff" />
+                <Text style={styles.cardActEditTxt}>{t("edit")}</Text>
+              </Pressable>
+              <Pressable style={styles.cardActDel} onPress={onDelete} hitSlop={6}>
+                <Feather name="trash-2" size={14} color="#dc2626" />
+              </Pressable>
+            </>
+          ) : canReport ? (
+            <Pressable style={styles.cardActReport} onPress={onReport} hitSlop={6}>
+              <Feather name="flag" size={14} color="#dc2626" />
+            </Pressable>
+          ) : null}
         </View>
       )}
     </View>
@@ -1077,7 +1129,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 8, elevation: 2,
   },
   actionBtnDisabled: { opacity: 0.5, shadowOpacity: 0 },
-  actionBtnTxt: { fontSize: 15, fontWeight: "700" },
+  actionBtnTxt: { fontSize: 13, fontWeight: "700", textAlign: 'center' },
 
   /* ── CARDS SECTION ── */
   cardsSection: { marginHorizontal: 16, marginTop: 24 },
@@ -1150,6 +1202,7 @@ const styles = StyleSheet.create({
   cardActEdit: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, backgroundColor: "rgba(99,102,241,0.08)" },
   cardActEditTxt: { fontSize: 13, color: "#6366f1", fontWeight: "600" },
   cardActDel: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(220,38,38,0.07)" },
+  cardActReport: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(220,38,38,0.07)", marginLeft: "auto" as any },
 
   /* ── Collaborator badge (for co-authors) ── */
   collaboratorBadge: {

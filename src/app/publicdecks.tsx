@@ -199,7 +199,7 @@ export default function PublicDecksScreen() {
     <>
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: C.text }]}>{t("publicDecks")}</Text>
-        <Text style={styles.sectionCount}>
+        <Text style={[styles.sectionCount, { color: C.textMuted }]}>
           {filtered.length} {filtered.length !== 1 ? t("decks") : t("deck")}
         </Text>
       </View>
@@ -232,7 +232,7 @@ export default function PublicDecksScreen() {
 
         {/* sort */}
         <View style={styles.controlBlock}>
-          <Text style={styles.chipsLabel}>{t("sortBy")}</Text>
+          <Text style={[styles.chipsLabel, { color: C.textSub }]}>{t("sortBy")}</Text>
           <View style={styles.chipsRow}>
             {sortOptions.map(({ key, label }) => (
               <Pressable
@@ -240,11 +240,11 @@ export default function PublicDecksScreen() {
                 style={[
                   styles.chip,
                   { backgroundColor: C.surface, borderColor: C.border },
-                  sortBy === key && styles.chipActive,
+                  sortBy === key && { borderColor: C.tint, backgroundColor: C.isDark ? 'rgba(165,180,252,0.15)' : 'rgba(66,85,255,0.12)' },
                 ]}
                 onPress={() => setSortBy(key)}
               >
-                <Text style={[styles.chipText, sortBy === key && styles.chipTextActive]}>
+                <Text style={[styles.chipText, { color: C.textSub }, sortBy === key && { color: C.tint, fontWeight: '600' }]}>
                   {label}
                 </Text>
               </Pressable>
@@ -263,15 +263,15 @@ export default function PublicDecksScreen() {
         </View>
       ) : error ? (
         <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={[styles.errorText, { color: C.textSub }]}>{error}</Text>
         </View>
       ) : decks.length === 0 ? (
         <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Feather name="globe" size={48} color="#c7d2fe" />
+          <View style={[styles.emptyIcon, { backgroundColor: C.isDark ? 'rgba(165,180,252,0.1)' : 'rgba(66,85,255,0.08)' }]}>
+            <Feather name="globe" size={48} color={C.tint} />
           </View>
-          <Text style={styles.emptyTitle}>{t("noPublicDecks")}</Text>
-          <Text style={styles.emptySubtitle}>{t("noPublicDecksHint")}</Text>
+          <Text style={[styles.emptyTitle, { color: C.text }]}>{t("noPublicDecks")}</Text>
+          <Text style={[styles.emptySubtitle, { color: C.textSub }]}>{t("noPublicDecksHint")}</Text>
         </View>
       ) : (
         <ListOfDecks

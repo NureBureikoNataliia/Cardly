@@ -11,6 +11,7 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -42,6 +43,20 @@ type Complaint = {
   reporter_name: string;
 };
 
+type CardComplaint = {
+  id: string;
+  created_at: string;
+  issue_key: string;
+  details: string | null;
+  gemini_summary: string | null;
+  card_id: string;
+  card_front_text: string;
+  deck_id: string;
+  deck_title: string;
+  reporter_id: string;
+  reporter_name: string;
+};
+
 type Comment = {
   id: string;
   content: string;
@@ -63,7 +78,18 @@ type AdminUser = {
   last_sign_in: string | null;
 };
 
-type Tab = 'overview' | 'complaints' | 'comments' | 'users';
+type Tab = 'overview' | 'complaints' | 'comments' | 'users' | 'support';
+
+type SupportMessage = {
+  id: string;
+  created_at: string;
+  type: 'bug' | 'suggestion' | 'complaint';
+  message: string;
+  is_read: boolean;
+  user_id: string;
+  username: string;
+  email: string;
+};
 
 /* ═══════════════════════════════════════ */
 export default function AdminPanelScreen() {
@@ -72,10 +98,17 @@ export default function AdminPanelScreen() {
   const { t } = useLanguage();
   const { user, loading: authLoading, isAdmin } = useAuth();
   const C = useAppColors();
+  const { width: screenWidth } = useWindowDimensions();
+  const isNarrow = screenWidth < 520;
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<Stats | null>(null);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [cardComplaints, setCardComplaints] = useState<CardComplaint[]>([]);
+  const [complaintFilter, setComplaintFilter] = useState<'decks' | 'words'>('decks');
+  const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
+  const [supportFilter, setSupportFilter] = useState<'all' | 'unread' | 'bug' | 'suggestion' | 'complaint'>('all');
+  const [supportToDelete, setSupportToDelete] = useState<SupportMessage | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [userSearch, setUserSearch] = useState('');
@@ -86,6 +119,8 @@ export default function AdminPanelScreen() {
   const [commentToDelete, setCommentToDelete] = useState<Comment | null>(null);
   const [complaintToDismiss, setComplaintToDismiss] = useState<Complaint | null>(null);
   const [deckToDelete, setDeckToDelete] = useState<Complaint | null>(null);
+  const [cardComplaintToDismiss, setCardComplaintToDismiss] = useState<CardComplaint | null>(null);
+  const [cardToDelete, setCardToDelete] = useState<CardComplaint | null>(null);
   const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
 
   useLayoutEffect(() => {
@@ -102,22 +137,27 @@ export default function AdminPanelScreen() {
   /* ── Load data ── */
   const load = useCallback(async () => {
     if (!isAdmin) return;
-    const [statsRes, complRes, commRes, usersRes] = await Promise.all([
+    const [statsRes, complRes, cardComplRes, commRes, usersRes, supportRes] = await Promise.all([
       supabase.rpc('admin_get_stats'),
       supabase.rpc('admin_get_all_complaints'),
+      supabase.rpc('admin_get_all_card_complaints'),
       supabase.rpc('admin_get_all_comments'),
       supabase.rpc('admin_get_all_users'),
+      supabase.rpc('admin_get_all_support_messages'),
     ]);
     if (__DEV__) {
-      if (statsRes.error)  console.warn('[admin] stats error',      statsRes.error);
-      if (complRes.error)  console.warn('[admin] complaints error', complRes.error);
-      if (commRes.error)   console.warn('[admin] comments error',   commRes.error);
-      if (usersRes.error)  console.warn('[admin] users error',      usersRes.error);
+      if (statsRes.error)     console.warn('[admin] stats error',          statsRes.error);
+      if (complRes.error)     console.warn('[admin] complaints error',     complRes.error);
+      if (cardComplRes.error) console.warn('[admin] card complaints error', cardComplRes.error);
+      if (commRes.error)      console.warn('[admin] comments error',        commRes.error);
+      if (usersRes.error)     console.warn('[admin] users error',           usersRes.error);
     }
     if (statsRes.data?.[0]) setStats(statsRes.data[0] as Stats);
     setComplaints((complRes.data ?? []) as Complaint[]);
+    setCardComplaints((cardComplRes.data ?? []) as CardComplaint[]);
     setComments((commRes.data ?? []) as Comment[]);
     setUsers((usersRes.data ?? []) as AdminUser[]);
+    setSupportMessages((supportRes.data ?? []) as SupportMessage[]);
     setLoading(false);
     setRefreshing(false);
   }, [isAdmin]);
@@ -162,6 +202,34 @@ export default function AdminPanelScreen() {
     setUsers(prev => prev.map(x => x.user_id === u.user_id ? { ...x, is_admin: !u.is_admin } : x));
   };
 
+  const handleDismissCardComplaint = async () => {
+    if (!cardComplaintToDismiss) return;
+    const { error } = await supabase.rpc('admin_dismiss_card_complaint', { p_id: cardComplaintToDismiss.id });
+    if (error) { console.warn('[admin] dismiss card complaint error', error); return; }
+    setCardComplaints(prev => prev.filter(c => c.id !== cardComplaintToDismiss.id));
+    setCardComplaintToDismiss(null);
+  };
+
+  const handleMarkSupportRead = async (msg: SupportMessage) => {
+    await supabase.rpc('admin_read_support_message', { p_id: msg.id });
+    setSupportMessages(prev => prev.map(m => m.id === msg.id ? { ...m, is_read: true } : m));
+  };
+
+  const handleDeleteSupportMessage = async () => {
+    if (!supportToDelete) return;
+    await supabase.rpc('admin_delete_support_message', { p_id: supportToDelete.id });
+    setSupportMessages(prev => prev.filter(m => m.id !== supportToDelete.id));
+    setSupportToDelete(null);
+  };
+
+  const handleDeleteCard = async () => {
+    if (!cardToDelete) return;
+    const { error } = await supabase.rpc('admin_delete_card', { p_card_id: cardToDelete.card_id });
+    if (error) { console.warn('[admin] delete card error', error); return; }
+    setCardComplaints(prev => prev.filter(c => c.card_id !== cardToDelete.card_id));
+    setCardToDelete(null);
+  };
+
   const handleDeleteUser = async () => {
     if (!userToDelete) return;
     const { error } = await supabase.rpc('admin_delete_user', { p_user_id: userToDelete.user_id });
@@ -187,58 +255,101 @@ export default function AdminPanelScreen() {
   const TABS: { key: Tab; icon: keyof typeof Feather.glyphMap; label: string; count?: number }[] = [
     { key: 'overview',   icon: 'bar-chart-2',    label: t('adminTabOverview') },
     { key: 'users',      icon: 'users',           label: t('adminTabUsers'),      count: users.length },
-    { key: 'complaints', icon: 'alert-triangle',  label: t('adminTabComplaints'), count: complaints.length },
+    { key: 'complaints', icon: 'alert-triangle',  label: t('adminTabComplaints'), count: complaints.length + cardComplaints.length },
     { key: 'comments',   icon: 'message-square',  label: t('adminTabComments'),   count: comments.length },
+    { key: 'support',    icon: 'inbox',           label: t('adminTabSupport'),    count: supportMessages.filter(m => !m.is_read).length || undefined },
   ];
 
   /* ──────────────────────────── RENDER ──────────────────────────── */
   return (
-    <View style={[styles.shell, { backgroundColor: C.bg }]}>
-      {/* ── Left sidebar (tabs) ── */}
-      <View style={[styles.sidebar, { backgroundColor: C.surface, borderRightColor: C.border }]}>
-        {/* Header */}
-        <View style={[styles.sidebarHeader, { borderBottomColor: C.border }]}>
-          <View style={styles.sidebarIconWrap}>
-            <Feather name="shield" size={18} color="#6366f1" />
-          </View>
-          <Text style={styles.sidebarTitle}>{t('adminPanel')}</Text>
-        </View>
+    <View style={[styles.shell, isNarrow && { flexDirection: 'column' }, { backgroundColor: C.bg }]}>
 
-        {/* Nav */}
-        {TABS.map(tab => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[
-              styles.navItem,
-              activeTab === tab.key && [styles.navItemActive, C.isDark && { backgroundColor: 'rgba(99,102,241,0.15)' }],
-            ]}
-            onPress={() => setActiveTab(tab.key)}
-            activeOpacity={0.8}
+      {/* ══ NARROW: horizontal scrollable top tab bar ══ */}
+      {isNarrow && (
+        <View style={[styles.topBar, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.topBarContent}
           >
-            <Feather
-              name={tab.icon}
-              size={17}
-              color={activeTab === tab.key ? '#6366f1' : '#6b7280'}
-            />
-            <Text style={[styles.navLabel, activeTab === tab.key && styles.navLabelActive]}>
-              {tab.label}
-            </Text>
-            {(tab.count ?? 0) > 0 && (
-              <View style={[styles.navBadge, { backgroundColor: C.isDark ? '#2d3f55' : '#f3f4f6' }, activeTab === tab.key && styles.navBadgeActive]}>
-                <Text style={[styles.navBadgeTxt, activeTab === tab.key && styles.navBadgeTxtActive]}>
-                  {tab.count}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
+            {TABS.map(tab => {
+              const active = activeTab === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[
+                    styles.topBarItem,
+                    active && [styles.topBarItemActive, C.isDark && { backgroundColor: 'rgba(99,102,241,0.15)' }],
+                  ]}
+                  onPress={() => setActiveTab(tab.key)}
+                  activeOpacity={0.8}
+                >
+                  <Feather name={tab.icon} size={16} color={active ? '#6366f1' : '#6b7280'} />
+                  <Text style={[styles.topBarLabel, active && styles.topBarLabelActive]}>
+                    {tab.label}
+                  </Text>
+                  {(tab.count ?? 0) > 0 && (
+                    <View style={[styles.navBadge, C.isDark && { backgroundColor: '#2d3f55' }, active && styles.navBadgeActive]}>
+                      <Text style={[styles.navBadgeTxt, active && styles.navBadgeTxtActive]}>
+                        {tab.count}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              style={styles.topBarBackBtn}
+              onPress={() => router.push('/(tabs)')}
+              activeOpacity={0.8}
+            >
+              <Feather name="arrow-left" size={15} color="#6b7280" />
+              <Text style={[styles.backBtnTxt, { display: 'flex' }]}>{t('adminBackToApp')}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
 
-        {/* Footer */}
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(tabs)')}>
-          <Feather name="arrow-left" size={15} color="#6b7280" />
-          <Text style={styles.backBtnTxt}>{t('adminBackToApp')}</Text>
-        </TouchableOpacity>
-      </View>
+      {/* ══ WIDE: left sidebar ══ */}
+      {!isNarrow && (
+        <View style={[styles.sidebar, { backgroundColor: C.surface, borderRightColor: C.border }]}>
+          <View style={[styles.sidebarHeader, { borderBottomColor: C.border }]}>
+            <View style={styles.sidebarIconWrap}>
+              <Feather name="shield" size={18} color="#6366f1" />
+            </View>
+            <Text style={styles.sidebarTitle}>{t('adminPanel')}</Text>
+          </View>
+
+          {TABS.map(tab => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.navItem,
+                activeTab === tab.key && [styles.navItemActive, C.isDark && { backgroundColor: 'rgba(99,102,241,0.15)' }],
+              ]}
+              onPress={() => setActiveTab(tab.key)}
+              activeOpacity={0.8}
+            >
+              <Feather name={tab.icon} size={17} color={activeTab === tab.key ? '#6366f1' : '#6b7280'} />
+              <Text style={[styles.navLabel, activeTab === tab.key && styles.navLabelActive]}>
+                {tab.label}
+              </Text>
+              {(tab.count ?? 0) > 0 && (
+                <View style={[styles.navBadge, { backgroundColor: C.isDark ? '#2d3f55' : '#f3f4f6' }, activeTab === tab.key && styles.navBadgeActive]}>
+                  <Text style={[styles.navBadgeTxt, activeTab === tab.key && styles.navBadgeTxtActive]}>
+                    {tab.count}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(tabs)')}>
+            <Feather name="arrow-left" size={15} color="#6b7280" />
+            <Text style={styles.backBtnTxt}>{t('adminBackToApp')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Main content ── */}
       <ScrollView
@@ -276,7 +387,7 @@ export default function AdminPanelScreen() {
                 <View style={styles.sectionHead}>
                   <Feather name="users" size={18} color="#6366f1" />
                   <Text style={styles.sectionTitle}>{t('adminTabUsers')}</Text>
-                  <View style={[styles.countPill, { backgroundColor: '#EEF2FF' }]}>
+                  <View style={[styles.countPill, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.18)' : '#EEF2FF' }]}>
                     <Text style={[styles.countPillTxt, { color: '#6366f1' }]}>{users.length}</Text>
                   </View>
                 </View>
@@ -310,9 +421,9 @@ export default function AdminPanelScreen() {
                             {u.username[0]?.toUpperCase() ?? '?'}
                           </Text>
                         </View>
-                        <View style={{ flex: 1 }}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
                           <View style={styles.userNameRow}>
-                            <Text style={styles.userName}>{u.username}</Text>
+                            <Text style={[styles.userName, { flexShrink: 1 }]} numberOfLines={1}>{u.username}</Text>
                             {u.is_admin && (
                               <View style={styles.adminBadge}>
                                 <Feather name="shield" size={10} color="#6366f1" />
@@ -320,7 +431,7 @@ export default function AdminPanelScreen() {
                               </View>
                             )}
                           </View>
-                          <Text style={styles.userEmail}>{u.email}</Text>
+                          <Text style={styles.userEmail} numberOfLines={1}>{u.email}</Text>
                           <View style={styles.userMeta}>
                             <View style={styles.userMetaItem}>
                               <Feather name="layers" size={11} color="#9ca3af" />
@@ -338,26 +449,33 @@ export default function AdminPanelScreen() {
                         </View>
                       </View>
 
-                      {/* Actions */}
-                      <View style={styles.userActions}>
-                        <TouchableOpacity
-                          style={[styles.userBtn, u.is_admin ? styles.userBtnWarning : styles.userBtnPrimary]}
-                          onPress={() => handleToggleAdmin(u)}
-                          activeOpacity={0.8}
-                        >
-                          <Feather name="shield" size={13} color={u.is_admin ? '#d97706' : '#6366f1'} />
-                          <Text style={[styles.userBtnTxt, { color: u.is_admin ? '#d97706' : '#6366f1' }]}>
-                            {u.is_admin ? t('adminRemoveAdmin') : t('adminMakeAdmin')}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.userBtnDanger}
-                          onPress={() => setUserToDelete(u)}
-                          activeOpacity={0.8}
-                        >
-                          <Feather name="trash-2" size={13} color="#dc2626" />
-                        </TouchableOpacity>
-                      </View>
+                      {/* Actions — hidden for current user */}
+                      {u.user_id !== user?.id && (
+                        <View style={styles.userActions}>
+                          <TouchableOpacity
+                            style={[
+                              styles.userBtn,
+                              u.is_admin
+                                ? { backgroundColor: C.isDark ? 'rgba(217,119,6,0.15)' : '#fffbeb', borderColor: C.isDark ? '#92400e' : '#fcd34d' }
+                                : { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF', borderColor: C.isDark ? '#4338ca' : '#c7d2fe' },
+                            ]}
+                            onPress={() => handleToggleAdmin(u)}
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="shield" size={13} color={u.is_admin ? '#d97706' : '#6366f1'} />
+                            <Text style={[styles.userBtnTxt, { color: u.is_admin ? '#d97706' : '#6366f1' }]}>
+                              {u.is_admin ? t('adminRemoveAdmin') : t('adminMakeAdmin')}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.userBtnDanger, C.isDark && { backgroundColor: 'rgba(220,38,38,0.15)', borderColor: '#7f1d1d' }]}
+                            onPress={() => setUserToDelete(u)}
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="trash-2" size={13} color="#dc2626" />
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
                   ))
                 )}
@@ -370,29 +488,117 @@ export default function AdminPanelScreen() {
                 <View style={styles.sectionHead}>
                   <Feather name="alert-triangle" size={18} color="#ef4444" />
                   <Text style={styles.sectionTitle}>{t('adminTabComplaints')}</Text>
-                  <View style={styles.countPill}>
-                    <Text style={styles.countPillTxt}>{complaints.length}</Text>
+                  <View style={[styles.countPill, C.isDark && { backgroundColor: 'rgba(239,68,68,0.15)' }]}>
+                    <Text style={styles.countPillTxt}>{complaints.length + cardComplaints.length}</Text>
                   </View>
                 </View>
 
-                {complaints.length === 0 ? (
+                {/* Filter: Decks / Words */}
+                <View style={styles.complaintFilterRow}>
+                  {(['decks', 'words'] as const).map((f) => (
+                    <Pressable
+                      key={f}
+                      style={[
+                        styles.filterChip,
+                        { backgroundColor: C.surface, borderColor: C.border },
+                        complaintFilter === f && { borderColor: C.tint, backgroundColor: C.isDark ? 'rgba(165,180,252,0.15)' : 'rgba(66,85,255,0.12)' },
+                      ]}
+                      onPress={() => setComplaintFilter(f)}
+                    >
+                      <Feather
+                        name={f === 'decks' ? 'layers' : 'credit-card'}
+                        size={13}
+                        color={complaintFilter === f ? C.tint : C.textMuted}
+                      />
+                      <Text style={[styles.filterChipTxt, { color: complaintFilter === f ? C.tint : C.textSub }, complaintFilter === f && { fontWeight: '700' }]}>
+                        {f === 'decks' ? t('adminFilterDecks') : t('adminFilterWords')}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {complaintFilter === 'words' ? (
+                  cardComplaints.length === 0 ? (
+                    <EmptyState icon="check-circle" text={t('adminNoCardComplaints')} />
+                  ) : (
+                    cardComplaints.map(row => (
+                      <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
+                        <View style={styles.cardHead}>
+                          <View style={[styles.issueBadge, C.isDark && { backgroundColor: 'rgba(217,119,6,0.15)', borderColor: '#92400e' }]}>
+                            <Text style={[styles.issueTxt, C.isDark && { color: '#fbbf24' }]}>{row.issue_key}</Text>
+                          </View>
+                          <Text style={[styles.cardDate, { color: C.textMuted }]}>
+                            {new Date(row.created_at).toLocaleDateString()}
+                          </Text>
+                        </View>
+
+                        {/* Card word */}
+                        <View style={[styles.cardWordBox, { backgroundColor: C.isDark ? 'rgba(165,180,252,0.1)' : '#f5f3ff', borderColor: C.isDark ? 'rgba(165,180,252,0.25)' : '#ddd6fe' }]}>
+                          <Feather name="credit-card" size={13} color={C.tint} />
+                          <Text style={[styles.cardWordTxt, { color: C.tint }]} numberOfLines={2}>{row.card_front_text}</Text>
+                        </View>
+
+                        {/* Deck link */}
+                        <Pressable
+                          style={[styles.deckRow, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF' }]}
+                          onPress={() => router.push(`/deck-detail?id=${row.deck_id}`)}
+                        >
+                          <Feather name="layers" size={13} color="#6366f1" />
+                          <Text style={styles.deckTitle} numberOfLines={1}>{row.deck_title}</Text>
+                          <Feather name="external-link" size={12} color="#6366f1" />
+                        </Pressable>
+
+                        <Text style={[styles.metaTxt, { color: C.textSub }]}>
+                          {t('adminReporter')}: <Text style={styles.metaBold}>{row.reporter_name}</Text>
+                        </Text>
+                        {row.details ? <Text style={[styles.bodyTxt, { color: C.text }]}>{row.details}</Text> : null}
+                        {row.gemini_summary ? (
+                          <View style={[styles.aiBox, { backgroundColor: C.isDark ? '#1a2740' : '#f8faff' }]}>
+                            <Feather name="cpu" size={12} color="#6366f1" />
+                            <Text style={styles.aiLabel}>{t('adminGeminiSummary')}</Text>
+                            <Text style={[styles.aiTxt, { color: C.textSub }]}>{row.gemini_summary}</Text>
+                          </View>
+                        ) : null}
+
+                        <View style={styles.cardActions}>
+                          <TouchableOpacity
+                            style={[styles.btnDismiss, C.isDark && { backgroundColor: 'rgba(5,150,105,0.15)', borderColor: '#065f46' }]}
+                            onPress={() => setCardComplaintToDismiss(row)}
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="check" size={14} color="#059669" />
+                            <Text style={styles.btnDismissTxt}>{t('adminDismissCardComplaint')}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.btnDanger}
+                            onPress={() => setCardToDelete(row)}
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="trash-2" size={14} color="#fff" />
+                            <Text style={styles.btnDangerTxt}>{t('adminDeleteCard')}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))
+                  )
+                ) : complaints.length === 0 ? (
                   <EmptyState icon="check-circle" text={t('adminNoComplaints')} />
                 ) : (
                   complaints.map(row => (
                     <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
                       {/* Card header */}
                       <View style={styles.cardHead}>
-                        <View style={styles.issueBadge}>
-                          <Text style={styles.issueTxt}>{row.issue_key}</Text>
+                        <View style={[styles.issueBadge, C.isDark && { backgroundColor: 'rgba(217,119,6,0.15)', borderColor: '#92400e' }]}>
+                          <Text style={[styles.issueTxt, C.isDark && { color: '#fbbf24' }]}>{row.issue_key}</Text>
                         </View>
-                        <Text style={styles.cardDate}>
+                        <Text style={[styles.cardDate, { color: C.textMuted }]}>
                           {new Date(row.created_at).toLocaleDateString()}
                         </Text>
                       </View>
 
                       {/* Deck */}
                       <Pressable
-                        style={styles.deckRow}
+                        style={[styles.deckRow, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF' }]}
                         onPress={() => router.push(`/deck-detail?id=${row.deck_id}`)}
                       >
                         <Feather name="layers" size={13} color="#6366f1" />
@@ -401,13 +607,13 @@ export default function AdminPanelScreen() {
                       </Pressable>
 
                       {/* Reporter */}
-                      <Text style={styles.metaTxt}>
+                      <Text style={[styles.metaTxt, { color: C.textSub }]}>
                         {t('adminReporter')}: <Text style={styles.metaBold}>{row.reporter_name}</Text>
                       </Text>
 
                       {/* Details */}
                       {row.details ? (
-                        <Text style={styles.bodyTxt}>{row.details}</Text>
+                        <Text style={[styles.bodyTxt, { color: C.text }]}>{row.details}</Text>
                       ) : null}
 
                       {/* AI summary */}
@@ -415,14 +621,14 @@ export default function AdminPanelScreen() {
                         <View style={[styles.aiBox, { backgroundColor: C.isDark ? '#1a2740' : '#f8faff' }]}>
                           <Feather name="cpu" size={12} color="#6366f1" />
                           <Text style={styles.aiLabel}>{t('adminGeminiSummary')}</Text>
-                          <Text style={styles.aiTxt}>{row.gemini_summary}</Text>
+                          <Text style={[styles.aiTxt, { color: C.textSub }]}>{row.gemini_summary}</Text>
                         </View>
                       ) : null}
 
                       {/* Actions */}
                       <View style={styles.cardActions}>
                         <TouchableOpacity
-                          style={styles.btnDismiss}
+                          style={[styles.btnDismiss, C.isDark && { backgroundColor: 'rgba(5,150,105,0.15)', borderColor: '#065f46' }]}
                           onPress={() => setComplaintToDismiss(row)}
                           activeOpacity={0.8}
                         >
@@ -444,13 +650,143 @@ export default function AdminPanelScreen() {
               </View>
             )}
 
+            {/* ════ SUPPORT ════ */}
+            {activeTab === 'support' && (() => {
+              const SUPPORT_FILTERS: { key: typeof supportFilter; label: string; icon: keyof typeof Feather.glyphMap; color: string }[] = [
+                { key: 'all',        label: t('adminSupportFilterAll'),        icon: 'inbox',          color: '#6366f1' },
+                { key: 'unread',     label: t('adminSupportUnread'),           icon: 'bell',           color: '#0ea5e9' },
+                { key: 'bug',        label: t('adminSupportFilterBug'),        icon: 'alert-circle',   color: '#ef4444' },
+                { key: 'suggestion', label: t('adminSupportFilterSuggestion'), icon: 'zap',            color: '#f59e0b' },
+                { key: 'complaint',  label: t('adminSupportFilterComplaint'),  icon: 'alert-triangle', color: '#8b5cf6' },
+              ];
+              const filtered = supportFilter === 'all'    ? supportMessages
+                             : supportFilter === 'unread' ? supportMessages.filter(m => !m.is_read)
+                             : supportMessages.filter(m => m.type === supportFilter);
+              const TYPE_META: Record<string, { color: string; icon: keyof typeof Feather.glyphMap; label: string }> = {
+                bug:        { color: '#ef4444', icon: 'alert-circle',   label: t('adminSupportFilterBug') },
+                suggestion: { color: '#f59e0b', icon: 'zap',            label: t('adminSupportFilterSuggestion') },
+                complaint:  { color: '#8b5cf6', icon: 'alert-triangle', label: t('adminSupportFilterComplaint') },
+              };
+              return (
+                <View style={styles.section}>
+                  <View style={styles.sectionHead}>
+                    <Feather name="inbox" size={18} color="#6366f1" />
+                    <Text style={styles.sectionTitle}>{t('adminTabSupport')}</Text>
+                    <View style={[styles.countPill, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eef0ff' }]}>
+                      <Text style={[styles.countPillTxt, { color: '#6366f1' }]}>{supportMessages.length}</Text>
+                    </View>
+                  </View>
+
+                  {/* Filters */}
+                  <View style={styles.complaintFilterRow}>
+                    {SUPPORT_FILTERS.map(f => {
+                      const active = supportFilter === f.key;
+                      const cnt = f.key === 'all'    ? supportMessages.length
+                                : f.key === 'unread' ? supportMessages.filter(m => !m.is_read).length
+                                : supportMessages.filter(m => m.type === f.key).length;
+                      return (
+                        <TouchableOpacity
+                          key={f.key}
+                          style={[styles.filterChip, {
+                            borderColor: active ? f.color : C.border,
+                            backgroundColor: active ? (C.isDark ? `${f.color}22` : `${f.color}11`) : C.inputBg,
+                          }]}
+                          onPress={() => setSupportFilter(f.key)}
+                          activeOpacity={0.8}
+                        >
+                          <Feather name={f.icon} size={13} color={active ? f.color : C.textMuted} />
+                          <Text style={[styles.filterChipTxt, { color: active ? f.color : C.textMuted }]}>
+                            {f.label} {cnt > 0 ? `(${cnt})` : ''}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {filtered.length === 0 ? (
+                    <EmptyState icon="inbox" text={t('adminSupportEmpty')} />
+                  ) : (
+                    filtered.map(msg => {
+                      const meta = TYPE_META[msg.type] ?? TYPE_META.bug;
+                      return (
+                        <View key={msg.id} style={[
+                          styles.card,
+                          { backgroundColor: C.surface },
+                          !msg.is_read && { borderLeftWidth: 3, borderLeftColor: meta.color },
+                        ]}>
+                          {/* Top row: avatar + user info + type pill */}
+                          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                            <View style={[styles.avatar, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.18)' : '#EEF2FF', flexShrink: 0 }]}>
+                              <Text style={styles.avatarTxt}>{msg.username[0]?.toUpperCase() ?? '?'}</Text>
+                            </View>
+                            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                              <Text style={[styles.commentUser, { color: C.text }]} numberOfLines={1}>
+                                {msg.username}
+                                {msg.email?.trim() ? <Text style={[styles.metaTxt, { color: C.textMuted }]}> ({msg.email})</Text> : null}
+                              </Text>
+                              <Text style={[styles.metaTxt, { color: C.textMuted, fontSize: 11 }]} numberOfLines={1}>
+                                {new Date(msg.created_at).toLocaleDateString()} · {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </Text>
+                              {/* Type pill — moves under username on narrow screens */}
+                              <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                                <View style={[styles.supportTypePill, {
+                                  backgroundColor: C.isDark ? `${meta.color}25` : `${meta.color}15`,
+                                  borderColor: meta.color,
+                                }]}>
+                                  <Feather name={meta.icon} size={12} color={meta.color} />
+                                  <Text style={[styles.supportTypeTxt, { color: meta.color }]}>{meta.label}</Text>
+                                </View>
+                              </View>
+                            </View>
+                          </View>
+
+                          {/* Unread dot label */}
+                          {!msg.is_read && (
+                            <View style={styles.unreadRow}>
+                              <View style={[styles.unreadDot, { backgroundColor: '#0ea5e9' }]} />
+                              <Text style={[styles.unreadTxt, { color: '#0ea5e9' }]}>{t('adminSupportUnread')}</Text>
+                            </View>
+                          )}
+
+                          {/* Message body */}
+                          <Text style={[styles.bodyTxt, { color: C.text, marginTop: 10 }]}>{msg.message}</Text>
+
+                          {/* Actions */}
+                          <View style={styles.cardActions}>
+                            {!msg.is_read && (
+                              <TouchableOpacity
+                                style={[styles.btnDismiss, C.isDark && { backgroundColor: 'rgba(5,150,105,0.1)', borderColor: '#065f46' }]}
+                                onPress={() => handleMarkSupportRead(msg)}
+                                activeOpacity={0.8}
+                              >
+                                <Feather name="check" size={13} color="#059669" />
+                                <Text style={styles.btnDismissTxt}>{t('adminSupportMarkRead')}</Text>
+                              </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                              style={[styles.btnDeleteComment, C.isDark && { backgroundColor: 'rgba(220,38,38,0.12)', borderColor: '#7f1d1d' }]}
+                              onPress={() => setSupportToDelete(msg)}
+                              activeOpacity={0.8}
+                            >
+                              <Feather name="trash-2" size={13} color="#dc2626" />
+                              <Text style={styles.btnDeleteCommentTxt}>{t('adminSupportDelete')}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    })
+                  )}
+                </View>
+              );
+            })()}
+
             {/* ════ COMMENTS ════ */}
             {activeTab === 'comments' && (
               <View style={styles.section}>
                 <View style={styles.sectionHead}>
                   <Feather name="message-square" size={18} color="#8b5cf6" />
                   <Text style={styles.sectionTitle}>{t('adminTabComments')}</Text>
-                  <View style={[styles.countPill, { backgroundColor: '#f3e8ff' }]}>
+                  <View style={[styles.countPill, { backgroundColor: C.isDark ? 'rgba(139,92,246,0.15)' : '#f3e8ff' }]}>
                     <Text style={[styles.countPillTxt, { color: '#8b5cf6' }]}>{comments.length}</Text>
                   </View>
                 </View>
@@ -462,11 +798,11 @@ export default function AdminPanelScreen() {
                     <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
                       <View style={styles.commentHead}>
                         {/* Avatar */}
-                        <View style={styles.avatar}>
+                        <View style={[styles.avatar, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.18)' : '#EEF2FF' }]}>
                           <Text style={styles.avatarTxt}>{row.username[0]?.toUpperCase() ?? '?'}</Text>
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.commentUser}>{row.username}</Text>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[styles.commentUser, { color: C.text }]} numberOfLines={1}>{row.username}</Text>
                           <Pressable
                             style={styles.commentDeckRow}
                             onPress={() => router.push(`/deck-detail?id=${row.deck_id}`)}
@@ -475,15 +811,15 @@ export default function AdminPanelScreen() {
                             <Text style={styles.commentDeckTxt} numberOfLines={1}>{row.deck_title}</Text>
                           </Pressable>
                         </View>
-                        <Text style={styles.cardDate}>
+                        <Text style={[styles.cardDate, { color: C.textMuted, flexShrink: 0 }]}>
                           {new Date(row.created_at).toLocaleDateString()}
                         </Text>
                       </View>
 
-                      <Text style={styles.commentContent}>{row.content}</Text>
+                      <Text style={[styles.commentContent, { color: C.text }]}>{row.content}</Text>
 
                       <TouchableOpacity
-                        style={styles.btnDeleteComment}
+                        style={[styles.btnDeleteComment, C.isDark && { backgroundColor: 'rgba(220,38,38,0.12)', borderColor: '#7f1d1d' }]}
                         onPress={() => setCommentToDelete(row)}
                         activeOpacity={0.8}
                       >
@@ -500,6 +836,17 @@ export default function AdminPanelScreen() {
       </ScrollView>
 
       {/* ── Confirm modals ── */}
+      <ConfirmModal
+        visible={Boolean(supportToDelete)}
+        title={t('adminSupportDelete')}
+        message={t('adminSupportDeleteConfirm')}
+        confirmText={t('delete')}
+        cancelText={t('cancel')}
+        destructive
+        icon="trash-2"
+        onConfirm={handleDeleteSupportMessage}
+        onCancel={() => setSupportToDelete(null)}
+      />
       <ConfirmModal
         visible={Boolean(commentToDelete)}
         title={t('adminDeleteComment')}
@@ -543,6 +890,27 @@ export default function AdminPanelScreen() {
         onConfirm={handleDeleteUser}
         onCancel={() => setUserToDelete(null)}
       />
+      <ConfirmModal
+        visible={Boolean(cardComplaintToDismiss)}
+        title={t('adminDismissCardComplaint')}
+        message={`Close complaint about "${cardComplaintToDismiss?.card_front_text}"?`}
+        confirmText={t('adminDismissCardComplaint')}
+        cancelText={t('cancel')}
+        icon="check-circle"
+        onConfirm={handleDismissCardComplaint}
+        onCancel={() => setCardComplaintToDismiss(null)}
+      />
+      <ConfirmModal
+        visible={Boolean(cardToDelete)}
+        title={t('adminDeleteCard')}
+        message={t('adminDeleteCardConfirm')}
+        confirmText={t('adminDeleteCard')}
+        cancelText={t('cancel')}
+        destructive
+        icon="trash-2"
+        onConfirm={handleDeleteCard}
+        onCancel={() => setCardToDelete(null)}
+      />
     </View>
   );
 }
@@ -583,6 +951,31 @@ const styles = StyleSheet.create({
   shell: {
     flex: 1,
     flexDirection: 'row',
+  },
+
+  /* ── Top bar (narrow screens) ── */
+  topBar: {
+    borderBottomWidth: 1,
+  },
+  topBarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  topBarItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
+  },
+  topBarItemActive: { backgroundColor: '#EEF2FF' },
+  topBarLabel: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  topBarLabelActive: { color: '#6366f1', fontWeight: '700' },
+  topBarBackBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
+    marginLeft: 8,
+    borderLeftWidth: 1, borderLeftColor: '#e5e7eb',
   },
 
   /* ── Sidebar ── */
@@ -699,6 +1092,24 @@ const styles = StyleSheet.create({
   },
   deckTitle: { fontSize: 13, fontWeight: '600', color: '#6366f1', maxWidth: 280 },
 
+  complaintFilterRow: {
+    flexDirection: 'row', gap: 8, marginBottom: 12,
+  },
+  filterChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 999, borderWidth: 1,
+    paddingVertical: 6, paddingHorizontal: 12,
+  },
+  filterChipTxt: { fontSize: 13 },
+
+  cardWordBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 7,
+    alignSelf: 'flex-start', maxWidth: '100%',
+  },
+  cardWordTxt: { fontSize: 13, fontWeight: '600', flex: 1 },
+
   metaTxt: { fontSize: 13, color: '#6b7280' },
   metaBold: { fontWeight: '600' },
   bodyTxt: { fontSize: 14, lineHeight: 20 },
@@ -723,6 +1134,18 @@ const styles = StyleSheet.create({
   },
   btnDangerTxt: { fontSize: 12, fontWeight: '600', color: '#fff' },
 
+  /* ── Support cards ── */
+  supportTypePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderWidth: 1, borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4,
+    flexShrink: 0,
+  },
+  supportTypeTxt: { fontSize: 12, fontWeight: '600' },
+  unreadRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
+  unreadDot: { width: 7, height: 7, borderRadius: 4 },
+  unreadTxt: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+
   /* ── Comments ── */
   commentHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   avatar: {
@@ -732,7 +1155,7 @@ const styles = StyleSheet.create({
   avatarTxt: { fontSize: 15, fontWeight: '700', color: '#6366f1' },
   commentUser: { fontSize: 14, fontWeight: '700' },
   commentDeckRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  commentDeckTxt: { fontSize: 12, color: '#6366f1', maxWidth: 200 },
+  commentDeckTxt: { fontSize: 12, color: '#6366f1', flex: 1 },
   commentContent: { fontSize: 15, lineHeight: 22 },
   btnDeleteComment: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -763,7 +1186,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
-  userCardLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, flex: 1 },
+  userCardLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 },
   userAvatar: {
     width: 42, height: 42, borderRadius: 21,
     backgroundColor: '#f3f4f6', justifyContent: 'center', alignItems: 'center',

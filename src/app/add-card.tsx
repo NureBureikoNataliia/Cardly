@@ -21,6 +21,7 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { supabase } from "@/src/lib/supabase";
 import { useAppColors } from "@/src/contexts/ThemeContext";
+import { generateCardBack, generateCardImageUrl } from "@/src/lib/gemini";
 
 /** Web: hide browser default focus outline on TextInput (RN typings omit outlineStyle "none"). */
 const webTextInputNoOutline: TextStyle | undefined =
@@ -61,6 +62,9 @@ export default function AddCardScreen() {
   const [error, setError] = useState<string | null>(null);
   const [errorModal, setErrorModal] = useState<string | null>(null);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [isAiBack, setIsAiBack] = useState(false);
+  const [isAiFrontImg, setIsAiFrontImg] = useState(false);
+  const [isAiBackImg, setIsAiBackImg] = useState(false);
 
   useEffect(() => {
     if (!deckId) {
@@ -263,7 +267,33 @@ export default function AddCardScreen() {
               </Field>
 
               {/* FRONT IMAGE URL */}
-              <Field label={t("frontImageUrl")}>
+              <Field
+                label={t("frontImageUrl")}
+                labelRight={
+                  <TouchableOpacity
+                    style={[styles.aiBtn, { backgroundColor: C.isDark ? 'rgba(165,180,252,0.12)' : 'rgba(66,85,255,0.08)', borderColor: C.isDark ? 'rgba(165,180,252,0.3)' : 'rgba(66,85,255,0.2)' }]}
+                    disabled={!frontText.trim() || isAiFrontImg}
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      if (!frontText.trim() || !deck) return;
+                      setIsAiFrontImg(true);
+                      const url = await generateCardImageUrl(frontText.trim(), deck.title ?? '', deck.description, 'front');
+                      setIsAiFrontImg(false);
+                      if (url) setFrontImageUrl(url);
+                      else setErrorModal(t('aiError'));
+                    }}
+                  >
+                    {isAiFrontImg ? (
+                      <ActivityIndicator size="small" color={C.tint} />
+                    ) : (
+                      <Feather name="image" size={12} color={C.tint} />
+                    )}
+                    <Text style={[styles.aiBtnTxt, { color: C.tint }]}>
+                      {isAiFrontImg ? t('aiGenerateImageLoading') : t('aiGenerateImage')}
+                    </Text>
+                  </TouchableOpacity>
+                }
+              >
                 <InputRow
                   icon="link-2"
                   focused={focusedField === "frontImg"}
@@ -293,7 +323,33 @@ export default function AddCardScreen() {
               <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
 
               {/* BACK TEXT */}
-              <Field label={t("back")} required>
+              <Field
+                label={t("back")}
+                required
+                labelRight={
+                  <TouchableOpacity
+                    style={[styles.aiBtn, { backgroundColor: C.isDark ? 'rgba(165,180,252,0.12)' : 'rgba(66,85,255,0.08)', borderColor: C.isDark ? 'rgba(165,180,252,0.3)' : 'rgba(66,85,255,0.2)' }]}
+                    disabled={!frontText.trim() || isAiBack}
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      if (!frontText.trim() || !deck) return;
+                      setIsAiBack(true);
+                      const result = await generateCardBack(frontText.trim(), deck.title ?? '', deck.description);
+                      setIsAiBack(false);
+                      if (result) setBackText(result);
+                    }}
+                  >
+                    {isAiBack ? (
+                      <ActivityIndicator size="small" color={C.tint} />
+                    ) : (
+                      <Feather name="zap" size={12} color={C.tint} />
+                    )}
+                    <Text style={[styles.aiBtnTxt, { color: C.tint }]}>
+                      {isAiBack ? t('aiGenerateBackLoading') : t('aiGenerateBack')}
+                    </Text>
+                  </TouchableOpacity>
+                }
+              >
                 <InputRow
                   icon="align-right"
                   focused={focusedField === "back"}
@@ -325,7 +381,33 @@ export default function AddCardScreen() {
               </Field>
 
               {/* BACK IMAGE URL */}
-              <Field label={t("backImageUrl")}>
+              <Field
+                label={t("backImageUrl")}
+                labelRight={
+                  <TouchableOpacity
+                    style={[styles.aiBtn, { backgroundColor: C.isDark ? 'rgba(165,180,252,0.12)' : 'rgba(66,85,255,0.08)', borderColor: C.isDark ? 'rgba(165,180,252,0.3)' : 'rgba(66,85,255,0.2)' }]}
+                    disabled={!backText.trim() || isAiBackImg}
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      if (!backText.trim() || !deck) return;
+                      setIsAiBackImg(true);
+                      const url = await generateCardImageUrl(backText.trim(), deck.title ?? '', deck.description, 'back');
+                      setIsAiBackImg(false);
+                      if (url) setBackImageUrl(url);
+                      else setErrorModal(t('aiError'));
+                    }}
+                  >
+                    {isAiBackImg ? (
+                      <ActivityIndicator size="small" color={C.tint} />
+                    ) : (
+                      <Feather name="image" size={12} color={C.tint} />
+                    )}
+                    <Text style={[styles.aiBtnTxt, { color: C.tint }]}>
+                      {isAiBackImg ? t('aiGenerateImageLoading') : t('aiGenerateImage')}
+                    </Text>
+                  </TouchableOpacity>
+                }
+              >
                 <InputRow
                   icon="link-2"
                   focused={focusedField === "backImg"}
@@ -439,18 +521,23 @@ export default function AddCardScreen() {
 function Field({
   label,
   required,
+  labelRight,
   children,
 }: {
   label: string;
   required?: boolean;
+  labelRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <View style={{ gap: 7 }}>
-      <Text style={styles.fieldLabel}>
-        {label}
-        {required && <Text style={{ color: "#ef4444" }}> *</Text>}
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={styles.fieldLabel}>
+          {label}
+          {required && <Text style={{ color: "#ef4444" }}> *</Text>}
+        </Text>
+        {labelRight}
+      </View>
       {children}
     </View>
   );
@@ -571,6 +658,20 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     letterSpacing: 0.5,
     textTransform: "uppercase",
+  },
+
+  aiBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  aiBtnTxt: {
+    fontSize: 11,
+    fontWeight: '600',
   },
 
   /* INPUT ROW */

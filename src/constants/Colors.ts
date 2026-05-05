@@ -8,6 +8,8 @@ export default {
     background: '#f3f4f6',
     /** Cards / sheets on top of screen */
     surface: '#ffffff',
+    /** Top navigation header */
+    header: '#f5f7ff',
     tint: tintColorLight,
     tabIconDefault: '#ccc',
     tabIconSelected: tintColorLight,
@@ -16,6 +18,8 @@ export default {
     text: '#eef2ff',
     background: '#141c2e',
     surface: '#1d2a3a',
+    /** Top navigation header — slightly lighter than surface */
+    header: '#243040',
     tint: tintColorDark,
     tabIconDefault: '#9ca3af',
     tabIconSelected: tintColorDark,

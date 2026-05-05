@@ -6,7 +6,7 @@ import Colors from '@/src/constants/Colors';
 
 export default function ThemeToggle() {
   const { colorScheme, toggleTheme } = useTheme();
-  const iconColor = Colors[colorScheme].text;
+  const iconColor = Colors[colorScheme].tint;
 
   return (
     <Pressable

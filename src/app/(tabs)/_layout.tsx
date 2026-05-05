@@ -18,10 +18,14 @@ const isWeb = Platform.OS === 'web';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  // Drawer state is only used on native; web has the persistent Sidebar in root layout
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { t } = useLanguage();
   const sidebarDrawer = useSidebarDrawerOptional();
+
+  const cs = colorScheme ?? 'light';
+  const headerBg = Colors[cs].header;
+  const headerTint = Colors[cs].tint;
+  const headerText = Colors[cs].text;
 
   const headerLeft = isWeb
     ? sidebarDrawer?.isCompact
@@ -30,28 +34,30 @@ export default function TabLayout() {
             onPress={sidebarDrawer.toggleDrawer}
             style={[styles.menuBtn, { marginLeft: 8 }]}
           >
-            <Feather name="menu" size={24} color="#1f2937" />
+            <Feather name="menu" size={24} color={headerTint} />
           </Pressable>
         )
       : undefined
     : () => (
         <Pressable onPress={() => setDrawerOpen(true)} style={styles.menuBtn}>
-          <Feather name="menu" size={24} color={Colors[colorScheme ?? 'light'].text} />
+          <Feather name="menu" size={24} color={headerTint} />
         </Pressable>
       );
 
   return (
     <>
-      {/* Mobile-only overlay drawer (web uses Sidebar rendered at root level) */}
       {!isWeb && (
         <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
       )}
 
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+          tabBarActiveTintColor: Colors[cs].tint,
           headerShown: useClientOnlyValue(false, true),
           tabBarStyle: { display: 'none' },
+          headerStyle: { backgroundColor: headerBg },
+          headerTintColor: headerText,
+          headerShadowVisible: true,
           headerLeft,
         }}
       >
@@ -70,7 +76,7 @@ export default function TabLayout() {
                       <FontAwesome
                         name="info-circle"
                         size={25}
-                        color={Colors[colorScheme ?? 'light'].text}
+                        color={headerTint}
                         style={{ opacity: pressed ? 0.5 : 1 }}
                       />
                     )}
