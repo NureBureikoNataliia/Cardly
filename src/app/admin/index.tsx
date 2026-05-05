@@ -240,7 +240,7 @@ export default function AdminPanelScreen() {
         style={styles.main}
         contentContainerStyle={styles.mainContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
       >
         {loading && !refreshing ? (
           <View style={styles.centered}>

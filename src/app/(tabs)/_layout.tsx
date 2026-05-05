@@ -6,11 +6,12 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import DrawerMenu from '@/src/components/DrawerMenu';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
+import NotificationBell from '@/src/components/NotificationBell';
 import { useClientOnlyValue } from '@/src/components/useClientOnlyValue';
 import { useColorScheme } from '@/src/components/useColorScheme';
+import Colors from '@/src/constants/Colors';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useSidebarDrawerOptional } from '@/src/contexts/SidebarDrawerContext';
-import Colors from '@/src/constants/Colors';
 
 const isWeb = Platform.OS === 'web';
 
@@ -59,6 +60,7 @@ export default function TabLayout() {
             title: t('appName'),
             headerRight: () => (
               <View style={styles.headerRight}>
+                <NotificationBell />
                 <LanguageDropdown />
                 <Link href="/modal" asChild>
                   <Pressable>

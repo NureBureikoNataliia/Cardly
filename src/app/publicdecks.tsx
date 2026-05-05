@@ -205,7 +205,7 @@ export default function PublicDecksScreen() {
       <View style={styles.controlsContainer}>
         {/* search */}
         <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
-          <Feather name="search" size={16} color={searchFocused ? '#4255ff' : '#b0b8c8'} />
+          <Feather name="search" size={16} color={searchFocused ? '#1a1a1a' : '#b0b8c8'} />
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
@@ -342,9 +342,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   searchContainerFocused: {
-    borderColor: '#4255ff',
+    borderColor: '#1a1a1a',
     backgroundColor: '#fff',
-    shadowColor: '#4255ff',
+    shadowColor: '#1a1a1a',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.14,
     shadowRadius: 8,

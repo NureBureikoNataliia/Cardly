@@ -1,7 +1,13 @@
 /**
- * Anki-style spaced repetition algorithm (SM-2 inspired)
+ * spaced repetition algorithm (SM-2 inspired)
  * Quality: Again=1, Hard=2, Good=3, Easy=4
  */
+
+import {
+  getNextSrsDayBoundary,
+  normalizeSrsDayStartHour,
+  SRS_DAY_START_HOUR_LOCAL,
+} from "./srsDayBoundary";
 
 export type Rating = 1 | 2 | 3 | 4; // Again, Hard, Good, Easy
 
@@ -14,6 +20,8 @@ export interface CardSchedule {
 }
 
 export interface StudySettings {
+  /** Local hour 0–23 when the SRS “day” rolls over (Anki-style next day starts at). */
+  srsDayStartHour: number;
   againIntervalMinutes: number;
   hardIntervalMinutes: number;
   goodIntervalDays: number;
@@ -30,6 +38,7 @@ export interface StudySettings {
 }
 
 export const DEFAULT_STUDY_SETTINGS: StudySettings = {
+  srsDayStartHour: 3,
   againIntervalMinutes: 1,
   hardIntervalMinutes: 5,
   goodIntervalDays: 1,
@@ -124,8 +133,13 @@ export function isCardDue(
 /**
  * Get count of cards due today (including overdue)
  */
-export function getDueTodayCount(cards: { next_review_at?: string | null }[]): number {
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
-  return cards.filter((c) => !c.next_review_at || new Date(c.next_review_at) <= endOfToday).length;
+export function getDueTodayCount(
+  cards: { next_review_at?: string | null }[],
+  now: Date = new Date(),
+  srsDayStartHour?: number
+): number {
+  const hour =
+    srsDayStartHour !== undefined ? normalizeSrsDayStartHour(srsDayStartHour) : SRS_DAY_START_HOUR_LOCAL;
+  const endOfSrsDay = getNextSrsDayBoundary(now, hour);
+  return cards.filter((c) => !c.next_review_at || new Date(c.next_review_at) <= endOfSrsDay).length;
 }

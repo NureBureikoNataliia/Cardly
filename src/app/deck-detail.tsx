@@ -17,13 +17,22 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import type { TextStyle } from "react-native";
+
 import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 
 const scrollPositions: Record<string, number> = {};
+
+/** Web: hide browser default focus outline (RN TextStyle typings omit outlineStyle "none"). */
+const webTextInputNoOutline: TextStyle | undefined =
+  Platform.OS === "web"
+    ? ({ outlineWidth: 0, outlineStyle: "none" } as unknown as TextStyle)
+    : undefined;
 
 type Collaborator = {
   deck_id: string;
@@ -69,6 +78,7 @@ export default function DeckDetailScreen() {
 
   // ── Collaborators ──
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [learnedInfoOpen, setLearnedInfoOpen] = useState(false);
   const [collabOpen, setCollabOpen] = useState(false);
   const [collaboratorSearch, setCollaboratorSearch] = useState("");
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
@@ -154,6 +164,20 @@ export default function DeckDetailScreen() {
   // ── Invite collaborator ──
   const handleInvite = useCallback(async (targetUserId: string, targetUsername?: string) => {
     if (!deckId || isInviting) return;
+
+    // Block inviting the owner of the original deck (to avoid duplicates in their "Your Decks")
+    if (deck?.original_deck_id) {
+      const { data: origDeck } = await supabase
+        .from("decks")
+        .select("creator_id")
+        .eq("deck_id", deck.original_deck_id)
+        .single();
+      if (origDeck?.creator_id === targetUserId) {
+        setInviteMsg({ text: t("cannotInviteOriginalCreator"), ok: false });
+        return;
+      }
+    }
+
     const existing = collaborators.find((c) => c.user_id === targetUserId);
     if (existing?.status === 'accepted') {
       setInviteMsg({ text: t("inviteAlready"), ok: false });
@@ -182,7 +206,7 @@ export default function DeckDetailScreen() {
       setSearchResults([]);
       loadCollaborators();
     }
-  }, [deckId, collaborators, isInviting, user?.id, t, loadCollaborators]);
+  }, [deckId, deck, collaborators, isInviting, user?.id, t, loadCollaborators]);
 
   // ── Remove collaborator ──
   const handleRemoveCollaborator = useCallback(async () => {
@@ -215,9 +239,30 @@ export default function DeckDetailScreen() {
     }, [loadData, deckId])
   );
 
-  const dueToday = user
-    ? getDueTodayCountForUser(cards.map((c) => c.card_id), progressMap)
-    : totalCards;
+  const { settings: studySettings } = useStudySettings();
+
+  const dueToday = useMemo(() => {
+    if (!user) return totalCards;
+    return getDueTodayCountForUser(
+      cards.map((c) => c.card_id),
+      progressMap,
+      new Date(),
+      studySettings.srsDayStartHour
+    );
+  }, [user, totalCards, cards, progressMap, studySettings.srsDayStartHour]);
+
+  const dueNowCount = useMemo(() => {
+    if (!user) return 0;
+    const now = Date.now();
+    return cards.filter((c) => {
+      const p = progressMap.get(c.card_id);
+      if (!p) return true;
+      if (p.due_date == null) return true;
+      const t = new Date(p.due_date).getTime();
+      if (Number.isNaN(t)) return true;
+      return t <= now;
+    }).length;
+  }, [user, cards, progressMap]);
 
   const isOwner = deck && user && deck.creator_id === user.id;
   // treat missing status (old DB without status column) as 'accepted' for backward compat
@@ -338,7 +383,7 @@ export default function DeckDetailScreen() {
         contentContainerStyle={styles.contentOuter}
         onScroll={(e) => { if (deckId) scrollPositions[deckId] = e.nativeEvent.contentOffset.y; }}
         scrollEventThrottle={100}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
       >
         <View style={styles.pageWrap}>
 
@@ -355,16 +400,32 @@ export default function DeckDetailScreen() {
 
             {/* Badge row */}
             <View style={styles.heroBadgeRow}>
-              <View style={[styles.badge, deck.is_public ? styles.badgePublic : styles.badgePrivate]}>
-                <Feather name={deck.is_public ? "globe" : "lock"} size={11} color={deck.is_public ? "#059669" : "#9ca3af"} />
-                <Text style={[styles.badgeTxt, deck.is_public ? styles.badgeTxtPublic : styles.badgeTxtPrivate]}>
+              <View style={[
+                styles.badge,
+                deck.cover_image_url
+                  ? styles.badgeOnCover
+                  : (deck.is_public ? styles.badgePublic : styles.badgePrivate),
+              ]}>
+                <Feather
+                  name={deck.is_public ? "globe" : "lock"}
+                  size={11}
+                  color={deck.cover_image_url ? "#fff" : (deck.is_public ? "#059669" : "#9ca3af")}
+                />
+                <Text style={[
+                  styles.badgeTxt,
+                  deck.cover_image_url
+                    ? styles.badgeTxtOnCover
+                    : (deck.is_public ? styles.badgeTxtPublic : styles.badgeTxtPrivate),
+                ]}>
                   {deck.is_public ? t("public") : t("private")}
                 </Text>
               </View>
               {isCopiedDeck && (
-                <View style={styles.badgeCopy}>
-                  <Feather name="copy" size={11} color="#8b5cf6" />
-                  <Text style={styles.badgeTxtCopy}>{t("copied")}</Text>
+                <View style={[styles.badgeCopy, deck.cover_image_url && styles.badgeOnCover]}>
+                  <Feather name="copy" size={11} color={deck.cover_image_url ? "#fff" : "#8b5cf6"} />
+                  <Text style={[styles.badgeTxtCopy, deck.cover_image_url && styles.badgeTxtOnCover]}>
+                    {t("copied")}
+                  </Text>
                 </View>
               )}
             </View>
@@ -386,7 +447,14 @@ export default function DeckDetailScreen() {
             <View style={styles.statsDivider} />
             <StatChip icon="clock" value={dueToday} label={t("dueToday")} color="#d97706" />
             <View style={styles.statsDivider} />
-            <StatChip icon="check-circle" value={`${progressPct}%`} label={t("learned") ?? "Вивчено"} color="#059669" />
+            <StatChip
+              icon="check-circle"
+              value={`${progressPct}%`}
+              label={t("learned")}
+              color="#059669"
+              onInfoPress={() => setLearnedInfoOpen(true)}
+              infoAccessibilityLabel={t("learnedPercentInfoTitle")}
+            />
           </View>
 
           {/* ────── Progress bar ────── */}
@@ -395,7 +463,19 @@ export default function DeckDetailScreen() {
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
               </View>
-              <Text style={styles.progressLabel}>{progressPct}% {t("learned") ?? "вивчено"}</Text>
+              <View style={styles.progressLabelRow}>
+                <Text style={styles.progressLabel}>
+                  {progressPct}% {t("learned")}
+                </Text>
+                <Pressable
+                  onPress={() => setLearnedInfoOpen(true)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("learnedPercentInfoTitle")}
+                >
+                  <Feather name="info" size={14} color="#9ca3af" />
+                </Pressable>
+              </View>
             </View>
           )}
 
@@ -410,21 +490,39 @@ export default function DeckDetailScreen() {
               </View>
             )}
 
-            {/* Primary row: Review + Study */}
+            {/* Primary: Study */}
             {canEdit && (
               <View style={styles.actionRowPrimary}>
-                <ActionBtn
-                  icon="book-open"
-                  label={t("reviewCards")}
-                  bg="#6366f1"
-                  onPress={() => router.push(`/deck-review?id=${deck.deck_id}`)}
-                  flex
-                />
                 <ActionBtn
                   icon="trending-up"
                   label={t("studying")}
                   bg="#059669"
-                  onPress={() => router.push(`/deck-study?id=${deck.deck_id}`)}
+                  onPress={() => {
+                    const onlyLaterToday = Boolean(user && dueNowCount === 0 && dueToday > 0);
+                    router.push({
+                      pathname: "/deck-study",
+                      params: onlyLaterToday
+                        ? { id: deck.deck_id, today: "1" }
+                        : { id: deck.deck_id },
+                    });
+                  }}
+                  flex
+                />
+              </View>
+            )}
+
+            {canEdit && user && dueToday > 0 && dueToday > dueNowCount && dueNowCount > 0 && (
+              <View style={styles.actionRowPrimary}>
+                <ActionBtn
+                  icon="zap"
+                  label={t("studyAllToday")}
+                  bg="#ecfdf5"
+                  textColor="#047857"
+                  border
+                  borderColor="rgba(4,120,87,0.35)"
+                  onPress={() =>
+                    router.push({ pathname: "/deck-study", params: { id: deck.deck_id, today: "1" } })
+                  }
                   flex
                 />
               </View>
@@ -487,52 +585,6 @@ export default function DeckDetailScreen() {
             )}
           </View>
 
-          {/* ════════════ CARDS SECTION ════════════ */}
-          <View style={styles.cardsSection}>
-            <View style={styles.cardsSectionHeader}>
-              <Text style={styles.cardsSectionTitle}>{t("cards")}</Text>
-              <Text style={styles.cardsSectionCount}>{totalCards}</Text>
-            </View>
-
-            {cards.length === 0 ? (
-              <View style={styles.emptyCards}>
-                <View style={styles.emptyCardsIcon}>
-                  <Feather name="credit-card" size={32} color="#c7d2fe" />
-                </View>
-                <Text style={styles.emptyCardsTitle}>{t("noCardsInDeck")}</Text>
-                {canEdit && (
-                  <TouchableOpacity
-                    style={styles.emptyCardsBtn}
-                    onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
-                  >
-                    <Feather name="plus" size={16} color="#fff" />
-                    <Text style={styles.emptyCardsBtnTxt}>{t("addCard")}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : (
-              <View style={[styles.cardsGrid, numCols === 2 && styles.cardsGridTwo]}>
-                {cards.map((card, index) => (
-                  <CardTile
-                    key={card.card_id}
-                    card={card}
-                    index={index}
-                    isOwner={!!canEdit}
-                    numCols={numCols}
-                    createdByName={
-                      card.created_by
-                        ? (membersMap[card.created_by] ?? null)
-                        : (deck ? (membersMap[deck.creator_id] ?? null) : null)
-                    }
-                    onEdit={() => router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`)}
-                    onDelete={() => handleDeleteCard(card)}
-                    t={t}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
-
           {/* ════════════ COLLABORATORS SECTION (owner only) ════════════ */}
           {isOwner && (
             <View style={styles.collabSection}>
@@ -571,7 +623,7 @@ export default function DeckDetailScreen() {
                     <View style={styles.inviteInputWrap}>
                       <Feather name="search" size={15} color={collaboratorSearch.length > 0 ? "#6366f1" : "#b0b8c8"} />
                       <TextInput
-                        style={styles.inviteInput}
+                        style={[styles.inviteInput, webTextInputNoOutline]}
                         placeholder={t("searchByUsername")}
                         placeholderTextColor="#c4cbd8"
                         value={collaboratorSearch}
@@ -678,8 +730,65 @@ export default function DeckDetailScreen() {
             </View>
           )}
 
+          {/* ════════════ CARDS SECTION ════════════ */}
+          <View style={styles.cardsSection}>
+            <View style={styles.cardsSectionHeader}>
+              <Text style={styles.cardsSectionTitle}>{t("cardsSectionTitle")}</Text>
+              <Text style={styles.cardsSectionCount}>{totalCards}</Text>
+            </View>
+
+            {cards.length === 0 ? (
+              <View style={styles.emptyCards}>
+                <View style={styles.emptyCardsIcon}>
+                  <Feather name="credit-card" size={32} color="#c7d2fe" />
+                </View>
+                <Text style={styles.emptyCardsTitle}>{t("noCardsInDeck")}</Text>
+                {canEdit && (
+                  <TouchableOpacity
+                    style={styles.emptyCardsBtn}
+                    onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
+                  >
+                    <Feather name="plus" size={16} color="#fff" />
+                    <Text style={styles.emptyCardsBtnTxt}>{t("addCard")}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <View style={[styles.cardsGrid, numCols === 2 && styles.cardsGridTwo]}>
+                {cards.map((card, index) => (
+                  <CardTile
+                    key={card.card_id}
+                    card={card}
+                    index={index}
+                    isOwner={!!canEdit}
+                    numCols={numCols}
+                    createdByName={
+                      card.created_by
+                        ? (membersMap[card.created_by] ?? null)
+                        : (deck ? (membersMap[deck.creator_id] ?? null) : null)
+                    }
+                    onEdit={() => router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`)}
+                    onDelete={() => handleDeleteCard(card)}
+                    t={t}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+
         </View>
       </ScrollView>
+
+      <ConfirmModal
+        visible={learnedInfoOpen}
+        title={t("learnedPercentInfoTitle")}
+        message={t("learnedPercentInfoBody")}
+        confirmText={t("ok")}
+        cancelText={null}
+        icon="info"
+        onConfirm={() => setLearnedInfoOpen(false)}
+        onCancel={() => setLearnedInfoOpen(false)}
+      />
 
       <ConfirmModal
         visible={Boolean(collaboratorToRemove)}
@@ -711,17 +820,36 @@ export default function DeckDetailScreen() {
 }
 
 /* ─── StatChip ─── */
-function StatChip({ icon, value, label, color }: {
+function StatChip({ icon, value, label, color, onInfoPress, infoAccessibilityLabel }: {
   icon: keyof typeof Feather.glyphMap;
   value: number | string;
   label: string;
   color: string;
+  onInfoPress?: () => void;
+  infoAccessibilityLabel?: string;
 }) {
   return (
     <View style={styles.statChip}>
-      <View style={[styles.statChipIcon, { backgroundColor: `${color}18` }]}>
-        <Feather name={icon} size={15} color={color} />
-      </View>
+      {onInfoPress ? (
+        <View style={styles.statChipIconWithInfo}>
+          <View style={[styles.statChipIcon, { backgroundColor: `${color}18` }]}>
+            <Feather name={icon} size={15} color={color} />
+          </View>
+          <Pressable
+            style={styles.statChipInfoHit}
+            onPress={onInfoPress}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={infoAccessibilityLabel ?? label}
+          >
+            <Feather name="info" size={14} color={color} />
+          </Pressable>
+        </View>
+      ) : (
+        <View style={[styles.statChipIcon, { backgroundColor: `${color}18` }]}>
+          <Feather name={icon} size={15} color={color} />
+        </View>
+      )}
       <Text style={[styles.statChipValue, { color }]}>{value}</Text>
       <Text style={styles.statChipLabel}>{label}</Text>
     </View>
@@ -874,9 +1002,11 @@ const styles = StyleSheet.create({
   },
   badgePublic: { backgroundColor: "rgba(5,150,105,0.12)", borderWidth: 1, borderColor: "rgba(5,150,105,0.25)" },
   badgePrivate: { backgroundColor: "rgba(71,85,105,0.1)", borderWidth: 1, borderColor: "rgba(71,85,105,0.2)" },
+  badgeOnCover: { backgroundColor: "rgba(0,0,0,0.52)", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
   badgeTxt: { fontSize: 12, fontWeight: "600" },
   badgeTxtPublic: { color: "#047857" },
   badgeTxtPrivate: { color: "#475569" },
+  badgeTxtOnCover: { color: "#fff", textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   badgeCopy: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "rgba(99,102,241,0.1)", borderWidth: 1, borderColor: "rgba(99,102,241,0.22)",
@@ -899,6 +1029,19 @@ const styles = StyleSheet.create({
   },
   statsDivider: { width: 1, height: 40, backgroundColor: "#f0f1f5" },
   statChip: { flex: 1, alignItems: "center", gap: 4 },
+  /** Main icon stays centered like other chips; info sits to the right, outside the centering width. */
+  statChipIconWithInfo: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statChipInfoHit: {
+    position: "absolute",
+    left: "100%",
+    marginLeft: 4,
+    height: 32,
+    justifyContent: "center",
+  },
   statChipIcon: {
     width: 32, height: 32, borderRadius: 10,
     alignItems: "center", justifyContent: "center",
@@ -910,7 +1053,14 @@ const styles = StyleSheet.create({
   progressWrap: { marginHorizontal: 16, marginTop: 12, gap: 6 },
   progressTrack: { height: 6, borderRadius: 999, backgroundColor: "#e8eaee", overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 999, backgroundColor: "#059669" },
-  progressLabel: { fontSize: 12, color: "#9ca3af", textAlign: "right" },
+  progressLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 6,
+    alignSelf: "flex-end",
+  },
+  progressLabel: { fontSize: 12, color: "#9ca3af" },
 
   /* ── ACTIONS ── */
   actions: { marginHorizontal: 16, marginTop: 16, gap: 10 },
@@ -1045,8 +1195,6 @@ const styles = StyleSheet.create({
   },
   inviteInput: {
     flex: 1, fontSize: 14, color: "#111827", paddingVertical: 0,
-    // @ts-ignore
-    outlineWidth: 0, outlineStyle: "none",
   },
   searchResultsList: {
     borderRadius: 12, borderWidth: 1, borderColor: "#e8eaee",

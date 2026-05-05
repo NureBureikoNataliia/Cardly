@@ -1,21 +1,29 @@
 import { Text, View } from '@/src/components/Themed';
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { Platform, ScrollView, StyleSheet } from 'react-native';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 
 export default function HelpScreen() {
   const { t } = useLanguage();
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{t('help')}</Text>
-      <Text>{t('helpPlaceholder')}</Text>
+    <View style={styles.root}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
+      >
+        <Text style={styles.title}>{t('help')}</Text>
+        <Text>{t('helpPlaceholder')}</Text>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
+  },
+  container: {
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,

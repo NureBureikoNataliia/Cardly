@@ -25,11 +25,11 @@ export {
 } from 'expo-router';
 
 export const unstable_settings = {
-  // При перезагрузке начальным маршрутом будет (tabs)
+  // After reload, the initial route is (tabs)
   initialRouteName: '(tabs)',
 };
 
-// Предотвращаем автоматическое скрытие сплэш-скрина
+// Keep the splash screen visible until we hide it explicitly
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -56,7 +56,7 @@ export default function RootLayout() {
     return null;
   }
 
-  // Оборачиваем навигацию в провайдер данных о пользователе
+  // Wrap navigation in auth / language / study-settings providers
   return (
     <LanguageProvider>
       <StudySettingsProvider>
@@ -105,7 +105,7 @@ function WebAuthenticatedShell({
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1, flexDirection: 'row' }}>
         {!isCompact ? <Sidebar /> : null}
-        <View style={{ flex: 1, overflow: 'hidden' }}>
+        <View style={{ flex: 1, overflow: Platform.OS === 'web' ? 'visible' : 'hidden' }}>
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: '#fff' },
@@ -123,7 +123,6 @@ function WebAuthenticatedShell({
             <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
             <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
             <Stack.Screen name="admin" options={{ headerShown: true, title: 'Admin' }} />
-            <Stack.Screen name="deck-review" options={{ headerShown: true }} />
             <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
             <Stack.Screen name="deck-study" options={{ headerShown: true }} />
             <Stack.Screen name="settings" options={{ headerShown: true }} />
@@ -197,7 +196,6 @@ function RootLayoutNav() {
       <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
       <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
       <Stack.Screen name="admin" options={{ headerShown: true, title: 'Admin' }} />
-      <Stack.Screen name="deck-review" options={{ headerShown: true }} />
       <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
       <Stack.Screen name="deck-study" options={{ headerShown: true }} />
       <Stack.Screen name="settings" options={{ headerShown: true }} />

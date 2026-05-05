@@ -4,6 +4,7 @@ import {
   Image,
   ScrollView,
   StyleSheet,
+  Switch,
   TextInput,
   TouchableOpacity,
   View as RNView,
@@ -15,6 +16,7 @@ import ConfirmModal from '@/src/components/ConfirmModal';
 import { Text, View } from '@/src/components/Themed';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useStudySettings } from '@/src/contexts/StudySettingsContext';
 import { supabase } from '@/src/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 
@@ -46,7 +48,47 @@ export default function SettingsScreen() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [editingField, setEditingField] = useState<'avatar' | 'username' | 'email' | null>(null);
-  const [activeSection, setActiveSection] = useState<'account' | 'notifications'>('account');
+  const [activeSection, setActiveSection] = useState<'account' | 'notifications' | 'learning'>(
+    'account'
+  );
+  const { settings: studySettings, updateSettings } = useStudySettings();
+
+  // ── Notification preferences ──
+  type NotifPrefs = {
+    studyReminder: boolean;
+    studyReminderHour: number;
+    streakReminder: boolean;
+    weeklySummary: boolean;
+    newCards: boolean;
+  };
+  const defaultNotifPrefs: NotifPrefs = {
+    studyReminder: false,
+    studyReminderHour: 9,
+    streakReminder: true,
+    weeklySummary: false,
+    newCards: true,
+  };
+  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(defaultNotifPrefs);
+  const [savingNotif, setSavingNotif] = useState(false);
+  const [notifMsg, setNotifMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const saved = user.user_metadata?.notifications as NotifPrefs | undefined;
+    if (saved) setNotifPrefs({ ...defaultNotifPrefs, ...saved });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const handleSaveNotif = async (patch: Partial<NotifPrefs>) => {
+    const next = { ...notifPrefs, ...patch };
+    setNotifPrefs(next);
+    setSavingNotif(true);
+    setNotifMsg(null);
+    const { error: e } = await updateMetadata({ notifications: next as unknown as string });
+    setSavingNotif(false);
+    setNotifMsg(e ? t('notifSaveError') : t('notifSaved'));
+    setTimeout(() => setNotifMsg(null), 3000);
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -184,6 +226,16 @@ export default function SettingsScreen() {
               ]}
             >
               {t('notificationsTab')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.topMenuTab, activeSection === 'learning' && styles.topMenuTabActive]}
+            onPress={() => setActiveSection('learning')}
+          >
+            <Text
+              style={[styles.topMenuTabText, activeSection === 'learning' && styles.topMenuTabTextActive]}
+            >
+              {t('learningTab')}
             </Text>
           </TouchableOpacity>
         </RNView>
@@ -367,10 +419,164 @@ export default function SettingsScreen() {
         {message ? <Text style={styles.successText}>{message}</Text> : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
-      ) : (
+      ) : activeSection === 'notifications' ? (
         <View style={styles.card}>
           <Text style={styles.sectionHeader}>{t('notificationsTab')}</Text>
-          <Text style={styles.infoSubText}>{t('notificationsPlaceholder')}</Text>
+
+          {/* Browser note */}
+          <RNView style={styles.notifNote}>
+            <Feather name="info" size={14} color="#6366f1" />
+            <Text style={styles.notifNoteTxt}>{t('notifBrowserNote')}</Text>
+          </RNView>
+
+          {/* Study reminder */}
+          <RNView style={styles.notifRow}>
+            <RNView style={styles.notifRowLeft}>
+              <RNView style={styles.notifIconWrap}>
+                <Feather name="bell" size={18} color="#6366f1" />
+              </RNView>
+              <RNView style={styles.notifRowText}>
+                <Text style={styles.infoLabel}>{t('notifStudyReminder')}</Text>
+                <Text style={styles.infoSubText}>{t('notifStudyReminderDesc')}</Text>
+              </RNView>
+            </RNView>
+            <Switch
+              value={notifPrefs.studyReminder}
+              onValueChange={v => handleSaveNotif({ studyReminder: v })}
+              trackColor={{ false: '#e5e7eb', true: '#a5b4fc' }}
+              thumbColor={notifPrefs.studyReminder ? '#6366f1' : '#f4f4f5'}
+            />
+          </RNView>
+
+          {/* Time picker (visible only when study reminder is on) */}
+          {notifPrefs.studyReminder && (
+            <RNView style={styles.notifTimeRow}>
+              <Text style={styles.fieldLabel}>{t('notifStudyTime')}</Text>
+              <RNView style={styles.srsHourRow}>
+                <TouchableOpacity
+                  style={styles.srsHourButton}
+                  onPress={() => handleSaveNotif({ studyReminderHour: (notifPrefs.studyReminderHour + 23) % 24 })}
+                >
+                  <Feather name="minus" size={20} color="#111827" />
+                </TouchableOpacity>
+                <Text style={styles.srsHourValue}>
+                  {String(notifPrefs.studyReminderHour).padStart(2, '0')}:00
+                </Text>
+                <TouchableOpacity
+                  style={styles.srsHourButton}
+                  onPress={() => handleSaveNotif({ studyReminderHour: (notifPrefs.studyReminderHour + 1) % 24 })}
+                >
+                  <Feather name="plus" size={20} color="#111827" />
+                </TouchableOpacity>
+              </RNView>
+            </RNView>
+          )}
+
+          <RNView style={styles.notifDivider} />
+
+          {/* Streak reminder */}
+          <RNView style={styles.notifRow}>
+            <RNView style={styles.notifRowLeft}>
+              <RNView style={[styles.notifIconWrap, { backgroundColor: '#fef3c7' }]}>
+                <Feather name="zap" size={18} color="#d97706" />
+              </RNView>
+              <RNView style={styles.notifRowText}>
+                <Text style={styles.infoLabel}>{t('notifStreakReminder')}</Text>
+                <Text style={styles.infoSubText}>{t('notifStreakReminderDesc')}</Text>
+              </RNView>
+            </RNView>
+            <Switch
+              value={notifPrefs.streakReminder}
+              onValueChange={v => handleSaveNotif({ streakReminder: v })}
+              trackColor={{ false: '#e5e7eb', true: '#fde68a' }}
+              thumbColor={notifPrefs.streakReminder ? '#d97706' : '#f4f4f5'}
+            />
+          </RNView>
+
+          <RNView style={styles.notifDivider} />
+
+          {/* New cards */}
+          <RNView style={styles.notifRow}>
+            <RNView style={styles.notifRowLeft}>
+              <RNView style={[styles.notifIconWrap, { backgroundColor: '#d1fae5' }]}>
+                <Feather name="layers" size={18} color="#059669" />
+              </RNView>
+              <RNView style={styles.notifRowText}>
+                <Text style={styles.infoLabel}>{t('notifNewCards')}</Text>
+                <Text style={styles.infoSubText}>{t('notifNewCardsDesc')}</Text>
+              </RNView>
+            </RNView>
+            <Switch
+              value={notifPrefs.newCards}
+              onValueChange={v => handleSaveNotif({ newCards: v })}
+              trackColor={{ false: '#e5e7eb', true: '#a7f3d0' }}
+              thumbColor={notifPrefs.newCards ? '#059669' : '#f4f4f5'}
+            />
+          </RNView>
+
+          <RNView style={styles.notifDivider} />
+
+          {/* Weekly summary */}
+          <RNView style={styles.notifRow}>
+            <RNView style={styles.notifRowLeft}>
+              <RNView style={[styles.notifIconWrap, { backgroundColor: '#fce7f3' }]}>
+                <Feather name="bar-chart-2" size={18} color="#db2777" />
+              </RNView>
+              <RNView style={styles.notifRowText}>
+                <Text style={styles.infoLabel}>{t('notifWeeklySummary')}</Text>
+                <Text style={styles.infoSubText}>{t('notifWeeklySummaryDesc')}</Text>
+              </RNView>
+            </RNView>
+            <Switch
+              value={notifPrefs.weeklySummary}
+              onValueChange={v => handleSaveNotif({ weeklySummary: v })}
+              trackColor={{ false: '#e5e7eb', true: '#fbcfe8' }}
+              thumbColor={notifPrefs.weeklySummary ? '#db2777' : '#f4f4f5'}
+            />
+          </RNView>
+
+          {/* Status message */}
+          {savingNotif && <ActivityIndicator color="#6366f1" style={{ alignSelf: 'flex-start' }} />}
+          {notifMsg && (
+            <Text style={notifMsg === t('notifSaved') ? styles.successText : styles.errorText}>
+              {notifMsg}
+            </Text>
+          )}
+        </View>
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.sectionHeader}>{t('studySettings')}</Text>
+          <Text style={styles.fieldLabel}>{t('srsDayStartTitle')}</Text>
+          <Text style={styles.infoSubText}>{t('srsDayStartHint')}</Text>
+          <RNView style={styles.srsHourRow}>
+            <TouchableOpacity
+              style={styles.srsHourButton}
+              onPress={() =>
+                void updateSettings({
+                  srsDayStartHour: (studySettings.srsDayStartHour + 23) % 24,
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={t('srsDayStartTitle')}
+            >
+              <Feather name="minus" size={22} color="#111827" />
+            </TouchableOpacity>
+            <Text style={styles.srsHourValue} accessibilityLiveRegion="polite">
+              {String(studySettings.srsDayStartHour).padStart(2, '0')}:00
+            </Text>
+            <TouchableOpacity
+              style={styles.srsHourButton}
+              onPress={() =>
+                void updateSettings({
+                  srsDayStartHour: (studySettings.srsDayStartHour + 1) % 24,
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={t('srsDayStartTitle')}
+            >
+              <Feather name="plus" size={22} color="#111827" />
+            </TouchableOpacity>
+          </RNView>
         </View>
       )}
 
@@ -401,7 +607,7 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
-    maxWidth: 900,
+    maxWidth: 1104,
     paddingHorizontal: 16,
     paddingBottom: 36,
     gap: 12,
@@ -455,8 +661,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 18,
-    gap: 14,
+    padding: 20,
+    gap: 18,
     borderWidth: 1,
     borderColor: '#eceff3',
   },
@@ -630,5 +836,50 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#dc2626',
     fontSize: 14,
+  },
+  notifNote: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: '#EEF2FF', borderRadius: 10,
+    padding: 12,
+  },
+  notifNoteTxt: { flex: 1, fontSize: 13, color: '#4338ca', lineHeight: 18 },
+  notifRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', gap: 12,
+    paddingVertical: 10,
+  },
+  notifRowLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  notifIconWrap: {
+    width: 46, height: 46, borderRadius: 14,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  notifRowText: { flex: 1, gap: 5 },
+  notifDivider: { height: 1, backgroundColor: '#f3f4f6' },
+  notifTimeRow: { paddingLeft: 60, gap: 8 },
+  srsHourRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginTop: 12,
+  },
+  srsHourButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  srsHourValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+    minWidth: 88,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
 });
