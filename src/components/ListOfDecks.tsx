@@ -64,6 +64,7 @@ function DeckCardInner({
 }) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuLayout, setMenuLayout] = useState<{ x: number; y: number } | null>(null);
+  const [imgError, setImgError] = useState(false);
   const menuButtonRef = useRef<View>(null);
 
   const openMenu = () => {
@@ -98,8 +99,13 @@ function DeckCardInner({
         accessibilityRole="button"
       >
         <View style={styles.coverWrap}>
-          {hasCover ? (
-            <Image source={{ uri: item.cover_image_url! }} style={styles.cover} resizeMode="cover" />
+          {hasCover && !imgError ? (
+            <Image
+              source={{ uri: item.cover_image_url! }}
+              style={styles.cover}
+              resizeMode="cover"
+              onError={() => setImgError(true)}
+            />
           ) : (
             <View style={styles.coverPlaceholder}>
               <Feather name="image" size={28} color="#b8c0d0" />

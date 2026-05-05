@@ -9,6 +9,7 @@ import { LanguageDropdown } from '@/src/components/LanguageDropdown';
 import { useClientOnlyValue } from '@/src/components/useClientOnlyValue';
 import { useColorScheme } from '@/src/components/useColorScheme';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useSidebarDrawerOptional } from '@/src/contexts/SidebarDrawerContext';
 import Colors from '@/src/constants/Colors';
 
 const isWeb = Platform.OS === 'web';
@@ -18,6 +19,24 @@ export default function TabLayout() {
   // Drawer state is only used on native; web has the persistent Sidebar in root layout
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { t } = useLanguage();
+  const sidebarDrawer = useSidebarDrawerOptional();
+
+  const headerLeft = isWeb
+    ? sidebarDrawer?.isCompact
+      ? () => (
+          <Pressable
+            onPress={sidebarDrawer.toggleDrawer}
+            style={[styles.menuBtn, { marginLeft: 8 }]}
+          >
+            <Feather name="menu" size={24} color="#1f2937" />
+          </Pressable>
+        )
+      : undefined
+    : () => (
+        <Pressable onPress={() => setDrawerOpen(true)} style={styles.menuBtn}>
+          <Feather name="menu" size={24} color={Colors[colorScheme ?? 'light'].text} />
+        </Pressable>
+      );
 
   return (
     <>
@@ -31,14 +50,7 @@ export default function TabLayout() {
           tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
           headerShown: useClientOnlyValue(false, true),
           tabBarStyle: { display: 'none' },
-          // Hamburger only on native
-          headerLeft: isWeb
-            ? undefined
-            : () => (
-                <Pressable onPress={() => setDrawerOpen(true)} style={styles.menuBtn}>
-                  <Feather name="menu" size={24} color={Colors[colorScheme ?? 'light'].text} />
-                </Pressable>
-              ),
+          headerLeft,
         }}
       >
         <Tabs.Screen

@@ -45,3 +45,8 @@ export function useSidebarDrawer() {
   }
   return ctx;
 }
+
+/** Returns null when used outside SidebarDrawerProvider (e.g. on native). */
+export function useSidebarDrawerOptional() {
+  return useContext(SidebarDrawerContext);
+}

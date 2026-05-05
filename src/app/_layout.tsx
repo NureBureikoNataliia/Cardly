@@ -1,3 +1,4 @@
+import Feather from '@expo/vector-icons/Feather';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { HeaderBackButton } from '@react-navigation/elements';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
@@ -93,7 +94,7 @@ function WebAuthenticatedShell({
           accessibilityRole="button"
           accessibilityLabel="Open menu"
         >
-          <AppLogo size={28} />
+          <Feather name="menu" size={24} color="#1f2937" />
         </Pressable>
       </View>
     ),
