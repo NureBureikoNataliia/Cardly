@@ -1,0 +1,69 @@
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme as useSystemColorScheme } from 'react-native';
+
+export type ColorScheme = 'light' | 'dark';
+
+const STORAGE_KEY = '@cardly_theme';
+
+interface ThemeContextType {
+  colorScheme: ColorScheme;
+  toggleTheme: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const system = useSystemColorScheme() ?? 'light';
+  const [colorScheme, setColorScheme] = useState<ColorScheme>(system);
+
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
+      if (stored === 'light' || stored === 'dark') {
+        setColorScheme(stored);
+      }
+    });
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setColorScheme((prev) => {
+      const next: ColorScheme = prev === 'light' ? 'dark' : 'light';
+      AsyncStorage.setItem(STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+
+  return (
+    <ThemeContext.Provider value={{ colorScheme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme() {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error('useTheme must be used within ThemeProvider');
+  return ctx;
+}
+
+/** Convenience hook — returns a set of theme-aware color tokens ready to use in styles. */
+export function useAppColors() {
+  const { colorScheme: cs } = useTheme();
+  const isDark = cs === 'dark';
+  return {
+    cs,
+    isDark,
+    bg:           isDark ? '#141c2e' : '#f3f4f6',
+    surface:      isDark ? '#1d2a3a' : '#ffffff',
+    surfaceAlt:   isDark ? '#243547' : '#f7f8fb',
+    text:         isDark ? '#eef2ff' : '#111827',
+    textSub:      isDark ? '#9ca3af' : '#6b7280',
+    textMuted:    isDark ? '#6b7280' : '#9ca3af',
+    border:       isDark ? '#2d3f55' : '#e5e7eb',
+    borderLight:  isDark ? '#243547' : '#f3f4f6',
+    inputBg:      isDark ? '#243547' : '#f7f8fb',
+    inputBorder:  isDark ? '#2d3f55' : '#e8eaee',
+    placeholder:  isDark ? '#6b7280' : '#c4cbd8',
+    tint:         isDark ? '#a5b4fc' : '#4255ff',
+  } as const;
+}

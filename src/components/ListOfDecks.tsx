@@ -13,7 +13,9 @@ import {
 
 import { Deck } from '@/assets/data/decks';
 import { Text } from '@/src/components/Themed';
+import { useColorScheme } from '@/src/components/useColorScheme';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import Colors from '@/src/constants/Colors';
 import Feather from '@expo/vector-icons/Feather';
 
 export interface ListOfDecksProps {
@@ -66,6 +68,7 @@ function DeckCardInner({
   const [menuLayout, setMenuLayout] = useState<{ x: number; y: number } | null>(null);
   const [imgError, setImgError] = useState(false);
   const menuButtonRef = useRef<View>(null);
+  const cs = useColorScheme();
 
   const openMenu = () => {
     menuButtonRef.current?.measureInWindow((x, y, width, height) => {
@@ -91,14 +94,14 @@ function DeckCardInner({
   };
 
   return (
-    <View style={[styles.card, isGrid && styles.cardGrid]}>
+    <View style={[styles.card, isGrid && styles.cardGrid, { backgroundColor: Colors[cs].surface }]}>
       <TouchableOpacity
         style={[styles.cardTouchable, isGrid && styles.cardTouchableGrid]}
         onPress={onPress}
         activeOpacity={0.85}
         accessibilityRole="button"
       >
-        <View style={styles.coverWrap}>
+        <View style={[styles.coverWrap, { backgroundColor: cs === 'dark' ? '#374151' : '#e8ecf2' }]}>
           {hasCover && !imgError ? (
             <Image
               source={{ uri: item.cover_image_url! }}
@@ -107,7 +110,7 @@ function DeckCardInner({
               onError={() => setImgError(true)}
             />
           ) : (
-            <View style={styles.coverPlaceholder}>
+            <View style={[styles.coverPlaceholder, { backgroundColor: cs === 'dark' ? '#374151' : '#eef1f6' }]}>
               <Feather name="image" size={28} color="#b8c0d0" />
             </View>
           )}
@@ -182,16 +185,16 @@ function DeckCardInner({
       >
         <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
           {menuLayout && (
-            <View style={[styles.menuCard, { left: menuLayout.x, top: menuLayout.y }]}>
+            <View style={[styles.menuCard, { left: menuLayout.x, top: menuLayout.y, backgroundColor: Colors[cs].surface }]}>
               {readOnly && onReportDeck ? (
                 <TouchableOpacity style={styles.menuItem} onPress={handleReport}>
-                  <Feather name="flag" size={18} color="#1f2937" />
+                  <Feather name="flag" size={18} color={Colors[cs].text} />
                   <Text style={styles.menuItemText}>{t('reportBoard')}</Text>
                 </TouchableOpacity>
               ) : (
                 <>
                   <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
-                    <Feather name="edit-2" size={18} color="#1f2937" />
+                    <Feather name="edit-2" size={18} color={Colors[cs].text} />
                     <Text style={styles.menuItemText}>{t('editBoard')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleDelete}>

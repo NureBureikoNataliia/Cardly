@@ -25,6 +25,7 @@ import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
+import { useAppColors } from "@/src/contexts/ThemeContext";
 
 const scrollPositions: Record<string, number> = {};
 
@@ -58,6 +59,7 @@ export default function DeckDetailScreen() {
   const params = useLocalSearchParams();
   const deckId = typeof params.id === "string" ? params.id : null;
   const { t } = useLanguage();
+  const C = useAppColors();
   const { width: windowWidth } = useWindowDimensions();
 
   const { user } = useAuth();
@@ -354,7 +356,7 @@ export default function DeckDetailScreen() {
   /* ── loading ── */
   if (loading) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { backgroundColor: C.bg }]}>
         <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
@@ -362,9 +364,9 @@ export default function DeckDetailScreen() {
 
   if (error || !deck) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { backgroundColor: C.bg }]}>
         <Feather name="alert-circle" size={40} color="#d1d5db" />
-        <Text style={styles.errorMsg}>{error ?? t("deckNotFound")}</Text>
+        <Text style={[styles.errorMsg, { color: C.textSub }]}>{error ?? t("deckNotFound")}</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backBtnTxt}>{t("goBack")}</Text>
         </TouchableOpacity>
@@ -379,7 +381,7 @@ export default function DeckDetailScreen() {
     <>
       <ScrollView
         ref={scrollViewRef}
-        style={styles.root}
+        style={[styles.root, { backgroundColor: C.bg }]}
         contentContainerStyle={styles.contentOuter}
         onScroll={(e) => { if (deckId) scrollPositions[deckId] = e.nativeEvent.contentOffset.y; }}
         scrollEventThrottle={100}
@@ -431,22 +433,22 @@ export default function DeckDetailScreen() {
             </View>
 
             {/* Title + description */}
-            <Text style={[styles.heroTitle, deck.cover_image_url && styles.heroTitleOnCover]}>
+            <Text style={[styles.heroTitle, { color: C.text }, deck.cover_image_url && styles.heroTitleOnCover]}>
               {deck.title}
             </Text>
             {deck.description ? (
-              <Text style={[styles.heroDesc, deck.cover_image_url && styles.heroDescOnCover]}>
+              <Text style={[styles.heroDesc, { color: C.textSub }, deck.cover_image_url && styles.heroDescOnCover]}>
                 {deck.description}
               </Text>
             ) : null}
           </View>
 
           {/* ════════════ STATS ROW ════════════ */}
-          <View style={styles.statsRow}>
+          <View style={[styles.statsRow, { backgroundColor: C.surface }]}>
             <StatChip icon="layers" value={totalCards} label={t("totalCards")} color="#6366f1" />
-            <View style={styles.statsDivider} />
+            <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
             <StatChip icon="clock" value={dueToday} label={t("dueToday")} color="#d97706" />
-            <View style={styles.statsDivider} />
+            <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
             <StatChip
               icon="check-circle"
               value={`${progressPct}%`}
@@ -460,7 +462,7 @@ export default function DeckDetailScreen() {
           {/* ────── Progress bar ────── */}
           {totalCards > 0 && (
             <View style={styles.progressWrap}>
-              <View style={styles.progressTrack}>
+              <View style={[styles.progressTrack, { backgroundColor: C.border }]}>
                 <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
               </View>
               <View style={styles.progressLabelRow}>
@@ -534,7 +536,7 @@ export default function DeckDetailScreen() {
                 <ActionBtn
                   icon="plus-circle"
                   label={t("addCard")}
-                  bg="#fff"
+                  bg={C.surface}
                   textColor="#6366f1"
                   border
                   borderColor="rgba(99,102,241,0.25)"
@@ -546,7 +548,7 @@ export default function DeckDetailScreen() {
                 <ActionBtn
                   icon="star"
                   label={t("rateComment")}
-                  bg="#fff"
+                  bg={C.surface}
                   textColor="#d97706"
                   border
                   borderColor="rgba(217,119,6,0.25)"
@@ -587,7 +589,7 @@ export default function DeckDetailScreen() {
 
           {/* ════════════ COLLABORATORS SECTION (owner only) ════════════ */}
           {isOwner && (
-            <View style={styles.collabSection}>
+            <View style={[styles.collabSection, { backgroundColor: C.surface }]}>
               {/* Toggle button */}
               <TouchableOpacity
                 style={styles.collabToggleBtn}
@@ -603,7 +605,7 @@ export default function DeckDetailScreen() {
                   <View style={styles.collabToggleIcon}>
                     <Feather name="users" size={16} color="#6366f1" />
                   </View>
-                  <Text style={styles.collabToggleTitle}>{t("collaborators")}</Text>
+                  <Text style={[styles.collabToggleTitle, { color: C.text }]}>{t("collaborators")}</Text>
                   {collaborators.filter(c => c.status !== 'pending' && c.status !== 'declined').length > 0 && (
                     <View style={styles.collabToggleBadge}>
                       <Text style={styles.collabToggleBadgeTxt}>
@@ -617,15 +619,15 @@ export default function DeckDetailScreen() {
 
               {/* Expandable content */}
               {collabOpen && (
-                <View style={styles.collabBody}>
+                <View style={[styles.collabBody, { borderTopColor: C.borderLight }]}>
                   {/* Invite input */}
                   <View style={styles.inviteRow}>
-                    <View style={styles.inviteInputWrap}>
+                    <View style={[styles.inviteInputWrap, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
                       <Feather name="search" size={15} color={collaboratorSearch.length > 0 ? "#6366f1" : "#b0b8c8"} />
                       <TextInput
-                        style={[styles.inviteInput, webTextInputNoOutline]}
+                        style={[styles.inviteInput, webTextInputNoOutline, { color: C.text }]}
                         placeholder={t("searchByUsername")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={collaboratorSearch}
                         onChangeText={handleSearchUser}
                         autoCapitalize="none"
@@ -648,7 +650,7 @@ export default function DeckDetailScreen() {
                         const isAccepted = existing?.status === 'accepted';
                         const isDisabled = isPending || isAccepted || isInviting;
                         return (
-                          <View key={u.user_id} style={styles.searchResultItem}>
+                          <View key={u.user_id} style={[styles.searchResultItem, { backgroundColor: C.surface, borderBottomColor: C.borderLight }]}>
                             <View style={styles.searchResultAvatar}>
                               {u.avatar_url
                                 ? <Image source={{ uri: u.avatar_url }} style={styles.searchResultAvatarImg} />
@@ -703,7 +705,7 @@ export default function DeckDetailScreen() {
                       {collaborators
                         .filter(c => c.status !== 'pending' && c.status !== 'declined')
                         .map((c) => (
-                          <View key={`${c.deck_id}_${c.user_id}`} style={styles.collabItem}>
+                          <View key={`${c.deck_id}_${c.user_id}`} style={[styles.collabItem, { borderBottomColor: C.borderLight }]}>
                             <View style={styles.collabAvatar}>
                               {c.avatar_url
                                 ? <Image source={{ uri: c.avatar_url }} style={styles.collabAvatarImg} />
@@ -711,8 +713,8 @@ export default function DeckDetailScreen() {
                               }
                             </View>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.collabName}>{c.display_name || c.username}</Text>
-                              <Text style={styles.collabMeta}>@{c.username}</Text>
+                              <Text style={[styles.collabName, { color: C.text }]}>{c.display_name || c.username}</Text>
+                              <Text style={[styles.collabMeta, { color: C.textMuted }]}>@{c.username}</Text>
                             </View>
                             <Pressable
                               style={styles.collabRemoveBtn}
@@ -733,7 +735,7 @@ export default function DeckDetailScreen() {
           {/* ════════════ CARDS SECTION ════════════ */}
           <View style={styles.cardsSection}>
             <View style={styles.cardsSectionHeader}>
-              <Text style={styles.cardsSectionTitle}>{t("cardsSectionTitle")}</Text>
+              <Text style={[styles.cardsSectionTitle, { color: C.text }]}>{t("cardsSectionTitle")}</Text>
               <Text style={styles.cardsSectionCount}>{totalCards}</Text>
             </View>
 
@@ -902,29 +904,30 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
   onDelete: () => void;
   t: (k: string) => string;
 }) {
+  const C = useAppColors();
   const accentColors = ["#4255ff", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"];
   const accent = accentColors[index % accentColors.length];
 
   return (
-    <View style={[styles.cardTile, numCols === 2 && styles.cardTileHalf]}>
+    <View style={[styles.cardTile, numCols === 2 && styles.cardTileHalf, { backgroundColor: C.surface }]}>
       {/* Number badge + author */}
       <View style={styles.cardTileHeader}>
         <View style={[styles.cardNumBadge, { backgroundColor: `${accent}18` }]}>
           <Text style={[styles.cardNumTxt, { color: accent }]}>{index + 1}</Text>
         </View>
         {createdByName ? (
-          <View style={styles.cardAuthorRow}>
-            <Feather name="user" size={10} color="#9ca3af" />
-            <Text style={styles.cardAuthorTxt}>{createdByName}</Text>
+          <View style={[styles.cardAuthorRow, { backgroundColor: C.surfaceAlt }]}>
+            <Feather name="user" size={10} color={C.textMuted} />
+            <Text style={[styles.cardAuthorTxt, { color: C.textSub }]}>{createdByName}</Text>
           </View>
         ) : null}
       </View>
 
       {/* Front */}
       {card.front_media_url ? (
-        <Image source={{ uri: card.front_media_url }} style={styles.cardMedia} resizeMode="contain" />
+        <Image source={{ uri: card.front_media_url }} style={[styles.cardMedia, { backgroundColor: C.surfaceAlt }]} resizeMode="contain" />
       ) : null}
-      <Text style={styles.cardFront} numberOfLines={4}>{card.front_text}</Text>
+      <Text style={[styles.cardFront, { color: C.text }]} numberOfLines={4}>{card.front_text}</Text>
 
       {/* Divider with arrow */}
       <View style={styles.cardDividerRow}>
@@ -937,21 +940,21 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
 
       {/* Back */}
       {card.back_media_url ? (
-        <Image source={{ uri: card.back_media_url }} style={styles.cardMedia} resizeMode="contain" />
+        <Image source={{ uri: card.back_media_url }} style={[styles.cardMedia, { backgroundColor: C.surfaceAlt }]} resizeMode="contain" />
       ) : null}
-      <Text style={styles.cardBack} numberOfLines={4}>{card.back_text}</Text>
+      <Text style={[styles.cardBack, { color: C.textSub }]} numberOfLines={4}>{card.back_text}</Text>
 
       {/* Notes */}
       {card.notes ? (
         <View style={styles.cardNotesRow}>
-          <Feather name="file-text" size={12} color="#9ca3af" />
-          <Text style={styles.cardNotes} numberOfLines={2}>{card.notes}</Text>
+          <Feather name="file-text" size={12} color={C.textMuted} />
+          <Text style={[styles.cardNotes, { color: C.textMuted }]} numberOfLines={2}>{card.notes}</Text>
         </View>
       ) : null}
 
       {/* Actions */}
       {isOwner && (
-        <View style={styles.cardActionsRow}>
+        <View style={[styles.cardActionsRow, { borderTopColor: C.borderLight }]}>
           <Pressable style={styles.cardActEdit} onPress={onEdit} hitSlop={6}>
             <Feather name="edit-2" size={14} color="#4255ff" />
             <Text style={styles.cardActEditTxt}>{t("edit")}</Text>
@@ -967,11 +970,11 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
 
 /* ═══════════════════ STYLES ═══════════════════ */
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f5f6fa" },
+  root: { flex: 1 },
   contentOuter: { alignItems: "center", paddingBottom: 40 },
   pageWrap: { width: "100%", maxWidth: 1000, paddingHorizontal: 0 },
 
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: "#f5f6fa" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   errorMsg: { fontSize: 16, color: "#6b7280", textAlign: "center", paddingHorizontal: 32 },
   backBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, backgroundColor: "#eef0ff" },
   backBtnTxt: { color: "#6366f1", fontWeight: "600" },

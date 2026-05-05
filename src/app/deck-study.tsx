@@ -17,6 +17,7 @@ import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
+import { useAppColors } from "@/src/contexts/ThemeContext";
 import { formatScheduleLabel } from "@/src/lib/formatScheduleLabel";
 import {
   applyRatingToProgressRow,
@@ -66,6 +67,7 @@ export default function DeckStudyScreen() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const { settings: studySettings } = useStudySettings();
+  const C = useAppColors();
 
   const [queue, setQueue] = useState<DueCard[]>([]);
   const [settings, setSettings] = useState<AppSpacedRepetitionSettingsRow | null>(null);
@@ -185,16 +187,16 @@ export default function DeckStudyScreen() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.loadingText}>{t("loadingDeck")}</Text>
+      <View style={[styles.container, { backgroundColor: C.bg }]}>
+        <Text style={[styles.loadingText, { color: C.textSub }]}>{t("loadingDeck")}</Text>
       </View>
     );
   }
 
   if (!user) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.emptyText}>{t("mustBeLoggedInStudy")}</Text>
+      <View style={[styles.container, { backgroundColor: C.bg }]}>
+        <Text style={[styles.emptyText, { color: C.textSub }]}>{t("mustBeLoggedInStudy")}</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
         </TouchableOpacity>
@@ -204,8 +206,8 @@ export default function DeckStudyScreen() {
 
   if (queue.length === 0 && !sessionComplete) {
     return (
-      <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
-        <Text style={styles.emptyText}>{t("noCardsToReview")}</Text>
+      <View style={[styles.container, { paddingBottom: insets.bottom + 16, backgroundColor: C.bg }]}>
+        <Text style={[styles.emptyText, { color: C.textSub }]}>{t("noCardsToReview")}</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
         </TouchableOpacity>
@@ -215,10 +217,10 @@ export default function DeckStudyScreen() {
 
   if (sessionComplete) {
     return (
-      <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
-        <View style={styles.completeCard}>
+      <View style={[styles.container, { paddingBottom: insets.bottom + 16, backgroundColor: C.bg }]}>
+        <View style={[styles.completeCard, { backgroundColor: C.surface }]}>
           <Feather name="check-circle" size={64} color="#66BB6A" />
-          <Text style={styles.completeTitle}>{t("reviewComplete")}</Text>
+          <Text style={[styles.completeTitle, { color: C.text }]}>{t("reviewComplete")}</Text>
         </View>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
@@ -233,37 +235,37 @@ export default function DeckStudyScreen() {
     .replace("{total}", String(total));
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
-      <Text style={styles.counter}>{cardCounterText}</Text>
+    <View style={[styles.root, { backgroundColor: C.bg, paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
+      <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollInner}
         keyboardShouldPersistTaps="handled"
       >
-        <TouchableOpacity style={styles.card} onPress={handleCardPress} activeOpacity={1}>
+        <TouchableOpacity style={[styles.card, { backgroundColor: C.surface }]} onPress={handleCardPress} activeOpacity={1}>
           <View style={styles.cardInner}>
             {showBack && currentCard.back_media_url ? (
               <Image
                 source={{ uri: currentCard.back_media_url }}
-                style={styles.cardMedia}
+                style={[styles.cardMedia, { backgroundColor: C.bg }]}
                 resizeMode="contain"
               />
             ) : !showBack && currentCard.front_media_url ? (
               <Image
                 source={{ uri: currentCard.front_media_url }}
-                style={styles.cardMedia}
+                style={[styles.cardMedia, { backgroundColor: C.bg }]}
                 resizeMode="contain"
               />
             ) : null}
 
-            <Text style={styles.cardTitle}>
+            <Text style={[styles.cardTitle, { color: C.text }]}>
               {showBack ? currentCard.back_text : currentCard.front_text}
             </Text>
             {showBack && currentCard.notes ? (
-              <Text style={styles.cardNotes}>{currentCard.notes}</Text>
+              <Text style={[styles.cardNotes, { color: C.textSub }]}>{currentCard.notes}</Text>
             ) : null}
-            {!showBack && <Text style={styles.hint}>{t("showAnswer")}</Text>}
+            {!showBack && <Text style={[styles.hint, { color: C.textMuted }]}>{t("showAnswer")}</Text>}
           </View>
         </TouchableOpacity>
       </ScrollView>

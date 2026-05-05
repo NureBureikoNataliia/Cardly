@@ -12,6 +12,7 @@ import { Text } from '@/src/components/Themed';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useStudySettings } from '@/src/contexts/StudySettingsContext';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 
 type RatingRow = {
   user_id: string;
@@ -131,6 +132,8 @@ function FilterChips({
   sort: SortOrder;
   setSort: (v: SortOrder) => void;
 }) {
+  const C = useAppColors();
+  const chipBase = { backgroundColor: C.surface, borderColor: C.border };
   return (
     <View style={chipStyles.chipsWrap}>
       <View style={chipStyles.chipsRow}>
@@ -146,7 +149,7 @@ function FilterChips({
           ).map(([key, label]) => (
             <Pressable
               key={key}
-              style={[chipStyles.chip, dateFilter === key && chipStyles.chipActive]}
+              style={[chipStyles.chip, chipBase, dateFilter === key && chipStyles.chipActive]}
               onPress={() => setDateFilter(key)}
             >
               <Text style={[chipStyles.chipText, dateFilter === key && chipStyles.chipTextActive]}>{label}</Text>
@@ -157,10 +160,10 @@ function FilterChips({
       <View style={chipStyles.chipsRow}>
         <Text style={chipStyles.chipsLabel}>{t('sortBy')}</Text>
         <View style={chipStyles.sortRow}>
-          <Pressable style={[chipStyles.chip, sort === 'newest' && chipStyles.chipActive]} onPress={() => setSort('newest')}>
+          <Pressable style={[chipStyles.chip, chipBase, sort === 'newest' && chipStyles.chipActive]} onPress={() => setSort('newest')}>
             <Text style={[chipStyles.chipText, sort === 'newest' && chipStyles.chipTextActive]}>{t('sortNewest')}</Text>
           </Pressable>
-          <Pressable style={[chipStyles.chip, sort === 'oldest' && chipStyles.chipActive]} onPress={() => setSort('oldest')}>
+          <Pressable style={[chipStyles.chip, chipBase, sort === 'oldest' && chipStyles.chipActive]} onPress={() => setSort('oldest')}>
             <Text style={[chipStyles.chipText, sort === 'oldest' && chipStyles.chipTextActive]}>{t('sortOldest')}</Text>
           </Pressable>
         </View>
@@ -199,8 +202,6 @@ const chipStyles = StyleSheet.create({
   chip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#fff',
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
@@ -210,7 +211,6 @@ const chipStyles = StyleSheet.create({
   },
   chipText: {
     fontSize: 12,
-    color: '#4b5563',
     fontWeight: '600',
   },
   chipTextActive: {
@@ -265,6 +265,7 @@ export default function DeckRateScreen() {
   const { user } = useAuth();
   const { t } = useLanguage();
   const { settings: studySettings } = useStudySettings();
+  const C = useAppColors();
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [loading, setLoading] = useState(true);
@@ -507,7 +508,7 @@ export default function DeckRateScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { backgroundColor: C.bg }]}>
         <ActivityIndicator size="large" color="#4255ff" />
       </View>
     );
@@ -515,7 +516,7 @@ export default function DeckRateScreen() {
 
   if (error || !deck) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { backgroundColor: C.bg }]}>
         <Text style={styles.errorText}>{error ?? t('deckNotFound')}</Text>
         <TouchableOpacity style={styles.btn} onPress={() => router.back()}>
           <Text style={styles.btnText}>{t('goBack')}</Text>
@@ -527,8 +528,8 @@ export default function DeckRateScreen() {
   const stars = [1, 2, 3, 4, 5];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <View style={styles.hero}>
+    <ScrollView style={[styles.container, { backgroundColor: C.bg }]} contentContainerStyle={styles.scrollContent}>
+      <View style={[styles.hero, { backgroundColor: C.surface }]}>
         <View style={{ gap: 6 }}>
           <Text style={styles.heroTitle}>{deck.title}</Text>
           <Text style={styles.heroSub}>
@@ -537,7 +538,7 @@ export default function DeckRateScreen() {
         </View>
       </View>
 
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: C.surface }]}>
         <Text style={styles.sectionLabel}>{t('yourRating')}</Text>
         <View style={styles.starRow}>
           {stars.map((n) => {
@@ -550,15 +551,15 @@ export default function DeckRateScreen() {
           })}
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
 
         <Text style={styles.sectionLabel}>{t('comment')}</Text>
         <TextInput
-          style={styles.commentInput}
+          style={[styles.commentInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
           value={commentText}
           onChangeText={setCommentText}
           placeholder={t('commentPlaceholder')}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={C.placeholder}
           multiline
         />
 
@@ -594,14 +595,14 @@ export default function DeckRateScreen() {
       />
 
       {filteredFeed.length === 0 ? (
-        <View style={styles.empty}>
+        <View style={[styles.empty, { backgroundColor: C.surface }]}>
           <Text style={styles.emptyText}>{t('noReviewsYet')}</Text>
         </View>
       ) : (
         filteredFeed.map((entry) => {
           const when = entryActivityIso(entry);
           return (
-            <View key={entry.userId} style={styles.reviewCard}>
+            <View key={entry.userId} style={[styles.reviewCard, { backgroundColor: C.surface }]}>
               <View style={styles.commentTopRow}>
                 <Text style={styles.commentAuthor}>{displayName(entry.userId)}</Text>
                 <Text style={styles.commentDate}>{when ? new Date(when).toLocaleString() : ''}</Text>
@@ -629,7 +630,6 @@ export default function DeckRateScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f6f7fb',
   },
   scrollContent: {
     padding: 16,
@@ -638,14 +638,12 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
-    backgroundColor: '#f6f7fb',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
     gap: 14,
   },
   hero: {
-    backgroundColor: '#fff',
     borderRadius: 18,
     padding: 18,
     gap: 8,
@@ -653,14 +651,12 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
   },
   heroSub: {
     fontSize: 13,
     color: '#6b7280',
   },
   card: {
-    backgroundColor: '#fff',
     borderRadius: 18,
     padding: 16,
     gap: 10,
@@ -687,7 +683,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
   },
   starRow: {
     flexDirection: 'row',
@@ -716,12 +711,9 @@ const styles = StyleSheet.create({
   },
   commentInput: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     borderRadius: 14,
     padding: 12,
     minHeight: 96,
-    color: '#111827',
-    backgroundColor: '#fff',
   },
   errorBoxRow: {
     marginTop: 4,
@@ -763,7 +755,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   empty: {
-    backgroundColor: '#fff',
     borderRadius: 18,
     padding: 18,
   },
@@ -773,7 +764,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   reviewCard: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 14,
     gap: 8,
@@ -787,7 +777,6 @@ const styles = StyleSheet.create({
   commentAuthor: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#111827',
     flex: 1,
   },
   commentDate: {
@@ -796,7 +785,6 @@ const styles = StyleSheet.create({
   },
   commentContent: {
     fontSize: 14,
-    color: '#374151',
   },
   errorText: {
     color: '#6b7280',

@@ -9,6 +9,7 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import ConfirmModal from '@/src/components/ConfirmModal';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 
 export interface DrawerMenuProps {
   visible: boolean;
@@ -19,6 +20,7 @@ export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
   const router = useRouter();
   const { signOut, isAdmin } = useAuth();
   const { t } = useLanguage();
+  const C = useAppColors();
   const anim = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
   const [logoutModal, setLogoutModal] = useState(false);
@@ -74,8 +76,8 @@ export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
     <View style={styles.overlay}>
       <Pressable style={styles.outside} onPress={onClose} accessibilityRole="button" />
 
-      <Animated.View style={[styles.container, { transform: [{ translateX }] }]}>
-        <Text style={styles.header}>{t('menu')}</Text>
+      <Animated.View style={[styles.container, { backgroundColor: C.surface, transform: [{ translateX }] }]}>
+        <Text style={[styles.header, { color: C.text }]}>{t('menu')}</Text>
 
         {navItems.map((item) => (
           <Pressable
@@ -84,8 +86,8 @@ export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
             onPress={() => navigateTo(item.path)}
             accessibilityRole="button"
           >
-            <Feather name={item.icon as any} size={18} color="#222" />
-            <Text style={styles.itemText}>{t(item.key)}</Text>
+            <Feather name={item.icon as any} size={18} color={C.text} />
+            <Text style={[styles.itemText, { color: C.text }]}>{t(item.key)}</Text>
           </Pressable>
         ))}
 

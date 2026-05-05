@@ -20,6 +20,7 @@ import ConfirmModal from "@/src/components/ConfirmModal";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { supabase } from "@/src/lib/supabase";
+import { useAppColors } from "@/src/contexts/ThemeContext";
 
 /** Web: hide browser default focus outline on TextInput (RN typings omit outlineStyle "none"). */
 const webTextInputNoOutline: TextStyle | undefined =
@@ -42,6 +43,7 @@ export default function AddCardScreen() {
       : null;
   const { t } = useLanguage();
   const { user } = useAuth();
+  const C = useAppColors();
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -172,7 +174,7 @@ export default function AddCardScreen() {
   /* ── Loading state ── */
   if (isLoading) {
     return (
-      <View style={styles.loadingWrap}>
+      <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
         <ActivityIndicator size="large" color="#4255ff" />
       </View>
     );
@@ -181,15 +183,15 @@ export default function AddCardScreen() {
   /* ── Deck not found ── */
   if (!deck) {
     return (
-      <View style={styles.loadingWrap}>
-        <Text style={{ color: "#6b7280", marginBottom: 16 }}>
+      <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
+        <Text style={{ color: C.textSub, marginBottom: 16 }}>
           {error ?? t("deckNotFound")}
         </Text>
         <TouchableOpacity
-          style={styles.btnCancel}
+          style={[styles.btnCancel, { backgroundColor: C.surface, borderColor: C.border }]}
           onPress={() => router.back()}
         >
-          <Text style={styles.btnCancelTxt}>{t("goBack")}</Text>
+          <Text style={[styles.btnCancelTxt, { color: C.textSub }]}>{t("goBack")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -199,7 +201,7 @@ export default function AddCardScreen() {
     <>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1, backgroundColor: "#f5f6fa" }}
+        style={{ flex: 1, backgroundColor: C.bg }}
       >
         <ScrollView
           contentContainerStyle={styles.scrollOuter}
@@ -217,17 +219,17 @@ export default function AddCardScreen() {
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.heroTitle}>
+                <Text style={[styles.heroTitle, { color: C.text }]}>
                   {isEdit ? t("editCard") : t("addCard")}
                 </Text>
-                <Text style={styles.heroSub} numberOfLines={1}>
+                <Text style={[styles.heroSub, { color: C.textSub }]} numberOfLines={1}>
                   {deck.title}
                 </Text>
               </View>
             </View>
 
             {/* ── FORM CARD ── */}
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: C.surface }]}>
               {/* FRONT TEXT */}
               <Field label={t("front")} required>
                 <InputRow
@@ -238,9 +240,9 @@ export default function AddCardScreen() {
                   multiline
                 >
                   <TextInput
-                    style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
+                    style={[styles.input, styles.inputMulti, webTextInputNoOutline, { color: C.text }]}
                     placeholder={t("frontPlaceholder")}
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={frontText}
                     onChangeText={setFrontText}
                     onFocus={() => setFocusedField("front")}
@@ -269,9 +271,9 @@ export default function AddCardScreen() {
                   onBlur={() => setFocusedField(null)}
                 >
                   <TextInput
-                    style={[styles.input, webTextInputNoOutline]}
+                    style={[styles.input, webTextInputNoOutline, { color: C.text }]}
                     placeholder="https://..."
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={frontImageUrl}
                     onChangeText={setFrontImageUrl}
                     onFocus={() => setFocusedField("frontImg")}
@@ -288,7 +290,7 @@ export default function AddCardScreen() {
               </Field>
 
               {/* DIVIDER */}
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
 
               {/* BACK TEXT */}
               <Field label={t("back")} required>
@@ -300,9 +302,9 @@ export default function AddCardScreen() {
                   multiline
                 >
                   <TextInput
-                    style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
+                    style={[styles.input, styles.inputMulti, webTextInputNoOutline, { color: C.text }]}
                     placeholder={t("backPlaceholder")}
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={backText}
                     onChangeText={setBackText}
                     onFocus={() => setFocusedField("back")}
@@ -331,9 +333,9 @@ export default function AddCardScreen() {
                   onBlur={() => setFocusedField(null)}
                 >
                   <TextInput
-                    style={[styles.input, webTextInputNoOutline]}
+                    style={[styles.input, webTextInputNoOutline, { color: C.text }]}
                     placeholder="https://..."
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={backImageUrl}
                     onChangeText={setBackImageUrl}
                     onFocus={() => setFocusedField("backImg")}
@@ -350,7 +352,7 @@ export default function AddCardScreen() {
               </Field>
 
               {/* DIVIDER */}
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
 
               {/* NOTES */}
               <Field label={t("notes")}>
@@ -362,9 +364,9 @@ export default function AddCardScreen() {
                   multiline
                 >
                   <TextInput
-                    style={[styles.input, styles.inputNotes, webTextInputNoOutline]}
+                    style={[styles.input, styles.inputNotes, webTextInputNoOutline, { color: C.text }]}
                     placeholder={t("notesPlaceholder")}
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={notes}
                     onChangeText={setNotes}
                     onFocus={() => setFocusedField("notes")}
@@ -387,11 +389,11 @@ export default function AddCardScreen() {
             {/* ── BUTTONS ── */}
             <View style={styles.buttons}>
               <TouchableOpacity
-                style={styles.btnCancel}
+                style={[styles.btnCancel, { backgroundColor: C.surface, borderColor: C.border }]}
                 onPress={() => router.back()}
                 activeOpacity={0.7}
               >
-                <Text style={styles.btnCancelTxt}>{t("cancel")}</Text>
+                <Text style={[styles.btnCancelTxt, { color: C.textSub }]}>{t("cancel")}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -469,18 +471,20 @@ function InputRow({
   multiline?: boolean;
   children: React.ReactNode;
 }) {
+  const C = useAppColors();
   return (
     <View
       style={[
         styles.inputRow,
+        { backgroundColor: C.inputBg, borderColor: C.inputBorder },
         multiline && styles.inputRowMulti,
-        focused && styles.inputRowFocused,
+        focused && [styles.inputRowFocused, C.isDark && { backgroundColor: C.surface, borderColor: '#6366f1' }],
       ]}
     >
       <Feather
         name={icon}
         size={16}
-        color={focused ? "#1a1a1a" : "#b0b8c8"}
+        color={focused ? C.tint : "#b0b8c8"}
         style={multiline ? { marginTop: 3 } : undefined}
       />
       {children}
@@ -494,7 +498,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f6fa",
   },
 
   scrollOuter: {

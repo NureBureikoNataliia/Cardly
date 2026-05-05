@@ -19,6 +19,7 @@ import ConfirmModal from '@/src/components/ConfirmModal';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { supabase } from '@/src/lib/supabase';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 
 /* ─── Types ─── */
 type Stats = {
@@ -70,6 +71,7 @@ export default function AdminPanelScreen() {
   const navigation = useNavigation();
   const { t } = useLanguage();
   const { user, loading: authLoading, isAdmin } = useAuth();
+  const C = useAppColors();
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<Stats | null>(null);
@@ -170,7 +172,7 @@ export default function AdminPanelScreen() {
 
   if (authLoading || (!isAdmin && !authLoading)) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: C.bg }]}>
         <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
@@ -191,11 +193,11 @@ export default function AdminPanelScreen() {
 
   /* ──────────────────────────── RENDER ──────────────────────────── */
   return (
-    <View style={styles.shell}>
+    <View style={[styles.shell, { backgroundColor: C.bg }]}>
       {/* ── Left sidebar (tabs) ── */}
-      <View style={styles.sidebar}>
+      <View style={[styles.sidebar, { backgroundColor: C.surface, borderRightColor: C.border }]}>
         {/* Header */}
-        <View style={styles.sidebarHeader}>
+        <View style={[styles.sidebarHeader, { borderBottomColor: C.border }]}>
           <View style={styles.sidebarIconWrap}>
             <Feather name="shield" size={18} color="#6366f1" />
           </View>
@@ -206,7 +208,10 @@ export default function AdminPanelScreen() {
         {TABS.map(tab => (
           <TouchableOpacity
             key={tab.key}
-            style={[styles.navItem, activeTab === tab.key && styles.navItemActive]}
+            style={[
+              styles.navItem,
+              activeTab === tab.key && [styles.navItemActive, C.isDark && { backgroundColor: 'rgba(99,102,241,0.15)' }],
+            ]}
             onPress={() => setActiveTab(tab.key)}
             activeOpacity={0.8}
           >
@@ -219,7 +224,7 @@ export default function AdminPanelScreen() {
               {tab.label}
             </Text>
             {(tab.count ?? 0) > 0 && (
-              <View style={[styles.navBadge, activeTab === tab.key && styles.navBadgeActive]}>
+              <View style={[styles.navBadge, { backgroundColor: C.isDark ? '#2d3f55' : '#f3f4f6' }, activeTab === tab.key && styles.navBadgeActive]}>
                 <Text style={[styles.navBadgeTxt, activeTab === tab.key && styles.navBadgeTxtActive]}>
                   {tab.count}
                 </Text>
@@ -237,13 +242,13 @@ export default function AdminPanelScreen() {
 
       {/* ── Main content ── */}
       <ScrollView
-        style={styles.main}
+        style={[styles.main, { backgroundColor: C.bg }]}
         contentContainerStyle={styles.mainContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />}
         showsVerticalScrollIndicator={Platform.OS === 'web'}
       >
         {loading && !refreshing ? (
-          <View style={styles.centered}>
+          <View style={[styles.centered, { backgroundColor: C.bg }]}>
             <ActivityIndicator color="#6366f1" size="large" />
           </View>
         ) : (
@@ -277,12 +282,12 @@ export default function AdminPanelScreen() {
                 </View>
 
                 {/* Search */}
-                <View style={styles.searchWrap}>
+                <View style={[styles.searchWrap, { backgroundColor: C.inputBg, borderColor: C.border }]}>
                   <Feather name="search" size={15} color="#9ca3af" style={{ marginLeft: 10 }} />
                   <TextInput
-                    style={styles.searchInput}
+                    style={[styles.searchInput, { color: C.text }]}
                     placeholder={t('adminSearchUsers')}
-                    placeholderTextColor="#9ca3af"
+                    placeholderTextColor={C.placeholder}
                     value={userSearch}
                     onChangeText={setUserSearch}
                   />
@@ -297,7 +302,7 @@ export default function AdminPanelScreen() {
                   <EmptyState icon="users" text={t('adminNoUsers')} />
                 ) : (
                   filteredUsers.map(u => (
-                    <View key={u.user_id} style={styles.userCard}>
+                    <View key={u.user_id} style={[styles.userCard, { backgroundColor: C.surface }]}>
                       {/* Avatar + info */}
                       <View style={styles.userCardLeft}>
                         <View style={[styles.userAvatar, u.is_admin && styles.userAvatarAdmin]}>
@@ -374,7 +379,7 @@ export default function AdminPanelScreen() {
                   <EmptyState icon="check-circle" text={t('adminNoComplaints')} />
                 ) : (
                   complaints.map(row => (
-                    <View key={row.id} style={styles.card}>
+                    <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
                       {/* Card header */}
                       <View style={styles.cardHead}>
                         <View style={styles.issueBadge}>
@@ -407,7 +412,7 @@ export default function AdminPanelScreen() {
 
                       {/* AI summary */}
                       {row.gemini_summary ? (
-                        <View style={styles.aiBox}>
+                        <View style={[styles.aiBox, { backgroundColor: C.isDark ? '#1a2740' : '#f8faff' }]}>
                           <Feather name="cpu" size={12} color="#6366f1" />
                           <Text style={styles.aiLabel}>{t('adminGeminiSummary')}</Text>
                           <Text style={styles.aiTxt}>{row.gemini_summary}</Text>
@@ -454,7 +459,7 @@ export default function AdminPanelScreen() {
                   <EmptyState icon="message-circle" text={t('adminNoComments')} />
                 ) : (
                   comments.map(row => (
-                    <View key={row.id} style={styles.card}>
+                    <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
                       <View style={styles.commentHead}>
                         {/* Avatar */}
                         <View style={styles.avatar}>
@@ -549,8 +554,9 @@ function StatCard({ icon, color, value, label }: {
   value: number;
   label: string;
 }) {
+  const C = useAppColors();
   return (
-    <View style={[styles.statCard, { borderTopColor: color }]}>
+    <View style={[styles.statCard, { borderTopColor: color, backgroundColor: C.surface }]}>
       <View style={[styles.statIconWrap, { backgroundColor: `${color}18` }]}>
         <Feather name={icon} size={20} color={color} />
       </View>
@@ -561,9 +567,10 @@ function StatCard({ icon, color, value, label }: {
 }
 
 function EmptyState({ icon, text }: { icon: keyof typeof Feather.glyphMap; text: string }) {
+  const C = useAppColors();
   return (
     <View style={styles.emptyWrap}>
-      <View style={styles.emptyIcon}>
+      <View style={[styles.emptyIcon, { backgroundColor: C.isDark ? '#1d2a3a' : '#f9fafb' }]}>
         <Feather name={icon} size={32} color="#d1d5db" />
       </View>
       <Text style={styles.emptyTxt}>{text}</Text>
@@ -576,15 +583,12 @@ const styles = StyleSheet.create({
   shell: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: '#f5f6fa',
   },
 
   /* ── Sidebar ── */
   sidebar: {
     width: Platform.OS === 'web' ? 220 : 64,
-    backgroundColor: '#fff',
     borderRightWidth: 1,
-    borderRightColor: '#f0f1f5',
     paddingTop: 20,
     paddingBottom: 20,
     paddingHorizontal: 10,
@@ -598,7 +602,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     marginBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f1f5',
   },
   sidebarIconWrap: {
     width: 32, height: 32, borderRadius: 10,
@@ -606,7 +609,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   sidebarTitle: {
-    fontSize: 14, fontWeight: '700', color: '#111827',
+    fontSize: 14, fontWeight: '700',
     display: Platform.OS === 'web' ? 'flex' : 'none' as any,
   },
   navItem: {
@@ -645,7 +648,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 10,
     marginBottom: 4,
   },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', flex: 1 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', flex: 1 },
   countPill: {
     backgroundColor: '#fef2f2', borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 2,
@@ -658,7 +661,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1, minWidth: 140,
-    backgroundColor: '#fff', borderRadius: 14,
+    borderRadius: 14,
     padding: 16, gap: 8,
     borderTopWidth: 3,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
@@ -674,7 +677,7 @@ const styles = StyleSheet.create({
 
   /* ── Cards ── */
   card: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16,
+    borderRadius: 14, padding: 16,
     gap: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
@@ -697,8 +700,8 @@ const styles = StyleSheet.create({
   deckTitle: { fontSize: 13, fontWeight: '600', color: '#6366f1', maxWidth: 280 },
 
   metaTxt: { fontSize: 13, color: '#6b7280' },
-  metaBold: { fontWeight: '600', color: '#374151' },
-  bodyTxt: { fontSize: 14, color: '#374151', lineHeight: 20 },
+  metaBold: { fontWeight: '600' },
+  bodyTxt: { fontSize: 14, lineHeight: 20 },
 
   aiBox: {
     backgroundColor: '#f8faff', borderRadius: 10, padding: 12,
@@ -727,10 +730,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center',
   },
   avatarTxt: { fontSize: 15, fontWeight: '700', color: '#6366f1' },
-  commentUser: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  commentUser: { fontSize: 14, fontWeight: '700' },
   commentDeckRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   commentDeckTxt: { fontSize: 12, color: '#6366f1', maxWidth: 200 },
-  commentContent: { fontSize: 15, color: '#374151', lineHeight: 22 },
+  commentContent: { fontSize: 15, lineHeight: 22 },
   btnDeleteComment: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     alignSelf: 'flex-end', paddingHorizontal: 12, paddingVertical: 6,
@@ -742,20 +745,20 @@ const styles = StyleSheet.create({
   /* ── Search ── */
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#f9fafb', borderRadius: 12,
-    borderWidth: 1, borderColor: '#e5e7eb',
+    borderRadius: 12,
+    borderWidth: 1,
     paddingHorizontal: 12, paddingVertical: 8,
     marginBottom: 4,
   },
   searchInput: {
-    flex: 1, fontSize: 14, color: '#111827',
+    flex: 1, fontSize: 14,
     outlineWidth: 0, outlineStyle: 'none',
     backgroundColor: 'transparent',
   } as any,
 
   /* ── Users ── */
   userCard: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 14,
+    borderRadius: 14, padding: 14,
     gap: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
@@ -767,9 +770,9 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#e5e7eb',
   },
   userAvatarAdmin: { borderColor: '#c7d2fe', backgroundColor: '#EEF2FF' },
-  userAvatarTxt: { fontSize: 16, fontWeight: '700', color: '#374151' },
+  userAvatarTxt: { fontSize: 16, fontWeight: '700' },
   userNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  userName: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  userName: { fontSize: 15, fontWeight: '700' },
   adminBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: '#EEF2FF', borderRadius: 6,

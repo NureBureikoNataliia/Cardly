@@ -14,10 +14,13 @@ import { useColorScheme } from '@/src/components/useColorScheme';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
 import NotificationBell from '@/src/components/NotificationBell';
 import Sidebar, { AppLogo } from '@/src/components/Sidebar';
+import ThemeToggle from '@/src/components/ThemeToggle';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { LanguageProvider } from '@/src/contexts/LanguageContext';
 import { SidebarDrawerProvider, useSidebarDrawer } from '@/src/contexts/SidebarDrawerContext';
 import { StudySettingsProvider } from '@/src/contexts/StudySettingsContext';
+import { ThemeProvider as AppThemeProvider } from '@/src/contexts/ThemeContext';
+import Colors from '@/src/constants/Colors';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -56,15 +59,16 @@ export default function RootLayout() {
     return null;
   }
 
-  // Wrap navigation in auth / language / study-settings providers
   return (
-    <LanguageProvider>
-      <StudySettingsProvider>
-        <AuthProvider>
-          <RootLayoutNav />
-        </AuthProvider>
-      </StudySettingsProvider>
-    </LanguageProvider>
+    <AppThemeProvider>
+      <LanguageProvider>
+        <StudySettingsProvider>
+          <AuthProvider>
+            <RootLayoutNav />
+          </AuthProvider>
+        </StudySettingsProvider>
+      </LanguageProvider>
+    </AppThemeProvider>
   );
 }
 
@@ -76,12 +80,15 @@ function WebAuthenticatedShell({
   sharedHeaderRight: () => ReactNode;
 }) {
   const { isCompact, toggleDrawer } = useSidebarDrawer();
+  const colorScheme = useColorScheme();
+  const headerBg = Colors[colorScheme].surface;
+  const headerText = Colors[colorScheme].text;
 
   const headerLeft = useCallback(
     (props: { canGoBack?: boolean } & Record<string, unknown>) => (
       <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
         {props.canGoBack ? (
-          <HeaderBackButton {...(props as any)} labelVisible={false} tintColor="#1f2937" />
+          <HeaderBackButton {...(props as any)} labelVisible={false} tintColor={headerText} />
         ) : null}
         <Pressable
           onPress={toggleDrawer}
@@ -94,11 +101,11 @@ function WebAuthenticatedShell({
           accessibilityRole="button"
           accessibilityLabel="Open menu"
         >
-          <Feather name="menu" size={24} color="#1f2937" />
+          <Feather name="menu" size={24} color={headerText} />
         </Pressable>
       </View>
     ),
-    [toggleDrawer],
+    [toggleDrawer, headerText],
   );
 
   return (
@@ -108,9 +115,9 @@ function WebAuthenticatedShell({
         <View style={{ flex: 1, overflow: Platform.OS === 'web' ? 'visible' : 'hidden' }}>
           <Stack
             screenOptions={{
-              headerStyle: { backgroundColor: '#fff' },
+              headerStyle: { backgroundColor: headerBg },
               headerShadowVisible: true,
-              headerTintColor: '#1f2937',
+              headerTintColor: headerText,
               headerTitleStyle: { fontSize: 18, fontWeight: '600' },
               headerRight: sharedHeaderRight,
               headerLeft: isCompact ? headerLeft : undefined,
@@ -147,6 +154,8 @@ function RootLayoutNav() {
   const { session, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const headerBg = Colors[colorScheme].surface;
+  const headerText = Colors[colorScheme].text;
 
   useEffect(() => {
     if (loading) return;
@@ -165,13 +174,14 @@ function RootLayoutNav() {
   const sharedHeaderRight = () => (
     <View style={{ marginRight: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
       <NotificationBell />
+      <ThemeToggle />
       <LanguageDropdown />
       <Pressable onPress={() => router.push('/modal')}>
         {({ pressed }) => (
           <FontAwesome
             name="info-circle"
             size={25}
-            color="#111827"
+            color={headerText}
             style={{ opacity: pressed ? 0.5 : 1 }}
           />
         )}
@@ -182,9 +192,9 @@ function RootLayoutNav() {
   const stackNav = (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: '#fff' },
+        headerStyle: { backgroundColor: headerBg },
         headerShadowVisible: true,
-        headerTintColor: '#1f2937',
+        headerTintColor: headerText,
         headerTitleStyle: { fontSize: 18, fontWeight: '600' },
         headerRight: sharedHeaderRight,
         animation: 'slide_from_right',

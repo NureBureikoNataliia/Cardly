@@ -15,6 +15,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { BookOpen } from 'lucide-react-native';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 
 export default function SignUpScreen() {
   const [username, setUsername] = useState('');
@@ -26,6 +27,7 @@ export default function SignUpScreen() {
   const { signUp } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
+  const C = useAppColors();
 
   const handleSignUp = async () => {
     if (!username.trim() || !email || !password || !confirmPassword) {
@@ -58,7 +60,7 @@ export default function SignUpScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: C.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.langBtn}>
@@ -72,14 +74,15 @@ export default function SignUpScreen() {
         <View style={styles.content}>
           <View style={styles.header}>
             <BookOpen size={48} color="#3b82f6" />
-            <Text style={styles.title}>{t('createAccount')}</Text>
-            <Text style={styles.subtitle}>{t('startJourney')}</Text>
+            <Text style={[styles.title, { color: C.text }]}>{t('createAccount')}</Text>
+            <Text style={[styles.subtitle, { color: C.textSub }]}>{t('startJourney')}</Text>
           </View>
 
           <View style={styles.form}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.text }]}
               placeholder={t('username')}
+              placeholderTextColor={C.placeholder}
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
@@ -87,8 +90,9 @@ export default function SignUpScreen() {
             />
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.text }]}
               placeholder={t('email')}
+              placeholderTextColor={C.placeholder}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -97,8 +101,9 @@ export default function SignUpScreen() {
             />
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.text }]}
               placeholder={t('password')}
+              placeholderTextColor={C.placeholder}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -106,8 +111,9 @@ export default function SignUpScreen() {
             />
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.text }]}
               placeholder={t('confirmPassword')}
+              placeholderTextColor={C.placeholder}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
@@ -129,7 +135,7 @@ export default function SignUpScreen() {
             </TouchableOpacity>
 
             <View style={styles.footer}>
-              <Text style={styles.footerText}>{t('haveAccount')} </Text>
+              <Text style={[styles.footerText, { color: C.textSub }]}>{t('haveAccount')} </Text>
               <TouchableOpacity onPress={() => router.push('/auth/login')}>
                 <Text style={styles.linkText}>{t('signIn')}</Text>
               </TouchableOpacity>

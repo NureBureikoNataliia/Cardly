@@ -19,6 +19,7 @@ import { Text } from '@/src/components/Themed';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { supabase } from '@/src/lib/supabase';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 type Stats = {
@@ -143,8 +144,9 @@ function PeriodCard({
   bgColor: string;
   tip: string;
 }) {
+  const C = useAppColors();
   return (
-    <View style={[styles.periodCard, { borderTopColor: color }]}>
+    <View style={[styles.periodCard, { borderTopColor: color, backgroundColor: C.surface }]}>
       <View style={styles.cardInfoRow}>
         <InfoTooltip text={tip} />
       </View>
@@ -175,8 +177,9 @@ function SummaryCard({
   borderColor: string;
   tip: string;
 }) {
+  const C = useAppColors();
   return (
-    <View style={[styles.summaryCard, { borderTopColor: borderColor }]}>
+    <View style={[styles.summaryCard, { borderTopColor: borderColor, backgroundColor: C.surface }]}>
       <View style={styles.cardInfoRow}>
         <InfoTooltip text={tip} />
       </View>
@@ -191,10 +194,11 @@ function SummaryCard({
 
 /* ─── Segment bar ────────────────────────────────────────────── */
 function SegmentBar({ segments }: { segments: { color: string; value: number }[] }) {
+  const C = useAppColors();
   const total = segments.reduce((s, seg) => s + seg.value, 0);
-  if (total === 0) return <View style={styles.segBarBg} />;
+  if (total === 0) return <View style={[styles.segBarBg, { backgroundColor: C.border }]} />;
   return (
-    <View style={styles.segBarBg}>
+    <View style={[styles.segBarBg, { backgroundColor: C.border }]}>
       {segments.map((seg, i) => {
         const w = pct(seg.value, total);
         if (w === 0) return null;
@@ -231,16 +235,17 @@ function LabelRow({
   total: number;
   tip?: string;
 }) {
+  const C = useAppColors();
   const percent = pct(count, total);
   return (
     <View style={styles.labelRow}>
       <View style={[styles.labelDot, { backgroundColor: color }]} />
-      <Text style={styles.labelText}>{label}</Text>
-      <View style={styles.labelBarBg}>
+      <Text style={[styles.labelText, { color: C.text }]}>{label}</Text>
+      <View style={[styles.labelBarBg, { backgroundColor: C.border }]}>
         <View style={[styles.labelBarFill, { width: `${percent}%`, backgroundColor: color }]} />
       </View>
       <Text style={[styles.labelPct, { color }]}>{percent}%</Text>
-      <Text style={styles.labelCount}>{count}</Text>
+      <Text style={[styles.labelCount, { color: C.textMuted }]}>{count}</Text>
       {tip && <InfoTooltip text={tip} />}
     </View>
   );
@@ -248,12 +253,13 @@ function LabelRow({
 
 /* ─── Activity chart ─────────────────────────────────────────── */
 function ActivityChart({ days, t }: { days: ActivityDay[]; t: (k: string) => string }) {
+  const C = useAppColors();
   if (days.length === 0) return null;
   const peak = Math.max(1, ...days.map(d => d.count));
   const BAR_MAX_H = 52;
 
   return (
-    <View style={styles.chartWrap}>
+    <View style={[styles.chartWrap, { backgroundColor: C.surface }]}>
       <View style={styles.chartBars}>
         {days.map(d => {
           const h = Math.max(3, Math.round((d.count / peak) * BAR_MAX_H));
@@ -263,7 +269,7 @@ function ActivityChart({ days, t }: { days: ActivityDay[]; t: (k: string) => str
               <View
                 style={[
                   styles.bar,
-                  { height: h, backgroundColor: d.count > 0 ? (isToday ? '#6366f1' : '#a5b4fc') : '#e5e7eb' },
+                  { height: h, backgroundColor: d.count > 0 ? (isToday ? '#6366f1' : '#a5b4fc') : C.border },
                 ]}
               />
             </View>
@@ -299,10 +305,11 @@ function SectionHead({
   pill?: number;
   tip?: string;
 }) {
+  const C = useAppColors();
   return (
     <View style={styles.sectionHead}>
       <Feather name={icon} size={16} color="#6366f1" />
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={[styles.sectionTitle, { color: C.text }]}>{title}</Text>
       {pill !== undefined && (
         <View style={styles.totalPill}>
           <Text style={styles.totalPillTxt}>{pill}</Text>
@@ -315,11 +322,12 @@ function SectionHead({
 
 /* ─── Deck card ──────────────────────────────────────────────── */
 function DeckStatCard({ deck, t, onPress }: { deck: DeckStat; t: (k: string) => string; onPress: () => void }) {
+  const C = useAppColors();
   const studied = deck.cards_learning + deck.cards_review + deck.cards_relearning;
   const progress = deck.total_cards > 0 ? studied / deck.total_cards : 0;
 
   return (
-    <TouchableOpacity style={styles.deckCard} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={[styles.deckCard, { backgroundColor: C.surface }]} onPress={onPress} activeOpacity={0.85}>
       {deck.cover_image_url ? (
         <Image source={{ uri: deck.cover_image_url }} style={styles.deckCover} />
       ) : (
@@ -328,14 +336,14 @@ function DeckStatCard({ deck, t, onPress }: { deck: DeckStat; t: (k: string) => 
         </View>
       )}
       <View style={styles.deckInfo}>
-        <Text style={styles.deckTitle} numberOfLines={1}>{deck.deck_title}</Text>
-        <Text style={styles.deckMeta}>
+        <Text style={[styles.deckTitle, { color: C.text }]} numberOfLines={1}>{deck.deck_title}</Text>
+        <Text style={[styles.deckMeta, { color: C.textSub }]}>
           {deck.total_cards} {t('statCards')} · {deck.reviews_total} {t('statReviews')}
         </Text>
-        <View style={styles.progressBg}>
+        <View style={[styles.progressBg, { backgroundColor: C.border }]}>
           <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
         </View>
-        <Text style={styles.deckLastStudied}>
+        <Text style={[styles.deckLastStudied, { color: C.textMuted }]}>
           {t('statLastStudied')}: {formatDate(deck.last_studied, t('statNever'))}
         </Text>
       </View>
@@ -350,6 +358,7 @@ export default function StatisticsScreen() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const router = useRouter();
+  const C = useAppColors();
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [wordStats, setWordStats] = useState<WordStats | null>(null);
@@ -384,7 +393,7 @@ export default function StatisticsScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: C.bg }]}>
         <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
@@ -408,7 +417,7 @@ export default function StatisticsScreen() {
 
   return (
     <ScrollView
-      style={styles.scroll}
+      style={[styles.scroll, { backgroundColor: C.bg }]}
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />}
       showsVerticalScrollIndicator={Platform.OS === 'web'}
@@ -439,7 +448,7 @@ export default function StatisticsScreen() {
       {/* ══ 3. Прогрес слів ══ */}
       <View style={styles.section}>
         <SectionHead icon="layers" title={t('statWordProgress')} pill={cardsTotal} tip={t('tipWordProgress')} />
-        <View style={styles.whiteCard}>
+        <View style={[styles.whiteCard, { backgroundColor: C.surface }]}>
           <SegmentBar segments={[
             { color: '#9ca3af', value: cardsNotStarted },
             { color: '#f59e0b', value: cardsInProgress },
@@ -451,9 +460,9 @@ export default function StatisticsScreen() {
             <LabelRow color="#10b981" label={t('statGraduated')}  count={cardsGraduated}  total={cardsTotal} tip={t('tipGraduated')} />
           </View>
           {cardsTotal > 0 && (
-            <View style={styles.retentionRow}>
+            <View style={[styles.retentionRow, { borderTopColor: C.borderLight }]}>
               <Feather name="check-circle" size={13} color="#10b981" />
-              <Text style={styles.retentionTxt}>
+              <Text style={[styles.retentionTxt, { color: C.textSub }]}>
                 {t('statGraduated')}: <Text style={{ fontWeight: '800', color: '#10b981' }}>{pct(cardsGraduated, cardsTotal)}%</Text>
                 {' '}({cardsGraduated}/{cardsTotal})
               </Text>
@@ -466,9 +475,9 @@ export default function StatisticsScreen() {
       <View style={styles.section}>
         <SectionHead icon="sliders" title={t('statDifficulty')} tip={t('tipDifficulty')} />
         {easeTotal === 0 ? (
-          <View style={styles.emptyBox}><Text style={styles.emptyTxt}>{t('statNoActivity')}</Text></View>
+          <View style={[styles.emptyBox, { backgroundColor: C.surface }]}><Text style={[styles.emptyTxt, { color: C.textMuted }]}>{t('statNoActivity')}</Text></View>
         ) : (
-          <View style={styles.whiteCard}>
+          <View style={[styles.whiteCard, { backgroundColor: C.surface }]}>
             <SegmentBar segments={[
               { color: '#22c55e', value: easeEasy   },
               { color: '#f59e0b', value: easeMedium },
@@ -487,7 +496,7 @@ export default function StatisticsScreen() {
       <View style={styles.section}>
         <SectionHead icon="activity" title={t('statActivity')} tip={t('tipActivity')} />
         {activity.every(d => d.count === 0) ? (
-          <View style={styles.emptyBox}><Text style={styles.emptyTxt}>{t('statNoActivity')}</Text></View>
+          <View style={[styles.emptyBox, { backgroundColor: C.surface }]}><Text style={[styles.emptyTxt, { color: C.textMuted }]}>{t('statNoActivity')}</Text></View>
         ) : (
           <ActivityChart days={activity} t={t} />
         )}
@@ -497,16 +506,16 @@ export default function StatisticsScreen() {
       <View style={styles.section}>
         <SectionHead icon="bar-chart-2" title={t('statAnswers')} pill={totalReviews > 0 ? totalReviews : undefined} tip={t('tipAnswers')} />
         {totalReviews === 0 ? (
-          <View style={styles.emptyBox}><Text style={styles.emptyTxt}>{t('statNoActivity')}</Text></View>
+          <View style={[styles.emptyBox, { backgroundColor: C.surface }]}><Text style={[styles.emptyTxt, { color: C.textMuted }]}>{t('statNoActivity')}</Text></View>
         ) : (
-          <View style={styles.whiteCard}>
+          <View style={[styles.whiteCard, { backgroundColor: C.surface }]}>
             <LabelRow label={t('again')} count={countAgain} total={totalReviews} color="#ef4444" />
             <LabelRow label={t('hard')}  count={countHard}  total={totalReviews} color="#f59e0b" />
             <LabelRow label={t('good')}  count={countGood}  total={totalReviews} color="#22c55e" />
             <LabelRow label={t('easy')}  count={countEasy}  total={totalReviews} color="#3b82f6" />
-            <View style={styles.retentionRow}>
+            <View style={[styles.retentionRow, { borderTopColor: C.borderLight }]}>
               <Feather name="check-circle" size={13} color="#22c55e" />
-              <Text style={styles.retentionTxt}>
+              <Text style={[styles.retentionTxt, { color: C.textSub }]}>
                 {t('statRetention')}: <Text style={styles.retentionVal}>{retentionRate}%</Text>
               </Text>
             </View>
@@ -518,7 +527,7 @@ export default function StatisticsScreen() {
       <View style={styles.section}>
         <SectionHead icon="grid" title={t('statDecks')} />
         {deckStats.length === 0 ? (
-          <View style={styles.emptyBox}><Text style={styles.emptyTxt}>{t('statNoDecks')}</Text></View>
+          <View style={[styles.emptyBox, { backgroundColor: C.surface }]}><Text style={[styles.emptyTxt, { color: C.textMuted }]}>{t('statNoDecks')}</Text></View>
         ) : (
           deckStats.map(d => (
             <DeckStatCard key={d.deck_id} deck={d} t={t} onPress={() => router.push(`/deck-detail?id=${d.deck_id}`)} />
@@ -612,7 +621,7 @@ const styles = StyleSheet.create({
   /* ── Sections ── */
   section:      { gap: 10 },
   sectionHead:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827', flex: 1 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', flex: 1 },
   totalPill: {
     backgroundColor: '#EEF2FF', borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 2,
@@ -634,7 +643,7 @@ const styles = StyleSheet.create({
   /* ── Label row ── */
   labelRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
   labelDot:    { width: 10, height: 10, borderRadius: 5 },
-  labelText:   { width: 80, fontSize: 13, color: '#374151', fontWeight: '600' },
+  labelText:   { width: 80, fontSize: 13, fontWeight: '600' },
   labelBarBg:  { flex: 1, height: 7, backgroundColor: '#f3f4f6', borderRadius: 4, overflow: 'hidden' },
   labelBarFill:{ height: 7, borderRadius: 4 },
   labelPct:    { width: 34, fontSize: 12, fontWeight: '700', textAlign: 'right' },
@@ -671,7 +680,7 @@ const styles = StyleSheet.create({
   deckCover:        { width: 60, height: 60, borderRadius: 10 },
   deckCoverFallback:{ backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center' },
   deckInfo:         { flex: 1, gap: 4 },
-  deckTitle:        { fontSize: 14, fontWeight: '700', color: '#111827' },
+  deckTitle:        { fontSize: 14, fontWeight: '700' },
   deckMeta:         { fontSize: 12, color: '#6b7280' },
   progressBg:       { height: 5, backgroundColor: '#e5e7eb', borderRadius: 3, overflow: 'hidden' },
   progressFill:     { height: 5, backgroundColor: '#6366f1', borderRadius: 3 },

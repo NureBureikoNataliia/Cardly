@@ -15,6 +15,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { BookOpen } from 'lucide-react-native';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -24,6 +25,7 @@ export default function LoginScreen() {
   const { signIn, signInWithGoogle } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
+  const C = useAppColors();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -60,7 +62,7 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: C.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.langBtn}>
@@ -74,14 +76,15 @@ export default function LoginScreen() {
         <View style={styles.content}>
           <View style={styles.header}>
             <BookOpen size={48} color="#3b82f6" />
-            <Text style={styles.title}>{t('flashCardMaster')}</Text>
-            <Text style={styles.subtitle}>{t('learnSmarter')}</Text>
+            <Text style={[styles.title, { color: C.text }]}>{t('flashCardMaster')}</Text>
+            <Text style={[styles.subtitle, { color: C.textSub }]}>{t('learnSmarter')}</Text>
           </View>
 
           <View style={styles.form}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.text }]}
               placeholder={t('email')}
+              placeholderTextColor={C.placeholder}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -90,8 +93,9 @@ export default function LoginScreen() {
             />
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.text }]}
               placeholder={t('password')}
+              placeholderTextColor={C.placeholder}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -113,15 +117,15 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.googleButton, loading && styles.buttonDisabled]}
+              style={[styles.googleButton, { backgroundColor: C.surface, borderColor: C.border }, loading && styles.buttonDisabled]}
               onPress={handleGoogle}
               disabled={loading}
             >
-              <Text style={styles.googleButtonText}>{t('googleSignIn')}</Text>
+              <Text style={[styles.googleButtonText, { color: C.text }]}>{t('googleSignIn')}</Text>
             </TouchableOpacity>
 
             <View style={styles.footer}>
-              <Text style={styles.footerText}>{t('noAccount')} </Text>
+              <Text style={[styles.footerText, { color: C.textSub }]}>{t('noAccount')} </Text>
               <TouchableOpacity onPress={() => router.push('/auth/signup' as never)}>
                 <Text style={styles.linkText}>{t('signUp')}</Text>
               </TouchableOpacity>

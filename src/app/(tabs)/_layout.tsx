@@ -7,6 +7,7 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import DrawerMenu from '@/src/components/DrawerMenu';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
 import NotificationBell from '@/src/components/NotificationBell';
+import ThemeToggle from '@/src/components/ThemeToggle';
 import { useClientOnlyValue } from '@/src/components/useClientOnlyValue';
 import { useColorScheme } from '@/src/components/useColorScheme';
 import Colors from '@/src/constants/Colors';
@@ -61,6 +62,7 @@ export default function TabLayout() {
             headerRight: () => (
               <View style={styles.headerRight}>
                 <NotificationBell />
+                <ThemeToggle />
                 <LanguageDropdown />
                 <Link href="/modal" asChild>
                   <Pressable>

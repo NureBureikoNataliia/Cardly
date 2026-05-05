@@ -20,6 +20,7 @@ import {
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 
 export default function AddDeckScreen() {
   const router = useRouter();
@@ -32,6 +33,7 @@ export default function AddDeckScreen() {
       : undefined;
   const { user } = useAuth();
   const { t } = useLanguage();
+  const C = useAppColors();
   const { width: screenWidth } = useWindowDimensions();
   const isEdit = Boolean(deckId);
 
@@ -110,7 +112,7 @@ export default function AddDeckScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1, backgroundColor: '#f5f6fa' }}
+      style={{ flex: 1, backgroundColor: C.bg }}
     >
       <ScrollView
         contentContainerStyle={styles.scrollOuter}
@@ -125,10 +127,10 @@ export default function AddDeckScreen() {
             <Feather name={isEdit ? 'edit-3' : 'layers'} size={20} color="#4255ff" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>
+            <Text style={[styles.heroTitle, { color: C.text }]}>
               {isEdit ? t('editDeck') : t('createNewDeck')}
             </Text>
-            <Text style={styles.heroSub}>
+            <Text style={[styles.heroSub, { color: C.textSub }]}>
               {isEdit ? t('deckSubtitleEdit') : t('deckSubtitleCreate')}
             </Text>
           </View>
@@ -178,7 +180,7 @@ export default function AddDeckScreen() {
             </View>
 
             {/* ── FORM CARD ── */}
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: C.surface }]}>
 
               {/* TITLE */}
               <Field label={t('title')} required>
@@ -189,9 +191,9 @@ export default function AddDeckScreen() {
                   onBlur={() => setFocusedField(null)}
                 >
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: C.text }]}
                     placeholder={t('title')}
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={title}
                     onChangeText={setTitle}
                     onFocus={() => setFocusedField('title')}
@@ -216,9 +218,9 @@ export default function AddDeckScreen() {
                   multiline
                 >
                   <TextInput
-                    style={[styles.input, styles.inputMulti]}
+                    style={[styles.input, styles.inputMulti, { color: C.text }]}
                     placeholder={t('description')}
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={description}
                     onChangeText={setDescription}
                     onFocus={() => setFocusedField('desc')}
@@ -239,9 +241,9 @@ export default function AddDeckScreen() {
                   onBlur={() => setFocusedField(null)}
                 >
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: C.text }]}
                     placeholder="https://..."
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={coverUrl}
                     onChangeText={setCoverUrl}
                     onFocus={() => setFocusedField('cover')}
@@ -258,15 +260,15 @@ export default function AddDeckScreen() {
               </Field>
 
               {/* VISIBILITY */}
-              <View style={[styles.toggleRow, isPublic && styles.toggleRowActive]}>
+              <View style={[styles.toggleRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }, isPublic && styles.toggleRowActive]}>
                 <View style={[styles.toggleIcon, isPublic ? styles.toggleIconOn : styles.toggleIconOff]}>
                   <Feather name={isPublic ? 'globe' : 'lock'} size={17} color={isPublic ? '#4255ff' : '#9ca3af'} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.toggleLabel}>
-                    {isPublic ? t('public') : t('private')}
-                  </Text>
-                  <Text style={styles.toggleHint} numberOfLines={1}>{t('publicDeckHelp')}</Text>
+                <Text style={[styles.toggleLabel, { color: C.text }]}>
+                  {isPublic ? t('public') : t('private')}
+                </Text>
+                <Text style={[styles.toggleHint, { color: C.textMuted }]} numberOfLines={1}>{t('publicDeckHelp')}</Text>
                 </View>
                 <Switch
                   value={isPublic}
@@ -289,11 +291,11 @@ export default function AddDeckScreen() {
             {/* ── BUTTONS ── */}
             <View style={styles.buttons}>
               <TouchableOpacity
-                style={styles.btnCancel}
+                style={[styles.btnCancel, { backgroundColor: C.surface, borderColor: C.border }]}
                 onPress={() => router.back()}
                 activeOpacity={0.7}
               >
-                <Text style={styles.btnCancelTxt}>{t('cancel')}</Text>
+                <Text style={[styles.btnCancelTxt, { color: C.textSub }]}>{t('cancel')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -356,18 +358,20 @@ function InputRow({
   multiline?: boolean;
   children: React.ReactNode;
 }) {
+  const C = useAppColors();
   return (
     <View
       style={[
         styles.inputRow,
+        { backgroundColor: C.inputBg, borderColor: C.inputBorder },
         multiline && styles.inputRowMulti,
-        focused && styles.inputRowFocused,
+        focused && [styles.inputRowFocused, C.isDark && { backgroundColor: C.surface, borderColor: '#6366f1' }],
       ]}
     >
       <Feather
         name={icon}
         size={16}
-        color={focused ? '#1a1a1a' : '#b0b8c8'}
+        color={focused ? C.tint : '#b0b8c8'}
         style={multiline ? { marginTop: 3 } : undefined}
       />
       {children}

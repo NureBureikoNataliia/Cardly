@@ -18,6 +18,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useStudySettings } from '@/src/contexts/StudySettingsContext';
 import { supabase } from '@/src/lib/supabase';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
 
 function authProviderLabel(user: User | null, t: (key: string) => string): string {
@@ -35,6 +36,7 @@ export default function SettingsScreen() {
   const { t } = useLanguage();
   const { user, signOut } = useAuth();
   const router = useRouter();
+  const C = useAppColors();
 
   const [username, setUsername] = useState((user?.user_metadata?.username as string) ?? '');
   const [avatarUrl, setAvatarUrl] = useState((user?.user_metadata?.avatar_url as string) ?? '');
@@ -200,49 +202,36 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentOuter}><View style={styles.content}>
+    <ScrollView style={[styles.container, { backgroundColor: C.bg }]} contentContainerStyle={styles.contentOuter}><View style={styles.content}>
       <Text style={styles.title}>{t('account')}</Text>
 
-      <View style={styles.topMenuCard}>
+      <View style={[styles.topMenuCard, { backgroundColor: C.surface, borderColor: C.border }]}>
         <Text style={styles.topMenuTitle}>{t('settings')}</Text>
-        <Text style={styles.topMenuSubtitle}>{t('settingsMenuSubtitle')}</Text>
+        <Text style={[styles.topMenuSubtitle, { color: C.textSub }]}>{t('settingsMenuSubtitle')}</Text>
         <RNView style={styles.topMenuTabs}>
-          <TouchableOpacity
-            style={[styles.topMenuTab, activeSection === 'account' && styles.topMenuTabActive]}
-            onPress={() => setActiveSection('account')}
-          >
-            <Text style={[styles.topMenuTabText, activeSection === 'account' && styles.topMenuTabTextActive]}>
-              {t('accountSettingsTab')}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.topMenuTab, activeSection === 'notifications' && styles.topMenuTabActive]}
-            onPress={() => setActiveSection('notifications')}
-          >
-            <Text
-              style={[
-                styles.topMenuTabText,
-                activeSection === 'notifications' && styles.topMenuTabTextActive,
-              ]}
-            >
-              {t('notificationsTab')}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.topMenuTab, activeSection === 'learning' && styles.topMenuTabActive]}
-            onPress={() => setActiveSection('learning')}
-          >
-            <Text
-              style={[styles.topMenuTabText, activeSection === 'learning' && styles.topMenuTabTextActive]}
-            >
-              {t('learningTab')}
-            </Text>
-          </TouchableOpacity>
+          {(['account', 'notifications', 'learning'] as const).map((sec) => {
+            const isActive = activeSection === sec;
+            return (
+              <TouchableOpacity
+                key={sec}
+                style={[
+                  styles.topMenuTab,
+                  { backgroundColor: C.surface, borderColor: C.border },
+                  isActive && { backgroundColor: C.isDark ? C.tint : '#111827', borderColor: C.isDark ? C.tint : '#111827' },
+                ]}
+                onPress={() => setActiveSection(sec)}
+              >
+                <Text style={[styles.topMenuTabText, isActive && styles.topMenuTabTextActive]}>
+                  {sec === 'account' ? t('accountSettingsTab') : sec === 'notifications' ? t('notificationsTab') : t('learningTab')}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </RNView>
       </View>
 
       {activeSection === 'account' ? (
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
         <Text style={styles.sectionHeader}>{t('account')}</Text>
 
         <RNView style={styles.accountTopRow}>
@@ -254,8 +243,8 @@ export default function SettingsScreen() {
                 <Text style={styles.avatarFallbackText}>{avatarInitial}</Text>
               </RNView>
             )}
-            <TouchableOpacity style={styles.avatarEditButton} onPress={() => setEditingField('avatar')}>
-              <Feather name="edit-2" size={16} color="#111827" />
+            <TouchableOpacity style={[styles.avatarEditButton, { backgroundColor: C.surface, borderColor: C.border }]} onPress={() => setEditingField('avatar')}>
+              <Feather name="edit-2" size={16} color={C.text} />
             </TouchableOpacity>
           </RNView>
         </RNView>
@@ -264,10 +253,11 @@ export default function SettingsScreen() {
           <RNView style={styles.editBlock}>
             <Text style={styles.fieldLabel}>{t('avatarUrl')}</Text>
             <TextInput
-              style={styles.inlineInput}
+              style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
               value={avatarUrl}
               onChangeText={setAvatarUrl}
               placeholder="https://..."
+              placeholderTextColor={C.placeholder}
               autoCapitalize="none"
               editable={!savingAvatar && !deletingAccount}
             />
@@ -277,7 +267,7 @@ export default function SettingsScreen() {
                 onPress={handleSaveAvatar}
                 disabled={savingAvatar || deletingAccount}
               >
-                {savingAvatar ? <ActivityIndicator color="#374151" /> : <Text style={styles.buttonSecondaryText}>{t('save')}</Text>}
+                {savingAvatar ? <ActivityIndicator color={C.text} /> : <Text style={[styles.buttonSecondaryText, { color: C.text }]}>{t('save')}</Text>}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.buttonGhost}
@@ -290,7 +280,7 @@ export default function SettingsScreen() {
           </RNView>
         )}
 
-        <RNView style={styles.securitySection}>
+          <RNView style={[styles.securitySection, { borderTopColor: C.border }]}>
           <Text style={styles.securityTitle}>{t('accountSecurity')}</Text>
 
           <RNView style={styles.infoRow}>
@@ -298,10 +288,11 @@ export default function SettingsScreen() {
               <Text style={styles.infoLabel}>{t('username')}</Text>
               {editingField === 'username' ? (
                 <TextInput
-                  style={styles.inlineInput}
+                  style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
                   value={username}
                   onChangeText={setUsername}
                   placeholder={t('username')}
+                  placeholderTextColor={C.placeholder}
                   autoCapitalize="none"
                   editable={!savingUsername && !deletingAccount}
                 />
@@ -317,9 +308,9 @@ export default function SettingsScreen() {
                   disabled={savingUsername || deletingAccount}
                 >
                   {savingUsername ? (
-                    <ActivityIndicator color="#374151" />
+                    <ActivityIndicator color={C.text} />
                   ) : (
-                    <Text style={styles.buttonSecondaryText}>{t('save')}</Text>
+                    <Text style={[styles.buttonSecondaryText, { color: C.text }]}>{t('save')}</Text>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -332,11 +323,11 @@ export default function SettingsScreen() {
               </RNView>
             ) : (
               <TouchableOpacity
-                style={styles.buttonOutline}
+                style={[styles.buttonOutline, { backgroundColor: C.surface, borderColor: C.border }]}
                 onPress={() => setEditingField('username')}
                 disabled={deletingAccount}
               >
-                <Text style={styles.buttonOutlineText}>{t('change')}</Text>
+                <Text style={[styles.buttonOutlineText, { color: C.text }]}>{t('change')}</Text>
               </TouchableOpacity>
             )}
           </RNView>
@@ -346,10 +337,11 @@ export default function SettingsScreen() {
               <Text style={styles.infoLabel}>{t('email')}</Text>
               {editingField === 'email' ? (
                 <TextInput
-                  style={styles.inlineInput}
+                  style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
                   value={email}
                   onChangeText={setEmail}
                   placeholder={t('email')}
+                  placeholderTextColor={C.placeholder}
                   autoCapitalize="none"
                   keyboardType="email-address"
                   editable={!savingEmail && !deletingAccount}
@@ -366,9 +358,9 @@ export default function SettingsScreen() {
                   disabled={savingEmail || deletingAccount}
                 >
                   {savingEmail ? (
-                    <ActivityIndicator color="#374151" />
+                    <ActivityIndicator color={C.text} />
                   ) : (
-                    <Text style={styles.buttonSecondaryText}>{t('save')}</Text>
+                    <Text style={[styles.buttonSecondaryText, { color: C.text }]}>{t('save')}</Text>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -381,11 +373,11 @@ export default function SettingsScreen() {
               </RNView>
             ) : (
               <TouchableOpacity
-                style={styles.buttonOutline}
+                style={[styles.buttonOutline, { backgroundColor: C.surface, borderColor: C.border }]}
                 onPress={() => setEditingField('email')}
                 disabled={deletingAccount}
               >
-                <Text style={styles.buttonOutlineText}>{t('change')}</Text>
+                <Text style={[styles.buttonOutlineText, { color: C.text }]}>{t('change')}</Text>
               </TouchableOpacity>
             )}
           </RNView>
@@ -420,7 +412,7 @@ export default function SettingsScreen() {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
       ) : activeSection === 'notifications' ? (
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
           <Text style={styles.sectionHeader}>{t('notificationsTab')}</Text>
 
           {/* Browser note */}
@@ -454,19 +446,19 @@ export default function SettingsScreen() {
               <Text style={styles.fieldLabel}>{t('notifStudyTime')}</Text>
               <RNView style={styles.srsHourRow}>
                 <TouchableOpacity
-                  style={styles.srsHourButton}
+                  style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
                   onPress={() => handleSaveNotif({ studyReminderHour: (notifPrefs.studyReminderHour + 23) % 24 })}
                 >
-                  <Feather name="minus" size={20} color="#111827" />
+                  <Feather name="minus" size={20} color={C.text} />
                 </TouchableOpacity>
-                <Text style={styles.srsHourValue}>
+                <Text style={[styles.srsHourValue, { color: C.text }]}>
                   {String(notifPrefs.studyReminderHour).padStart(2, '0')}:00
                 </Text>
                 <TouchableOpacity
-                  style={styles.srsHourButton}
+                  style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
                   onPress={() => handleSaveNotif({ studyReminderHour: (notifPrefs.studyReminderHour + 1) % 24 })}
                 >
-                  <Feather name="plus" size={20} color="#111827" />
+                  <Feather name="plus" size={20} color={C.text} />
                 </TouchableOpacity>
               </RNView>
             </RNView>
@@ -544,13 +536,13 @@ export default function SettingsScreen() {
           )}
         </View>
       ) : (
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
           <Text style={styles.sectionHeader}>{t('studySettings')}</Text>
           <Text style={styles.fieldLabel}>{t('srsDayStartTitle')}</Text>
           <Text style={styles.infoSubText}>{t('srsDayStartHint')}</Text>
           <RNView style={styles.srsHourRow}>
             <TouchableOpacity
-              style={styles.srsHourButton}
+              style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() =>
                 void updateSettings({
                   srsDayStartHour: (studySettings.srsDayStartHour + 23) % 24,
@@ -559,13 +551,13 @@ export default function SettingsScreen() {
               accessibilityRole="button"
               accessibilityLabel={t('srsDayStartTitle')}
             >
-              <Feather name="minus" size={22} color="#111827" />
+              <Feather name="minus" size={22} color={C.text} />
             </TouchableOpacity>
-            <Text style={styles.srsHourValue} accessibilityLiveRegion="polite">
+            <Text style={[styles.srsHourValue, { color: C.text }]} accessibilityLiveRegion="polite">
               {String(studySettings.srsDayStartHour).padStart(2, '0')}:00
             </Text>
             <TouchableOpacity
-              style={styles.srsHourButton}
+              style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() =>
                 void updateSettings({
                   srsDayStartHour: (studySettings.srsDayStartHour + 1) % 24,
@@ -574,7 +566,7 @@ export default function SettingsScreen() {
               accessibilityRole="button"
               accessibilityLabel={t('srsDayStartTitle')}
             >
-              <Feather name="plus" size={22} color="#111827" />
+              <Feather name="plus" size={22} color={C.text} />
             </TouchableOpacity>
           </RNView>
         </View>
@@ -623,11 +615,9 @@ const styles = StyleSheet.create({
   topMenuTitle: {
     fontSize: 34,
     fontWeight: '700',
-    color: '#111827',
   },
   topMenuSubtitle: {
     fontSize: 16,
-    color: '#374151',
     marginTop: -6,
   },
   topMenuTabs: {
@@ -649,7 +639,6 @@ const styles = StyleSheet.create({
   },
   topMenuTabText: {
     fontSize: 16,
-    color: '#111827',
     fontWeight: '600',
   },
   topMenuTabTextActive: {
@@ -669,7 +658,6 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 34,
     fontWeight: '700',
-    color: '#111827',
   },
   accountTopRow: {
     flexDirection: 'row',
@@ -723,7 +711,6 @@ const styles = StyleSheet.create({
   securityTitle: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#111827',
   },
   infoRow: {
     flexDirection: 'row',
@@ -738,15 +725,12 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
   },
   infoValue: {
     fontSize: 16,
-    color: '#111827',
   },
   infoSubText: {
     fontSize: 14,
-    color: '#111827',
     lineHeight: 20,
   },
   inlineInput: {
@@ -773,7 +757,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   buttonOutlineText: {
-    color: '#111827',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -877,7 +860,6 @@ const styles = StyleSheet.create({
   srsHourValue: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
     minWidth: 88,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],

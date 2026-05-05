@@ -19,6 +19,7 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { compareDeckTitles } from "@/src/lib/deckSort";
 import { supabase } from "@/src/lib/supabase";
+import { useAppColors } from "@/src/contexts/ThemeContext";
 
 type SortKey =
   | "newest"
@@ -33,6 +34,7 @@ export default function PublicDecksScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { t } = useLanguage();
+  const C = useAppColors();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cardCounts, setCardCounts] = useState<Record<string, number>>({});
   const [ratingByDeckId, setRatingByDeckId] = useState<Record<string, number>>({});
@@ -196,7 +198,7 @@ export default function PublicDecksScreen() {
   const listHeader = (
     <>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{t("publicDecks")}</Text>
+        <Text style={[styles.sectionTitle, { color: C.text }]}>{t("publicDecks")}</Text>
         <Text style={styles.sectionCount}>
           {filtered.length} {filtered.length !== 1 ? t("decks") : t("deck")}
         </Text>
@@ -204,14 +206,20 @@ export default function PublicDecksScreen() {
 
       <View style={styles.controlsContainer}>
         {/* search */}
-        <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
-          <Feather name="search" size={16} color={searchFocused ? '#1a1a1a' : '#b0b8c8'} />
+        <View style={[
+          styles.searchContainer,
+          { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+          searchFocused && (C.isDark
+            ? { borderColor: '#6366f1', backgroundColor: C.surface }
+            : styles.searchContainerFocused),
+        ]}>
+          <Feather name="search" size={16} color={searchFocused ? C.tint : '#b0b8c8'} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: C.text }]}
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder={t("searchDecks")}
-            placeholderTextColor="#c4cbd8"
+            placeholderTextColor={C.placeholder}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
           />
@@ -229,7 +237,11 @@ export default function PublicDecksScreen() {
             {sortOptions.map(({ key, label }) => (
               <Pressable
                 key={key}
-                style={[styles.chip, sortBy === key && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  { backgroundColor: C.surface, borderColor: C.border },
+                  sortBy === key && styles.chipActive,
+                ]}
                 onPress={() => setSortBy(key)}
               >
                 <Text style={[styles.chipText, sortBy === key && styles.chipTextActive]}>
@@ -244,7 +256,7 @@ export default function PublicDecksScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#4255ff" />
