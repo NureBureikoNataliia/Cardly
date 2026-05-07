@@ -20,6 +20,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { supabase } from '@/src/lib/supabase';
 import { useAppColors } from '@/src/contexts/ThemeContext';
+import type { Locale } from '@/src/locales/translations';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 type Stats = {
@@ -68,15 +69,57 @@ type DeckStat = {
   last_studied: string | null;
 };
 
+type ForecastDay = { due_day: string; count: number };
+type AddedDay = { added_day: string; count: number };
+
+type ActivityRange = 7 | 30 | 90;
+
+/** BCP 47 tag for Intl — must match app language, not system default (avoids RU when UI is UK). */
+function bcp47ForAppLocale(locale: Locale): string {
+  return locale === 'uk' ? 'uk-UA' : 'en-US';
+}
+
 /* ─── Helpers ────────────────────────────────────────────────── */
-function formatDate(iso: string | null, neverLabel: string): string {
+function formatDate(iso: string | null, neverLabel: string, dateLocaleTag: string): string {
   if (!iso) return neverLabel;
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(dateLocaleTag, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function shortMonthDay(iso: string, dateLocaleTag: string): string {
+  return new Date(iso).toLocaleDateString(dateLocaleTag, { month: 'short', day: 'numeric' });
 }
 
 function pct(part: number, total: number): number {
   if (total === 0) return 0;
   return Math.round((part / total) * 100);
+}
+
+function formatTemplate(tpl: string, params: Record<string, string | number>): string {
+  return Object.keys(params).reduce(
+    (acc, k) => acc.replace(new RegExp(`\\{${k}\\}`, 'g'), String(params[k])),
+    tpl,
+  );
+}
+
+/** Pick a "nice" axis max + integer ticks (e.g., 28 → 30 ticks [0,10,20,30]). */
+function niceScale(maxVal: number, ticksTarget = 5): { max: number; ticks: number[] } {
+  if (maxVal <= 0) return { max: 1, ticks: [0, 1] };
+  const rawStep = maxVal / ticksTarget;
+  const exp = Math.floor(Math.log10(rawStep));
+  const base = Math.pow(10, exp);
+  const m = rawStep / base;
+  let niceM: number;
+  if (m <= 1) niceM = 1;
+  else if (m <= 2) niceM = 2;
+  else if (m <= 5) niceM = 5;
+  else niceM = 10;
+  const step = niceM * base;
+  const max = Math.ceil(maxVal / step) * step;
+  const ticks: number[] = [];
+  for (let v = 0; v <= max + 1e-6; v += step) {
+    ticks.push(Math.round(v * 1e6) / 1e6);
+  }
+  return { max, ticks };
 }
 
 /* ─── InfoTooltip ────────────────────────────────────────────── */
@@ -94,10 +137,8 @@ function InfoTooltip({ text }: { text: string }) {
     (btnRef.current as any)?.measure(
       (_x: number, _y: number, w: number, h: number, pageX: number, pageY: number) => {
         const screenW = Dimensions.get('window').width;
-        // центруємо підказку під іконкою, але не виходимо за межі екрану
         let left = pageX + w / 2 - TIP_W / 2;
         left = Math.max(8, Math.min(left, screenW - TIP_W - 8));
-        // стрілочка вказує на центр іконки
         const arrowLeft = pageX + w / 2 - left - 6;
         setAnchor({ top: pageY + h + 6, left, arrowLeft });
         setVisible(true);
@@ -251,44 +292,145 @@ function LabelRow({
   );
 }
 
-/* ─── Activity chart ─────────────────────────────────────────── */
-function ActivityChart({ days, t }: { days: ActivityDay[]; t: (k: string) => string }) {
+/* ─── Generic Bar Chart ──────────────────────────────────────── */
+type BarDatum = {
+  label?: string;
+  value: number;
+  highlight?: boolean;
+};
+
+const Y_AXIS_W = 32;
+
+function BarChart({
+  data,
+  color = '#6366f1',
+  barHeight = 110,
+  showXLabels = true,
+}: {
+  data: BarDatum[];
+  color?: string;
+  barHeight?: number;
+  showXLabels?: boolean;
+}) {
   const C = useAppColors();
-  if (days.length === 0) return null;
-  const peak = Math.max(1, ...days.map(d => d.count));
-  const BAR_MAX_H = 52;
+  const peak = Math.max(0, ...data.map((d) => d.value));
+  const { max, ticks } = niceScale(peak);
 
   return (
-    <View style={[styles.chartWrap, { backgroundColor: C.surface }]}>
-      <View style={styles.chartBars}>
-        {days.map(d => {
-          const h = Math.max(3, Math.round((d.count / peak) * BAR_MAX_H));
-          const isToday = d.review_date === new Date().toISOString().split('T')[0];
-          return (
-            <View key={d.review_date} style={styles.barCol}>
-              <View
-                style={[
-                  styles.bar,
-                  { height: h, backgroundColor: d.count > 0 ? (isToday ? '#6366f1' : '#a5b4fc') : C.border },
-                ]}
-              />
-            </View>
-          );
-        })}
+    <View style={styles.bcWrap}>
+      <View style={[styles.bcRow, { height: barHeight }]}>
+        {/* ── Y axis with tick labels ── */}
+        <View style={[styles.bcYAxis, { width: Y_AXIS_W, height: barHeight }]}>
+          {ticks.map((tick) => (
+            <Text
+              key={`y-${tick}`}
+              style={[
+                styles.bcYTick,
+                {
+                  color: C.textMuted,
+                  top: barHeight * (1 - tick / max) - 7,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {tick}
+            </Text>
+          ))}
+        </View>
+
+        {/* ── Chart area: gridlines + bars ── */}
+        <View style={[styles.bcChartArea, { height: barHeight }]}>
+          {ticks.map((tick) => (
+            <View
+              key={`g-${tick}`}
+              style={[
+                styles.bcGridLine,
+                {
+                  top: barHeight * (1 - tick / max),
+                  backgroundColor: tick === 0 ? C.border : C.borderLight,
+                },
+              ]}
+            />
+          ))}
+
+          <View style={[styles.bcBars, { height: barHeight }]}>
+            {data.map((d, i) => {
+              const h = d.value > 0
+                ? Math.max(2, Math.round((d.value / max) * barHeight))
+                : 0;
+              return (
+                <View key={i} style={styles.bcBarCol}>
+                  <View
+                    style={[
+                      styles.bcBar,
+                      {
+                        height: h,
+                        backgroundColor: d.value === 0
+                          ? 'transparent'
+                          : d.highlight ? color : `${color}80`,
+                      },
+                    ]}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        </View>
       </View>
-      <View style={styles.chartLabels}>
-        <Text style={styles.chartLabel}>
-          {days[0]?.review_date
-            ? new Date(days[0].review_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-            : ''}
-        </Text>
-        <Text style={styles.chartLabelCenter}>{t('statActivityDays')}</Text>
-        <Text style={styles.chartLabel}>
-          {days[days.length - 1]?.review_date
-            ? new Date(days[days.length - 1].review_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-            : ''}
-        </Text>
-      </View>
+
+      {showXLabels && (
+        <View style={styles.bcXRow}>
+          <View style={{ width: Y_AXIS_W }} />
+          <View style={styles.bcXBars}>
+            {data.map((d, i) => (
+              <View key={i} style={styles.bcXCol}>
+                <Text style={[styles.bcXLabel, { color: C.textMuted }]} numberOfLines={1}>
+                  {d.label ?? ''}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ─── Period toggle ──────────────────────────────────────────── */
+function PeriodToggle({
+  value,
+  onChange,
+  options,
+}: {
+  value: ActivityRange;
+  onChange: (v: ActivityRange) => void;
+  options: { v: ActivityRange; label: string }[];
+}) {
+  const C = useAppColors();
+  return (
+    <View style={[styles.toggleWrap, { backgroundColor: C.surfaceAlt ?? '#f5f6fa', borderColor: C.borderLight }]}>
+      {options.map((o) => {
+        const active = o.v === value;
+        return (
+          <Pressable
+            key={o.v}
+            onPress={() => onChange(o.v)}
+            style={[
+              styles.toggleBtn,
+              active && { backgroundColor: '#6366f1' },
+            ]}
+          >
+            <Text
+              style={[
+                styles.toggleTxt,
+                active ? { color: '#fff' } : { color: C.textSub },
+              ]}
+            >
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -299,29 +441,46 @@ function SectionHead({
   title,
   pill,
   tip,
+  subtitle,
 }: {
   icon: React.ComponentProps<typeof Feather>['name'];
   title: string;
   pill?: number;
   tip?: string;
+  subtitle?: string;
 }) {
   const C = useAppColors();
   return (
-    <View style={styles.sectionHead}>
-      <Feather name={icon} size={16} color="#6366f1" />
-      <Text style={[styles.sectionTitle, { color: C.text }]}>{title}</Text>
-      {pill !== undefined && (
-        <View style={styles.totalPill}>
-          <Text style={styles.totalPillTxt}>{pill}</Text>
-        </View>
-      )}
-      {tip && <InfoTooltip text={tip} />}
+    <View style={styles.sectionHeadWrap}>
+      <View style={styles.sectionHead}>
+        <Feather name={icon} size={16} color="#6366f1" />
+        <Text style={[styles.sectionTitle, { color: C.text }]}>{title}</Text>
+        {pill !== undefined && (
+          <View style={styles.totalPill}>
+            <Text style={styles.totalPillTxt}>{pill}</Text>
+          </View>
+        )}
+        {tip && <InfoTooltip text={tip} />}
+      </View>
+      {subtitle ? (
+        <Text style={[styles.sectionSubtitle, { color: C.textMuted }]}>{subtitle}</Text>
+      ) : null}
     </View>
   );
 }
 
 /* ─── Deck card ──────────────────────────────────────────────── */
-function DeckStatCard({ deck, t, onPress }: { deck: DeckStat; t: (k: string) => string; onPress: () => void }) {
+function DeckStatCard({
+  deck,
+  t,
+  dateLocaleTag,
+  onPress,
+}: {
+  deck: DeckStat;
+  t: (k: string) => string;
+  dateLocaleTag: string;
+  onPress: () => void;
+}) {
   const C = useAppColors();
   const studied = deck.cards_learning + deck.cards_review + deck.cards_relearning;
   const progress = deck.total_cards > 0 ? studied / deck.total_cards : 0;
@@ -344,7 +503,7 @@ function DeckStatCard({ deck, t, onPress }: { deck: DeckStat; t: (k: string) => 
           <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
         </View>
         <Text style={[styles.deckLastStudied, { color: C.textMuted }]}>
-          {t('statLastStudied')}: {formatDate(deck.last_studied, t('statNever'))}
+          {t('statLastStudied')}: {formatDate(deck.last_studied, t('statNever'), dateLocaleTag)}
         </Text>
       </View>
     </TouchableOpacity>
@@ -355,14 +514,18 @@ function DeckStatCard({ deck, t, onPress }: { deck: DeckStat; t: (k: string) => 
    Main Screen
 ═══════════════════════════════════════════════════════════════ */
 export default function StatisticsScreen() {
-  const { t } = useLanguage();
+  const { locale, t } = useLanguage();
   const { user } = useAuth();
   const router = useRouter();
   const C = useAppColors();
+  const dateLocaleTag = bcp47ForAppLocale(locale);
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [wordStats, setWordStats] = useState<WordStats | null>(null);
   const [activity, setActivity] = useState<ActivityDay[]>([]);
+  const [activityRange, setActivityRange] = useState<ActivityRange>(30);
+  const [forecast, setForecast] = useState<ForecastDay[]>([]);
+  const [added, setAdded] = useState<AddedDay[]>([]);
   const [deckStats, setDeckStats] = useState<DeckStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -371,10 +534,19 @@ export default function StatisticsScreen() {
   const load = useCallback(async () => {
     if (!user) return;
     setError(null);
-    const [statsRes, wordRes, activityRes, deckRes] = await Promise.all([
+    const [
+      statsRes,
+      wordRes,
+      activityRes,
+      forecastRes,
+      addedRes,
+      deckRes,
+    ] = await Promise.all([
       supabase.rpc('get_my_stats'),
       supabase.rpc('get_my_word_stats'),
-      supabase.rpc('get_review_activity', { p_days: 30 }),
+      supabase.rpc('get_review_activity', { p_days: activityRange }),
+      supabase.rpc('get_review_forecast', { p_days: 30 }),
+      supabase.rpc('get_added_cards_activity', { p_days: 30 }),
       supabase.rpc('get_my_deck_stats'),
     ]);
     if (statsRes.error || wordRes.error || activityRes.error || deckRes.error) {
@@ -383,10 +555,12 @@ export default function StatisticsScreen() {
     if (statsRes.data?.[0]) setStats(statsRes.data[0] as Stats);
     if (wordRes.data?.[0]) setWordStats(wordRes.data[0] as WordStats);
     setActivity((activityRes.data ?? []) as ActivityDay[]);
+    setForecast((forecastRes.data ?? []) as ForecastDay[]);
+    setAdded((addedRes.data ?? []) as AddedDay[]);
     setDeckStats((deckRes.data ?? []) as DeckStat[]);
     setLoading(false);
     setRefreshing(false);
-  }, [user, t]);
+  }, [user, t, activityRange]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
   const onRefresh = () => { setRefreshing(true); load(); };
@@ -415,6 +589,38 @@ export default function StatisticsScreen() {
   const easeHard        = wordStats?.ease_hard         ?? 0;
   const easeTotal       = easeEasy + easeMedium + easeHard;
 
+  /* ─── Build chart data ─── */
+  const todayIso = new Date().toISOString().split('T')[0];
+
+  const activityData: BarDatum[] = activity.map((d, i) => ({
+    label: i === 0 || i === activity.length - 1 || i === Math.floor(activity.length / 2)
+      ? shortMonthDay(d.review_date, dateLocaleTag)
+      : '',
+    value: d.count,
+    highlight: d.review_date === todayIso,
+  }));
+  const activityHasData = activity.some((d) => d.count > 0);
+
+  const forecastData: BarDatum[] = forecast.map((d, i) => ({
+    label: i === 0
+      ? t('statToday')
+      : (i === Math.floor(forecast.length / 2) || i === forecast.length - 1)
+        ? `+${i}`
+        : '',
+    value: d.count,
+    highlight: i === 0,
+  }));
+  const forecastTotal = forecast.reduce((s, d) => s + d.count, 0);
+
+  const addedData: BarDatum[] = added.map((d, i) => ({
+    label: i === 0 || i === added.length - 1 || i === Math.floor(added.length / 2)
+      ? shortMonthDay(d.added_day, dateLocaleTag)
+      : '',
+    value: d.count,
+    highlight: d.added_day === todayIso,
+  }));
+  const addedTotal = added.reduce((s, d) => s + d.count, 0);
+
   return (
     <ScrollView
       style={[styles.scroll, { backgroundColor: C.bg }]}
@@ -429,7 +635,14 @@ export default function StatisticsScreen() {
         </View>
       )}
 
-      {/* ══ 1. Вивчені слова ══ */}
+      {/* ══ 1. Огляд (3 cards) ══ */}
+      <View style={styles.summaryGrid}>
+        <SummaryCard icon="zap"          iconBg="#fef3c7" value={stats?.streak_days ?? 0}    label={`${t('statStreak')} (${t('statDays')})`} color="#d97706" borderColor="#f59e0b" tip={t('tipStreak')} />
+        <SummaryCard icon="trending-up"  iconBg="#fce7f3" value={`${retentionRate}%`}        label={t('statRetention')}                 color="#db2777" borderColor="#db2777" tip={t('tipRetention')} />
+        <SummaryCard icon="repeat"       iconBg="#e0e7ff" value={totalReviews}                label={t('statTotalReviews')}              color="#4f46e5" borderColor="#6366f1" tip={t('tipTotalReviews')} />
+      </View>
+
+      {/* ══ 2. Картки, які ви вивчали ══ */}
       <View style={styles.section}>
         <SectionHead icon="book" title={t('statWordsTitle')} />
         <View style={styles.periodRow}>
@@ -439,13 +652,94 @@ export default function StatisticsScreen() {
         </View>
       </View>
 
-      {/* ══ 2. Summary ══ */}
-      <View style={styles.summaryGrid}>
-        <SummaryCard icon="zap"          iconBg="#fef3c7" value={stats?.streak_days ?? 0}    label={`${t('statStreak')} (${t('statDays')})`} color="#d97706" borderColor="#f59e0b" tip={t('tipStreak')} />
-        <SummaryCard icon="trending-up"  iconBg="#fce7f3" value={`${retentionRate}%`}        label={t('statRetention')}                 color="#db2777" borderColor="#db2777" tip={t('tipRetention')} />
+      {/* ══ 3. Щоденна активність + перемикач діапазону ══ */}
+      <View style={styles.section}>
+        <SectionHead
+          icon="activity"
+          title={t('statActivity')}
+          tip={t('tipActivity')}
+        />
+        <PeriodToggle
+          value={activityRange}
+          onChange={setActivityRange}
+          options={[
+            { v: 7,  label: t('statPeriod7d') },
+            { v: 30, label: t('statPeriod30d') },
+            { v: 90, label: t('statPeriod90d') },
+          ]}
+        />
+        {!activityHasData ? (
+          <View style={[styles.emptyBox, { backgroundColor: C.surface }]}>
+            <Text style={[styles.emptyTxt, { color: C.textMuted }]}>{t('statNoActivity')}</Text>
+          </View>
+        ) : (
+          <View style={[styles.whiteCard, { backgroundColor: C.surface }]}>
+            <BarChart data={activityData} color="#6366f1" />
+          </View>
+        )}
       </View>
 
-      {/* ══ 3. Прогрес слів ══ */}
+      {/* ══ 4. Прогноз повторень ══ */}
+      <View style={styles.section}>
+        <SectionHead
+          icon="calendar"
+          title={t('statForecastTitle')}
+          tip={t('tipForecast')}
+          subtitle={formatTemplate(t('statForecastSub'), { days: 30 })}
+        />
+        {forecastTotal === 0 ? (
+          <View style={[styles.emptyBox, { backgroundColor: C.surface }]}>
+            <Text style={[styles.emptyTxt, { color: C.textMuted }]}>{t('statForecastNoData')}</Text>
+          </View>
+        ) : (
+          <View style={[styles.whiteCard, { backgroundColor: C.surface }]}>
+            <BarChart data={forecastData} color="#0891b2" />
+            <View style={[styles.metaRow, { borderTopColor: C.borderLight }]}>
+              <View style={styles.metaItem}>
+                <Feather name="clock" size={13} color="#0891b2" />
+                <Text style={[styles.metaTxt, { color: C.textSub }]}>
+                  {formatTemplate(t('statForecastTotal'), { count: forecastTotal, days: 30 })}
+                </Text>
+              </View>
+              <Text style={[styles.metaSub, { color: C.textMuted }]}>
+                {formatTemplate(t('statForecastDaily'), { avg: Math.round(forecastTotal / 30) })}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* ══ 5. Темп додавання карток ══ */}
+      <View style={styles.section}>
+        <SectionHead
+          icon="plus-circle"
+          title={t('statAddedTitle')}
+          tip={t('tipAddedRate')}
+          subtitle={t('statAddedSub')}
+        />
+        {addedTotal === 0 ? (
+          <View style={[styles.emptyBox, { backgroundColor: C.surface }]}>
+            <Text style={[styles.emptyTxt, { color: C.textMuted }]}>{t('statAddedNoData')}</Text>
+          </View>
+        ) : (
+          <View style={[styles.whiteCard, { backgroundColor: C.surface }]}>
+            <BarChart data={addedData} color="#059669" />
+            <View style={[styles.metaRow, { borderTopColor: C.borderLight }]}>
+              <View style={styles.metaItem}>
+                <Feather name="layers" size={13} color="#059669" />
+                <Text style={[styles.metaTxt, { color: C.textSub }]}>
+                  {formatTemplate(t('statAddedTotal'), { count: addedTotal })}
+                </Text>
+              </View>
+              <Text style={[styles.metaSub, { color: C.textMuted }]}>
+                {formatTemplate(t('statAddedAvg'), { avg: Math.max(1, Math.round(addedTotal / 30)) })}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* ══ 6. Прогрес карток ══ */}
       <View style={styles.section}>
         <SectionHead icon="layers" title={t('statWordProgress')} pill={cardsTotal} tip={t('tipWordProgress')} />
         <View style={[styles.whiteCard, { backgroundColor: C.surface }]}>
@@ -471,7 +765,7 @@ export default function StatisticsScreen() {
         </View>
       </View>
 
-      {/* ══ 4. Складність слів ══ */}
+      {/* ══ 7. Складність карток ══ */}
       <View style={styles.section}>
         <SectionHead icon="sliders" title={t('statDifficulty')} tip={t('tipDifficulty')} />
         {easeTotal === 0 ? (
@@ -492,17 +786,7 @@ export default function StatisticsScreen() {
         )}
       </View>
 
-      {/* ══ 5. Активність ══ */}
-      <View style={styles.section}>
-        <SectionHead icon="activity" title={t('statActivity')} tip={t('tipActivity')} />
-        {activity.every(d => d.count === 0) ? (
-          <View style={[styles.emptyBox, { backgroundColor: C.surface }]}><Text style={[styles.emptyTxt, { color: C.textMuted }]}>{t('statNoActivity')}</Text></View>
-        ) : (
-          <ActivityChart days={activity} t={t} />
-        )}
-      </View>
-
-      {/* ══ 6. Розподіл відповідей ══ */}
+      {/* ══ 8. Якість відповідей ══ */}
       <View style={styles.section}>
         <SectionHead icon="bar-chart-2" title={t('statAnswers')} pill={totalReviews > 0 ? totalReviews : undefined} tip={t('tipAnswers')} />
         {totalReviews === 0 ? (
@@ -523,14 +807,14 @@ export default function StatisticsScreen() {
         )}
       </View>
 
-      {/* ══ 7. Мої дошки ══ */}
+      {/* ══ 9. Прогрес по дошках ══ */}
       <View style={styles.section}>
         <SectionHead icon="grid" title={t('statDecks')} />
         {deckStats.length === 0 ? (
           <View style={[styles.emptyBox, { backgroundColor: C.surface }]}><Text style={[styles.emptyTxt, { color: C.textMuted }]}>{t('statNoDecks')}</Text></View>
         ) : (
           deckStats.map(d => (
-            <DeckStatCard key={d.deck_id} deck={d} t={t} onPress={() => router.push(`/deck-detail?id=${d.deck_id}`)} />
+            <DeckStatCard key={d.deck_id} deck={d} t={t} dateLocaleTag={dateLocaleTag} onPress={() => router.push(`/deck-detail?id=${d.deck_id}`)} />
           ))
         )}
       </View>
@@ -602,10 +886,10 @@ const styles = StyleSheet.create({
   periodVal:   { fontSize: 22, fontWeight: '800' },
   periodLabel: { fontSize: 11, color: '#6b7280', fontWeight: '500', textAlign: 'center' },
 
-  /* ── Summary 2×2 ── */
+  /* ── Summary grid ── */
   summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   summaryCard: {
-    width: '47%', flexGrow: 1,
+    flex: 1, minWidth: 140,
     backgroundColor: '#fff', borderRadius: 14, padding: 10,
     alignItems: 'center', borderTopWidth: 3,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
@@ -619,9 +903,11 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 11, color: '#6b7280', textAlign: 'center', fontWeight: '500' },
 
   /* ── Sections ── */
-  section:      { gap: 10 },
-  sectionHead:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', flex: 1 },
+  section:          { gap: 10 },
+  sectionHeadWrap:  { gap: 4 },
+  sectionHead:      { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionTitle:     { fontSize: 16, fontWeight: '700', flex: 1 },
+  sectionSubtitle:  { fontSize: 12, marginLeft: 24 },
   totalPill: {
     backgroundColor: '#EEF2FF', borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 2,
@@ -657,18 +943,50 @@ const styles = StyleSheet.create({
   retentionTxt: { fontSize: 13, color: '#6b7280' },
   retentionVal: { fontWeight: '800', color: '#22c55e' },
 
-  /* ── Activity chart ── */
-  chartWrap: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  /* ── Period toggle ── */
+  toggleWrap: {
+    flexDirection: 'row', alignSelf: 'flex-start',
+    backgroundColor: '#f5f6fa', padding: 3, borderRadius: 10,
+    borderWidth: 1, borderColor: '#e5e7eb',
   },
-  chartBars:       { flexDirection: 'row', alignItems: 'flex-end', height: 60, gap: 2 },
-  barCol:          { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
-  bar:             { width: '100%', borderRadius: 3 },
-  chartLabels:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
-  chartLabel:      { fontSize: 10, color: '#9ca3af' },
-  chartLabelCenter:{ fontSize: 10, color: '#9ca3af', textAlign: 'center' },
+  toggleBtn: {
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 8,
+  },
+  toggleTxt: { fontSize: 12, fontWeight: '700' },
+
+  /* ── Bar chart ── */
+  bcWrap:       { paddingTop: 8 },
+  bcRow:        { flexDirection: 'row' },
+  bcYAxis:      { position: 'relative' },
+  bcYTick:      {
+    position: 'absolute',
+    right: 6,
+    fontSize: 10,
+    fontWeight: '500',
+    textAlign: 'right',
+    minWidth: 20,
+  },
+  bcChartArea:  { flex: 1, position: 'relative' },
+  bcGridLine:   { position: 'absolute', left: 0, right: 0, height: 1 },
+  bcBars:       { flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
+  bcBarCol:     { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
+  bcBar:        { width: '100%', borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  bcXRow:       { flexDirection: 'row', marginTop: 6 },
+  bcXBars:      { flex: 1, flexDirection: 'row', gap: 2 },
+  bcXCol:       { flex: 1, alignItems: 'center' },
+  bcXLabel:     { fontSize: 10 },
+
+  /* ── Meta row beneath chart ── */
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f3f4f6',
+  },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metaTxt:  { fontSize: 13, color: '#6b7280' },
+  metaSub:  { fontSize: 12, color: '#9ca3af' },
 
   /* ── Deck cards ── */
   deckCard: {
