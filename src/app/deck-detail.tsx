@@ -1,6 +1,7 @@
 import { Deck } from "@/assets/data/decks";
 import { Card } from "@/assets/data/cards";
 import Feather from "@expo/vector-icons/Feather";
+import { exportDeckPdf } from "@/src/lib/exportDeckPdf";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -78,6 +79,7 @@ export default function DeckDetailScreen() {
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [errorModal, setErrorModal] = useState<string | null>(null);
   const [isCopying, setIsCopying] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [hasCopy, setHasCopy] = useState<boolean | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -337,6 +339,26 @@ export default function DeckDetailScreen() {
 
   const handleDeleteCard = (card: Card) => setCardToDelete(card);
 
+  const handleExportPdf = useCallback(async () => {
+    if (!deck || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      await exportDeckPdf({
+        title: deck.title ?? "",
+        description: deck.description ?? null,
+        emptyMessage: "Ця дошка поки що немає карток",
+        cards: cards.map((c) => ({
+          front_text: c.front_text ?? "",
+          back_text: c.back_text ?? "",
+        })),
+      });
+    } catch (err) {
+      setErrorModal(err instanceof Error ? err.message : t("unexpectedError"));
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }, [cards, deck, isExportingPdf, t]);
+
   const performDeleteCard = async () => {
     if (!cardToDelete) return;
     const card = cardToDelete;
@@ -536,6 +558,17 @@ export default function DeckDetailScreen() {
 
             {/* Secondary row */}
             <View style={styles.actionRowSecondary}>
+              <ActionBtn
+                icon="download"
+                label={isExportingPdf ? t("exportingPdf") : t("exportPdf")}
+                bg={C.surface}
+                textColor="#2563eb"
+                border
+                borderColor="rgba(37,99,235,0.25)"
+                onPress={handleExportPdf}
+                disabled={isExportingPdf}
+                flex
+              />
               {canEdit && (
                 <ActionBtn
                   icon="plus-circle"
