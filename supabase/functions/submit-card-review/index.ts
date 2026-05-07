@@ -1,6 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { scheduleAfterAnswer } from "@cardly/srs/cardScheduling";
-import type { ReviewRating } from "@cardly/srs/ankiScheduler";
+import type { ReviewRating } from "@cardly/srs/reviewScheduler";
 import {
   appSettingsRowToGlobal,
   delayDaysForReview,

@@ -1,3 +1,6 @@
+/** Optional JSON from `cards.card_extra` — see `src/lib/cardModel.ts`. */
+export type CardExtraJson = Record<string, unknown>;
+
 export interface Card {
   card_id: string;   // UUID from DB
   deck_id: string;   // UUID (decks.deck_id)
@@ -6,11 +9,13 @@ export interface Card {
   back_text: string;
   front_media_url: string | null;
   back_media_url: string | null;
+  /** Media kinds, reversible pair ids, etc. */
+  card_extra?: CardExtraJson | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
-  // Spaced repetition (Anki/SM-2)
+  // Spaced repetition (SRS / SM-2)
   next_review_at?: string | null;
   interval_days?: number;
   ease_factor?: number;

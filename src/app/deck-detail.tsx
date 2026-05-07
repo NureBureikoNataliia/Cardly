@@ -25,6 +25,14 @@ import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
+import {
+  effectiveMediaKind,
+  getClozePartsFromCard,
+  isClozeGapComplete,
+  isReversiblePairCard,
+  normalizeCardType,
+  parseCardExtra,
+} from "@/src/lib/cardModel";
 
 const scrollPositions: Record<string, number> = {};
 
@@ -279,9 +287,16 @@ export default function DeckDetailScreen() {
       if (deckErr) { setErrorModal(deckErr.message ?? t("failedToLoadData")); setIsCopying(false); return; }
       if (cards.length > 0) {
         const { error: cardsErr } = await supabase.from("cards").insert(
-          cards.map((c) => ({ deck_id: newDeck.deck_id, card_type: c.card_type ?? "basic",
-            front_text: c.front_text, back_text: c.back_text,
-            front_media_url: c.front_media_url, back_media_url: c.back_media_url, notes: c.notes }))
+          cards.map((c) => ({
+            deck_id: newDeck.deck_id,
+            card_type: c.card_type ?? "basic",
+            card_extra: c.card_extra ?? {},
+            front_text: c.front_text,
+            back_text: c.back_text,
+            front_media_url: c.front_media_url,
+            back_media_url: c.back_media_url,
+            notes: c.notes,
+          })),
         );
         if (cardsErr) { setErrorModal(cardsErr.message ?? t("failedToLoadData")); setIsCopying(false); return; }
       }
@@ -297,16 +312,23 @@ export default function DeckDetailScreen() {
     setIsUpdating(true); setError(null);
     try {
       const { data: originalCards, error: fetchErr } = await supabase.from("cards")
-        .select("front_text, back_text, notes, card_type, front_media_url, back_media_url")
+        .select("front_text, back_text, notes, card_type, card_extra, front_media_url, back_media_url")
         .eq("deck_id", deck.original_deck_id);
       if (fetchErr) { setErrorModal(fetchErr.message ?? t("failedToLoadData")); setIsUpdating(false); return; }
       const existingKeys = new Set(cards.map((c) => `${c.front_text}\0${c.back_text}`));
       const toAdd = (originalCards ?? []).filter((oc) => !existingKeys.has(`${oc.front_text}\0${oc.back_text}`));
       if (toAdd.length === 0) { setErrorModal(t("noNewCards")); setIsUpdating(false); return; }
       const { error: insertErr } = await supabase.from("cards").insert(
-        toAdd.map((c) => ({ deck_id: deck.deck_id, card_type: c.card_type ?? "basic",
-          front_text: c.front_text, back_text: c.back_text,
-          front_media_url: c.front_media_url, back_media_url: c.back_media_url, notes: c.notes }))
+        toAdd.map((c) => ({
+          deck_id: deck.deck_id,
+          card_type: c.card_type ?? "basic",
+          card_extra: c.card_extra ?? {},
+          front_text: c.front_text,
+          back_text: c.back_text,
+          front_media_url: c.front_media_url,
+          back_media_url: c.back_media_url,
+          notes: c.notes,
+        })),
       );
       if (insertErr) { setErrorModal(insertErr.message ?? t("failedToLoadData")); setIsUpdating(false); return; }
       await loadData();
@@ -874,6 +896,16 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
 }) {
   const accentColors = ["#4255ff", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"];
   const accent = accentColors[index % accentColors.length];
+  const extra = parseCardExtra(card.card_extra);
+  const ctype = normalizeCardType(card.card_type);
+  const frontKind = effectiveMediaKind(card.front_media_url, extra.mediaFront, "front", extra);
+  const backKind = effectiveMediaKind(card.back_media_url, extra.mediaBack, "back", extra);
+  const paired = isReversiblePairCard(extra);
+  const clozeParts = getClozePartsFromCard(card);
+  const clozePreview =
+    ctype === "cloze" && clozeParts && isClozeGapComplete(clozeParts)
+      ? `${clozeParts.before.trimEnd()} ${clozeParts.gapFront.trim()} ${clozeParts.after.trimStart()}`.trim()
+      : null;
 
   return (
     <View style={[styles.cardTile, numCols === 2 && styles.cardTileHalf]}>
@@ -882,6 +914,20 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
         <View style={[styles.cardNumBadge, { backgroundColor: `${accent}18` }]}>
           <Text style={[styles.cardNumTxt, { color: accent }]}>{index + 1}</Text>
         </View>
+        {ctype === "cloze" ? (
+          <View style={[styles.cardKindBadge, { borderColor: `${accent}40` }]}>
+            <Text style={[styles.cardKindBadgeTxt, { color: accent }]} numberOfLines={1}>
+              {t("cardTypeCloze")}
+            </Text>
+          </View>
+        ) : null}
+        {paired ? (
+          <View style={[styles.cardKindBadge, { borderColor: `${accent}40` }]}>
+            <Text style={[styles.cardKindBadgeTxt, { color: accent }]} numberOfLines={1}>
+              {t("cardReversiblePairBadge")}
+            </Text>
+          </View>
+        ) : null}
         {createdByName ? (
           <View style={styles.cardAuthorRow}>
             <Feather name="user" size={10} color="#9ca3af" />
@@ -892,9 +938,17 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
 
       {/* Front */}
       {card.front_media_url ? (
-        <Image source={{ uri: card.front_media_url }} style={styles.cardMedia} resizeMode="contain" />
+        frontKind === "image" ? (
+          <Image source={{ uri: card.front_media_url }} style={styles.cardMedia} resizeMode="contain" />
+        ) : (
+          <View style={[styles.cardMedia, styles.cardMediaAudio]}>
+            <Feather name="volume-2" size={22} color="#4255ff" />
+          </View>
+        )
       ) : null}
-      <Text style={styles.cardFront} numberOfLines={4}>{card.front_text}</Text>
+      <Text style={styles.cardFront} numberOfLines={4}>
+        {clozePreview ?? card.front_text}
+      </Text>
 
       {/* Divider with arrow */}
       <View style={styles.cardDividerRow}>
@@ -907,9 +961,17 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
 
       {/* Back */}
       {card.back_media_url ? (
-        <Image source={{ uri: card.back_media_url }} style={styles.cardMedia} resizeMode="contain" />
+        backKind === "image" ? (
+          <Image source={{ uri: card.back_media_url }} style={styles.cardMedia} resizeMode="contain" />
+        ) : (
+          <View style={[styles.cardMedia, styles.cardMediaAudio]}>
+            <Feather name="volume-2" size={22} color="#4255ff" />
+          </View>
+        )
       ) : null}
-      <Text style={styles.cardBack} numberOfLines={4}>{card.back_text}</Text>
+      <Text style={styles.cardBack} numberOfLines={4}>
+        {card.back_text}
+      </Text>
 
       {/* Notes */}
       {card.notes ? (
@@ -1085,12 +1147,22 @@ const styles = StyleSheet.create({
   cardTileHeader: {
     flexDirection: "row", alignItems: "center",
     justifyContent: "space-between", marginBottom: 10,
+    flexWrap: "wrap", gap: 6,
   },
   cardNumBadge: {
     alignSelf: "flex-start", paddingHorizontal: 9, paddingVertical: 3,
     borderRadius: 999,
   },
   cardNumTxt: { fontSize: 12, fontWeight: "700" },
+  cardKindBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    maxWidth: "46%",
+  },
+  cardKindBadgeTxt: { fontSize: 10, fontWeight: "700" },
   cardAuthorRow: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "#f3f4f6", borderRadius: 8,
@@ -1099,6 +1171,7 @@ const styles = StyleSheet.create({
   cardAuthorTxt: { fontSize: 11, color: "#6b7280", fontWeight: "500" },
 
   cardMedia: { width: "100%", height: 100, borderRadius: 10, marginBottom: 8, backgroundColor: "#f3f4f6" },
+  cardMediaAudio: { alignItems: "center", justifyContent: "center" },
 
   cardFront: { fontSize: 17, fontWeight: "700", color: "#111827", lineHeight: 24 },
 

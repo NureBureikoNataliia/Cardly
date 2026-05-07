@@ -1,5 +1,5 @@
 /**
- * Anki-style "next day starts at" (local clock). Default 03:00 — the SRS calendar day
+ * When the study "day" starts (local clock). Default 03:00 — the SRS calendar day
  * runs from this hour until the same hour next calendar day.
  */
 
@@ -27,7 +27,7 @@ export function getSrsDayStart(now: Date = new Date(), startHour = SRS_DAY_START
 
 /**
  * End of the current SRS window (exclusive): next rollover at `startHour`.
- * Use for "due before end of today's SRS day" (same idea as Anki's daily cutoff).
+ * Use for "due before end of today's SRS day" (daily cutoff).
  */
 export function getNextSrsDayBoundary(now: Date = new Date(), startHour = SRS_DAY_START_HOUR_LOCAL): Date {
   const todayAt = new Date(now);

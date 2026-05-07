@@ -1,7 +1,7 @@
 import {
-  ANKI_DEFAULT_EASE_PERMILLE,
+  DEFAULT_EASE_PERMILLE,
   type ReviewRating,
-} from "./ankiScheduler";
+} from "./reviewScheduler";
 import { scheduleAfterAnswer, type ScheduleOutcome } from "./cardScheduling";
 import type {
   AppSpacedRepetitionSettingsRow,
@@ -30,7 +30,7 @@ export function progressRowToSnapshot(
   const ease =
     row.ease_factor != null && Number.isFinite(row.ease_factor)
       ? easeFactorToPermille(row.ease_factor)
-      : ANKI_DEFAULT_EASE_PERMILLE;
+      : DEFAULT_EASE_PERMILLE;
 
   const intervalDays =
     row.interval_days != null && Number.isFinite(row.interval_days)
@@ -166,7 +166,7 @@ export function nextDueDateFromOutcome(
 }
 
 /**
- * Days after due (Anki delay). `due` / `now` ISO strings from DB and `Date.now()`.
+ * Days after due. `due` / `now` ISO strings from DB and `Date.now()`.
  */
 export function delayDaysForReview(
   dueIso: string | null | undefined,

@@ -49,7 +49,7 @@ export function isCardDueForUser(
 }
 
 /**
- * Count cards due in the current SRS day (Anki-style: day rolls at `srsDayStartHour` local).
+ * Count cards due in the current SRS day (day rolls at `srsDayStartHour` local).
  * Includes no progress, null due, and any due_date on or before the next boundary.
  */
 export function getDueTodayCountForUser(

@@ -1,6 +1,6 @@
 import type { ScheduleOutcome } from "@cardly/srs/cardScheduling";
 
-/** Short label for rating buttons (Anki-style interval hints). */
+/** Short label for rating buttons (interval hints). */
 export function formatScheduleLabel(outcome: ScheduleOutcome): string {
   if (outcome.dueInSecondsFromNow != null) {
     const s = outcome.dueInSecondsFromNow;

@@ -1,11 +1,11 @@
 import type { Card } from "@/assets/data/cards";
-import type { UserCardProgressRow } from "@cardly/srs/dbTypes";
 import {
-  getNextSrsDayBoundary,
-  normalizeSrsDayStartHour,
-  SRS_DAY_START_HOUR_LOCAL,
+    getNextSrsDayBoundary,
+    normalizeSrsDayStartHour,
+    SRS_DAY_START_HOUR_LOCAL,
 } from "@/src/lib/srsDayBoundary";
 import { supabase } from "@/src/lib/supabase";
+import type { UserCardProgressRow } from "@cardly/srs/dbTypes";
 
 export interface DueCard {
   progress: UserCardProgressRow;
@@ -13,7 +13,10 @@ export interface DueCard {
 }
 
 /** Synthetic row before first server-side review (Edge Function inserts the real row). */
-export function syntheticNewProgress(userId: string, cardId: string): UserCardProgressRow {
+export function syntheticNewProgress(
+  userId: string,
+  cardId: string,
+): UserCardProgressRow {
   return {
     user_id: userId,
     card_id: cardId,
@@ -38,7 +41,7 @@ function isDue(progress: UserCardProgressRow, nowMs: number): boolean {
 function isDueWithinTodaySrsWindow(
   progress: UserCardProgressRow,
   nowMs: number,
-  startHour: number
+  startHour: number,
 ): boolean {
   if (progress.due_date == null) return true;
   const t = new Date(progress.due_date).getTime();
@@ -47,7 +50,10 @@ function isDueWithinTodaySrsWindow(
   return t <= boundary;
 }
 
-function sortDueCardsForTodaySession(items: DueCard[], nowMs: number): DueCard[] {
+function sortDueCardsForTodaySession(
+  items: DueCard[],
+  nowMs: number,
+): DueCard[] {
   const keyed = items.map((dc) => {
     const d = dc.progress.due_date;
     const dueMs = d == null ? -1 : new Date(d).getTime();
@@ -76,7 +82,7 @@ export type LoadDueCardsOptions = {
 /** Cards in the deck that are due now, or (optionally) everything due before the next SRS day boundary. */
 export async function loadDueCardsForDeck(
   deckId: string,
-  options?: LoadDueCardsOptions
+  options?: LoadDueCardsOptions,
 ): Promise<DueCard[]> {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
@@ -107,9 +113,12 @@ export async function loadDueCardsForDeck(
 
   const now = Date.now();
   const includeToday = options?.includeScheduledToday === true;
-  const startHour = normalizeSrsDayStartHour(options?.srsDayStartHour ?? SRS_DAY_START_HOUR_LOCAL);
+  const startHour = normalizeSrsDayStartHour(
+    options?.srsDayStartHour ?? SRS_DAY_START_HOUR_LOCAL,
+  );
   const match = includeToday
-    ? (p: UserCardProgressRow, ms: number) => isDueWithinTodaySrsWindow(p, ms, startHour)
+    ? (p: UserCardProgressRow, ms: number) =>
+        isDueWithinTodaySrsWindow(p, ms, startHour)
     : isDue;
   const due: DueCard[] = [];
 

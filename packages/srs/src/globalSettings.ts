@@ -1,14 +1,14 @@
 import {
-  ANKI_DEFAULT_EASE_PERMILLE,
-  AnkiSchedulerConfig,
-  defaultAnkiSchedulerConfig,
-} from "./ankiScheduler";
+  DEFAULT_EASE_PERMILLE,
+  type ReviewSchedulerConfig,
+  defaultReviewSchedulerConfig,
+} from "./reviewScheduler";
 
 /**
  * App-wide spaced repetition settings (same for every deck).
  * Tune `learningStepsSeconds` / `relearningStepsSeconds` to match how you want first reviews to feel.
  */
-export interface GlobalSpacedRepetitionSettings extends AnkiSchedulerConfig {
+export interface GlobalSpacedRepetitionSettings extends ReviewSchedulerConfig {
   /** Delays for new cards in seconds (e.g. 60, 600 = 1m then 10m). Must be non-empty. */
   learningStepsSeconds: number[];
   /** Short delays after a failed review, before the card returns to day-based intervals. Non-empty enables relearning. */
@@ -24,7 +24,7 @@ export interface GlobalSpacedRepetitionSettings extends AnkiSchedulerConfig {
 }
 
 export const defaultGlobalSpacedRepetitionSettings: GlobalSpacedRepetitionSettings = {
-  ...defaultAnkiSchedulerConfig,
+  ...defaultReviewSchedulerConfig,
   learningStepsSeconds: [60, 600],
   relearningStepsSeconds: [600],
   graduatingIntervalDays: 1,
@@ -53,7 +53,7 @@ export function initialSnapshotForNewCard(
   return {
     phase: "learning",
     learningStepIndex: 0,
-    easePermille: ANKI_DEFAULT_EASE_PERMILLE,
+    easePermille: DEFAULT_EASE_PERMILLE,
     intervalDays: 0,
   };
 }

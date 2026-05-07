@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
+    Modal,
     Platform,
     Pressable,
     ScrollView,
@@ -17,15 +18,77 @@ import type { TextStyle } from "react-native";
 
 import { Deck } from "@/assets/data/decks";
 import ConfirmModal from "@/src/components/ConfirmModal";
+import { CardSideMedia } from "@/src/components/CardSideMedia";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { supabase } from "@/src/lib/supabase";
+import type { Card } from "@/assets/data/cards";
+import type { CardExtra, CardTypeName, ClozeParts, MediaKind } from "@/src/lib/cardModel";
+import {
+  buildClozeFrontText,
+  effectiveMediaKind,
+  getClozePartsFromCard,
+  isClozeGapComplete,
+  newPairId,
+  normalizeCardType,
+  parseCardExtra,
+} from "@/src/lib/cardModel";
 
 /** Web: hide browser default focus outline on TextInput (RN typings omit outlineStyle "none"). */
 const webTextInputNoOutline: TextStyle | undefined =
   Platform.OS === "web"
     ? ({ outlineWidth: 0, outlineStyle: "none" } as unknown as TextStyle)
     : undefined;
+
+const addCardStudyClozeStyles = StyleSheet.create({
+  title: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1f2937",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  gap: {
+    color: "#9ca3af",
+    letterSpacing: 3,
+    textDecorationLine: "underline",
+  },
+  gapHint: {
+    color: "#4b5563",
+    fontStyle: "italic",
+    fontWeight: "500",
+  },
+  answer: {
+    fontWeight: "800",
+    color: "#059669",
+  },
+});
+
+function AddCardStudyClozeFront({ parts }: { parts: ClozeParts }) {
+  const gap =
+    parts.gapFront.trim().length > 0 ? (
+      <Text style={addCardStudyClozeStyles.gapHint}> {parts.gapFront.trim()} </Text>
+    ) : (
+      <Text style={addCardStudyClozeStyles.gap}> ▯▯▯ </Text>
+    );
+  return (
+    <Text style={addCardStudyClozeStyles.title}>
+      {parts.before}
+      {gap}
+      {parts.after}
+    </Text>
+  );
+}
+
+function AddCardStudyClozeBack({ parts }: { parts: ClozeParts }) {
+  return (
+    <Text style={addCardStudyClozeStyles.title}>
+      {parts.before}
+      <Text style={addCardStudyClozeStyles.answer}>{parts.hidden}</Text>
+      {parts.after}
+    </Text>
+  );
+}
 
 export default function AddCardScreen() {
   const router = useRouter();
@@ -59,6 +122,34 @@ export default function AddCardScreen() {
   const [error, setError] = useState<string | null>(null);
   const [errorModal, setErrorModal] = useState<string | null>(null);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [studyPreviewOpen, setStudyPreviewOpen] = useState(false);
+  const [studyPreviewShowBack, setStudyPreviewShowBack] = useState(false);
+  /** When creating a reversed pair, which of the two future cards to preview (1 = forward, 2 = reverse). */
+  const [studyPreviewPairSlot, setStudyPreviewPairSlot] = useState<1 | 2>(1);
+
+  const [cardType, setCardType] = useState<CardTypeName>("basic");
+  const [initialCardType, setInitialCardType] = useState<CardTypeName>("basic");
+  const [mediaKindFront, setMediaKindFront] = useState<MediaKind>("image");
+  const [mediaKindBack, setMediaKindBack] = useState<MediaKind>("image");
+  const [initialMediaKindFront, setInitialMediaKindFront] = useState<MediaKind>("image");
+  const [initialMediaKindBack, setInitialMediaKindBack] = useState<MediaKind>("image");
+  /** Optional second card with swapped sides when creating a new basic card. */
+  const [createReversedPair, setCreateReversedPair] = useState(false);
+  const [initialCreateReversed, setInitialCreateReversed] = useState(false);
+  /** Preserve reversible link when editing. */
+  const [pairMeta, setPairMeta] = useState<{
+    pairId?: string;
+    pairRole?: "forward" | "reverse";
+  }>({});
+
+  const [clozeBefore, setClozeBefore] = useState("");
+  const [clozeGapFront, setClozeGapFront] = useState("");
+  const [clozeHidden, setClozeHidden] = useState("");
+  const [clozeAfter, setClozeAfter] = useState("");
+  const [initialClozeBefore, setInitialClozeBefore] = useState("");
+  const [initialClozeGapFront, setInitialClozeGapFront] = useState("");
+  const [initialClozeHidden, setInitialClozeHidden] = useState("");
+  const [initialClozeAfter, setInitialClozeAfter] = useState("");
 
   useEffect(() => {
     if (!deckId) {
@@ -91,15 +182,65 @@ export default function AddCardScreen() {
         const backImg = cardData?.back_media_url ?? "";
         const notesVal = cardData?.notes ?? "";
         setFrontText(front);
-        setBackText(back);
+        setBackText(normalizeCardType(cardData?.card_type) === "cloze" ? "" : back);
         setFrontImageUrl(frontImg);
         setBackImageUrl(backImg);
         setNotes(notesVal);
         setInitialFront(front);
-        setInitialBack(back);
+        setInitialBack(normalizeCardType(cardData?.card_type) === "cloze" ? "" : back);
         setInitialFrontImage(frontImg);
         setInitialBackImage(backImg);
         setInitialNotes(notesVal);
+
+        const ct = normalizeCardType(cardData?.card_type);
+        setCardType(ct);
+        setInitialCardType(ct);
+        const extra = parseCardExtra(cardData?.card_extra);
+        const mf = extra.mediaFront ?? "image";
+        const mb = extra.mediaBack ?? "image";
+        setMediaKindFront(mf);
+        setMediaKindBack(mb);
+        setInitialMediaKindFront(mf);
+        setInitialMediaKindBack(mb);
+        setPairMeta(
+          extra.pairId
+            ? { pairId: extra.pairId, pairRole: extra.pairRole }
+            : {},
+        );
+        setCreateReversedPair(false);
+        setInitialCreateReversed(false);
+
+        if (ct === "cloze" && cardData) {
+          const cp = getClozePartsFromCard(cardData as Card);
+          if (cp) {
+            setClozeBefore(cp.before);
+            setClozeGapFront(cp.gapFront);
+            setClozeHidden(cp.hidden);
+            setClozeAfter(cp.after);
+            setInitialClozeBefore(cp.before);
+            setInitialClozeGapFront(cp.gapFront);
+            setInitialClozeHidden(cp.hidden);
+            setInitialClozeAfter(cp.after);
+          } else {
+            setClozeBefore("");
+            setClozeGapFront("");
+            setClozeHidden("");
+            setClozeAfter("");
+            setInitialClozeBefore("");
+            setInitialClozeGapFront("");
+            setInitialClozeHidden("");
+            setInitialClozeAfter("");
+          }
+        } else {
+          setClozeBefore("");
+          setClozeGapFront("");
+          setClozeHidden("");
+          setClozeAfter("");
+          setInitialClozeBefore("");
+          setInitialClozeGapFront("");
+          setInitialClozeHidden("");
+          setInitialClozeAfter("");
+        }
       }
       setIsLoading(false);
     };
@@ -108,11 +249,16 @@ export default function AddCardScreen() {
   }, [deckId, cardId, t]);
 
   const handleSave = async () => {
-    if (!frontText.trim() || !backText.trim()) return;
     if (!cardId && !deckId) {
       setError(t("deckNotFound"));
       return;
     }
+
+    const validBasic = frontText.trim().length > 0 && backText.trim().length > 0;
+    const validCloze =
+      clozeHidden.trim().length > 0 && clozeGapFront.trim().length > 0;
+    const ok = cardType === "cloze" ? validCloze : validBasic;
+    if (!ok) return;
 
     setIsSaving(true);
     setError(null);
@@ -120,28 +266,137 @@ export default function AddCardScreen() {
     try {
       const frontMedia = frontImageUrl.trim() || null;
       const backMedia = backImageUrl.trim() || null;
-      const { error: upsertError } = cardId
-        ? await supabase
-            .from("cards")
-            .update({
-              front_text: frontText.trim(),
-              back_text: backText.trim(),
-              front_media_url: frontMedia,
-              back_media_url: backMedia,
-              notes: notes.trim() || null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("card_id", cardId)
-        : await supabase.from("cards").insert({
-            deck_id: deckId,
-            card_type: "basic",
-            front_text: frontText.trim(),
-            back_text: backText.trim(),
+      const notesVal = notes.trim() || null;
+
+      const clozeParts: ClozeParts = {
+        before: clozeBefore,
+        gapFront: clozeGapFront.trim(),
+        hidden: clozeHidden.trim(),
+        after: clozeAfter,
+      };
+      const outFront =
+        cardType === "cloze" ? buildClozeFrontText(clozeParts) : frontText.trim();
+      const outBack = cardType === "cloze" ? "" : backText.trim();
+
+      const baseMediaExtra = (): CardExtra => ({
+        mediaFront: mediaKindFront,
+        mediaBack: mediaKindBack,
+      });
+
+      if (cardId) {
+        const extraPayload: CardExtra = {
+          ...baseMediaExtra(),
+          ...(pairMeta.pairId
+            ? { pairId: pairMeta.pairId, pairRole: pairMeta.pairRole }
+            : {}),
+          ...(cardType === "cloze" ? { cloze: clozeParts } : {}),
+        };
+        const { error: upsertError } = await supabase
+          .from("cards")
+          .update({
+            card_type: cardType,
+            card_extra: extraPayload,
+            front_text: outFront,
+            back_text: outBack,
             front_media_url: frontMedia,
             back_media_url: backMedia,
-            notes: notes.trim() || null,
+            notes: notesVal,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("card_id", cardId);
+
+        if (upsertError) {
+          const msg = upsertError.message || t("failedToSaveCard");
+          setError(msg);
+          setIsSaving(false);
+          setErrorModal(msg);
+          return;
+        }
+        router.back();
+        return;
+      }
+
+      if (!deckId) {
+        setError(t("deckNotFound"));
+        setIsSaving(false);
+        return;
+      }
+
+      if (cardType === "basic" && createReversedPair) {
+        const pairId = newPairId();
+        const forwardExtra: CardExtra = {
+          ...baseMediaExtra(),
+          pairId,
+          pairRole: "forward",
+        };
+        const reverseExtra: CardExtra = {
+          mediaFront: mediaKindBack,
+          mediaBack: mediaKindFront,
+          pairId,
+          pairRole: "reverse",
+        };
+
+        const { data: firstRow, error: e1 } = await supabase
+          .from("cards")
+          .insert({
+            deck_id: deckId,
+            card_type: "basic",
+            card_extra: forwardExtra,
+            front_text: outFront,
+            back_text: outBack,
+            front_media_url: frontMedia,
+            back_media_url: backMedia,
+            notes: notesVal,
             created_by: user?.id ?? null,
-          });
+          })
+          .select("card_id")
+          .single();
+        if (e1 || !firstRow?.card_id) {
+          const msg = e1?.message || t("failedToSaveCard");
+          setError(msg);
+          setIsSaving(false);
+          setErrorModal(msg);
+          return;
+        }
+
+        const { error: e2 } = await supabase.from("cards").insert({
+          deck_id: deckId,
+          card_type: "basic",
+          card_extra: reverseExtra,
+          front_text: outBack,
+          back_text: outFront,
+          front_media_url: backMedia,
+          back_media_url: frontMedia,
+          notes: notesVal,
+          created_by: user?.id ?? null,
+        });
+        if (e2) {
+          await supabase.from("cards").delete().eq("card_id", firstRow.card_id);
+          const msg = e2.message || t("failedToSaveCard");
+          setError(msg);
+          setIsSaving(false);
+          setErrorModal(msg);
+          return;
+        }
+        router.back();
+        return;
+      }
+
+      const extraPayload: CardExtra = {
+        ...baseMediaExtra(),
+        ...(cardType === "cloze" ? { cloze: clozeParts } : {}),
+      };
+      const { error: upsertError } = await supabase.from("cards").insert({
+        deck_id: deckId,
+        card_type: cardType,
+        card_extra: extraPayload,
+        front_text: outFront,
+        back_text: outBack,
+        front_media_url: frontMedia,
+        back_media_url: backMedia,
+        notes: notesVal,
+        created_by: user?.id ?? null,
+      });
 
       if (upsertError) {
         const msg = upsertError.message || t("failedToSaveCard");
@@ -160,14 +415,38 @@ export default function AddCardScreen() {
     }
   };
 
-  const isValid = frontText.trim().length > 0 && backText.trim().length > 0;
+  const isValid =
+    cardType === "cloze"
+      ? isClozeGapComplete({
+          before: clozeBefore,
+          gapFront: clozeGapFront,
+          hidden: clozeHidden,
+          after: clozeAfter,
+        })
+      : frontText.trim().length > 0 && backText.trim().length > 0;
   const hasChanges =
+    cardType !== initialCardType ||
+    mediaKindFront !== initialMediaKindFront ||
+    mediaKindBack !== initialMediaKindBack ||
+    createReversedPair !== initialCreateReversed ||
+    clozeBefore !== initialClozeBefore ||
+    clozeGapFront !== initialClozeGapFront ||
+    clozeHidden !== initialClozeHidden ||
+    clozeAfter !== initialClozeAfter ||
     frontText !== initialFront ||
     backText !== initialBack ||
     frontImageUrl !== initialFrontImage ||
     backImageUrl !== initialBackImage ||
     notes !== initialNotes;
   const isEdit = Boolean(cardId);
+  const showPairStudySwitcher =
+    cardType === "basic" && createReversedPair && !isEdit;
+  const clozePartsPreview: ClozeParts = {
+    before: clozeBefore,
+    gapFront: clozeGapFront.trim(),
+    hidden: clozeHidden.trim(),
+    after: clozeAfter,
+  };
 
   /* ── Loading state ── */
   if (isLoading) {
@@ -228,39 +507,230 @@ export default function AddCardScreen() {
 
             {/* ── FORM CARD ── */}
             <View style={styles.card}>
-              {/* FRONT TEXT */}
-              <Field label={t("front")} required>
-                <InputRow
-                  icon="align-left"
-                  focused={focusedField === "front"}
-                  onFocus={() => setFocusedField("front")}
-                  onBlur={() => setFocusedField(null)}
-                  multiline
-                >
-                  <TextInput
-                    style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
-                    placeholder={t("frontPlaceholder")}
-                    placeholderTextColor="#c4cbd8"
-                    value={frontText}
-                    onChangeText={setFrontText}
-                    onFocus={() => setFocusedField("front")}
-                    onBlur={() => setFocusedField(null)}
-                    multiline
-                    textAlignVertical="top"
-                  />
-                  {frontText.length > 0 && (
+              <Field label={t("cardTypeLabel")}>
+                <View style={styles.typeRow}>
+                  {(
+                    [
+                      ["basic", "cardTypeBasic"],
+                      ["cloze", "cardTypeCloze"],
+                    ] as const
+                  ).map(([id, lk]) => (
                     <Pressable
-                      onPress={() => setFrontText("")}
-                      hitSlop={8}
-                      style={{ marginTop: 2 }}
+                      key={id}
+                      onPress={() => setCardType(id)}
+                      style={[styles.typeChip, cardType === id && styles.typeChipOn]}
                     >
-                      <Feather name="x-circle" size={16} color="#d1d5db" />
+                      <Text
+                        style={[
+                          styles.typeChipTxt,
+                          cardType === id && styles.typeChipTxtOn,
+                        ]}
+                      >
+                        {t(lk)}
+                      </Text>
                     </Pressable>
-                  )}
-                </InputRow>
+                  ))}
+                </View>
               </Field>
 
-              {/* FRONT IMAGE URL */}
+              {cardType === "cloze" ? (
+                <>
+                  <Text style={styles.clozeIntro}>{t("clozeIntro")}</Text>
+                  <Field label={t("clozeFieldBefore")}>
+                    <InputRow
+                      icon="align-left"
+                      focused={focusedField === "cBefore"}
+                      onFocus={() => setFocusedField("cBefore")}
+                      onBlur={() => setFocusedField(null)}
+                      multiline
+                    >
+                      <TextInput
+                        style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
+                        placeholder={t("clozePlaceholderBefore")}
+                        placeholderTextColor="#c4cbd8"
+                        value={clozeBefore}
+                        onChangeText={setClozeBefore}
+                        onFocus={() => setFocusedField("cBefore")}
+                        onBlur={() => setFocusedField(null)}
+                        multiline
+                        textAlignVertical="top"
+                      />
+                    </InputRow>
+                  </Field>
+                  <Field label={t("clozeFieldGapFront")} required>
+                    <InputRow
+                      icon="book-open"
+                      focused={focusedField === "cGap"}
+                      onFocus={() => setFocusedField("cGap")}
+                      onBlur={() => setFocusedField(null)}
+                      multiline
+                    >
+                      <TextInput
+                        style={[styles.input, styles.inputMulti, styles.inputClozeGapHint, webTextInputNoOutline]}
+                        placeholder={t("clozePlaceholderGapFront")}
+                        placeholderTextColor="#c4cbd8"
+                        value={clozeGapFront}
+                        onChangeText={setClozeGapFront}
+                        onFocus={() => setFocusedField("cGap")}
+                        onBlur={() => setFocusedField(null)}
+                        multiline
+                        textAlignVertical="top"
+                      />
+                      {clozeGapFront.length > 0 && (
+                        <Pressable
+                          onPress={() => setClozeGapFront("")}
+                          hitSlop={8}
+                          style={{ marginTop: 2 }}
+                        >
+                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                        </Pressable>
+                      )}
+                    </InputRow>
+                  </Field>
+                  <Field label={t("clozeFieldHidden")} required>
+                    <InputRow
+                      icon="target"
+                      focused={focusedField === "cHidden"}
+                      onFocus={() => setFocusedField("cHidden")}
+                      onBlur={() => setFocusedField(null)}
+                      multiline
+                    >
+                      <TextInput
+                        style={[styles.input, styles.inputMulti, styles.inputClozeHidden, webTextInputNoOutline]}
+                        placeholder={t("clozePlaceholderHidden")}
+                        placeholderTextColor="#c4cbd8"
+                        value={clozeHidden}
+                        onChangeText={setClozeHidden}
+                        onFocus={() => setFocusedField("cHidden")}
+                        onBlur={() => setFocusedField(null)}
+                        multiline
+                        textAlignVertical="top"
+                      />
+                      {clozeHidden.length > 0 && (
+                        <Pressable
+                          onPress={() => setClozeHidden("")}
+                          hitSlop={8}
+                          style={{ marginTop: 2 }}
+                        >
+                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                        </Pressable>
+                      )}
+                    </InputRow>
+                  </Field>
+                  <Field label={t("clozeFieldAfter")}>
+                    <InputRow
+                      icon="align-right"
+                      focused={focusedField === "cAfter"}
+                      onFocus={() => setFocusedField("cAfter")}
+                      onBlur={() => setFocusedField(null)}
+                      multiline
+                    >
+                      <TextInput
+                        style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
+                        placeholder={t("clozePlaceholderAfter")}
+                        placeholderTextColor="#c4cbd8"
+                        value={clozeAfter}
+                        onChangeText={setClozeAfter}
+                        onFocus={() => setFocusedField("cAfter")}
+                        onBlur={() => setFocusedField(null)}
+                        multiline
+                        textAlignVertical="top"
+                      />
+                    </InputRow>
+                  </Field>
+                </>
+              ) : (
+                <>
+                  <Field label={t("front")} required>
+                    <InputRow
+                      icon="align-left"
+                      focused={focusedField === "front"}
+                      onFocus={() => setFocusedField("front")}
+                      onBlur={() => setFocusedField(null)}
+                      multiline
+                    >
+                      <TextInput
+                        style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
+                        placeholder={t("frontPlaceholder")}
+                        placeholderTextColor="#c4cbd8"
+                        value={frontText}
+                        onChangeText={setFrontText}
+                        onFocus={() => setFocusedField("front")}
+                        onBlur={() => setFocusedField(null)}
+                        multiline
+                        textAlignVertical="top"
+                      />
+                      {frontText.length > 0 && (
+                        <Pressable
+                          onPress={() => setFrontText("")}
+                          hitSlop={8}
+                          style={{ marginTop: 2 }}
+                        >
+                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                        </Pressable>
+                      )}
+                    </InputRow>
+                  </Field>
+                  <Field label={t("back")} required>
+                    <InputRow
+                      icon="align-right"
+                      focused={focusedField === "back"}
+                      onFocus={() => setFocusedField("back")}
+                      onBlur={() => setFocusedField(null)}
+                      multiline
+                    >
+                      <TextInput
+                        style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
+                        placeholder={t("backPlaceholder")}
+                        placeholderTextColor="#c4cbd8"
+                        value={backText}
+                        onChangeText={setBackText}
+                        onFocus={() => setFocusedField("back")}
+                        onBlur={() => setFocusedField(null)}
+                        multiline
+                        textAlignVertical="top"
+                      />
+                      {backText.length > 0 && (
+                        <Pressable
+                          onPress={() => setBackText("")}
+                          hitSlop={8}
+                          style={{ marginTop: 2 }}
+                        >
+                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                        </Pressable>
+                      )}
+                    </InputRow>
+                  </Field>
+                  {!isEdit ? (
+                    <Pressable
+                      style={styles.revToggle}
+                      onPress={() => setCreateReversedPair((v) => !v)}
+                    >
+                      <Feather
+                        name={createReversedPair ? "check-square" : "square"}
+                        size={20}
+                        color={createReversedPair ? "#4255ff" : "#b0b8c8"}
+                      />
+                      <View style={{ flex: 1, gap: 4 }}>
+                        <Text style={styles.revToggleTitle}>
+                          {t("cardCreateReversedPair")}
+                        </Text>
+                        <Text style={styles.revToggleHint}>
+                          {t("cardCreateReversedHint")}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ) : null}
+                  {isEdit && pairMeta.pairId ? (
+                    <Text style={styles.revEditHint}>
+                      {t("cardReversiblePairEditNote")}
+                    </Text>
+                  ) : null}
+                </>
+              )}
+
+              <View style={styles.divider} />
+
               <Field label={t("frontImageUrl")}>
                 <InputRow
                   icon="link-2"
@@ -286,43 +756,43 @@ export default function AddCardScreen() {
                   )}
                 </InputRow>
               </Field>
-
-              {/* DIVIDER */}
-              <View style={styles.divider} />
-
-              {/* BACK TEXT */}
-              <Field label={t("back")} required>
-                <InputRow
-                  icon="align-right"
-                  focused={focusedField === "back"}
-                  onFocus={() => setFocusedField("back")}
-                  onBlur={() => setFocusedField(null)}
-                  multiline
-                >
-                  <TextInput
-                    style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
-                    placeholder={t("backPlaceholder")}
-                    placeholderTextColor="#c4cbd8"
-                    value={backText}
-                    onChangeText={setBackText}
-                    onFocus={() => setFocusedField("back")}
-                    onBlur={() => setFocusedField(null)}
-                    multiline
-                    textAlignVertical="top"
-                  />
-                  {backText.length > 0 && (
-                    <Pressable
-                      onPress={() => setBackText("")}
-                      hitSlop={8}
-                      style={{ marginTop: 2 }}
+              <Field label={t("mediaKindFront")}>
+                <View style={styles.typeRow}>
+                  <Pressable
+                    onPress={() => setMediaKindFront("image")}
+                    style={[
+                      styles.typeChip,
+                      mediaKindFront === "image" && styles.typeChipOn,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.typeChipTxt,
+                        mediaKindFront === "image" && styles.typeChipTxtOn,
+                      ]}
                     >
-                      <Feather name="x-circle" size={16} color="#d1d5db" />
-                    </Pressable>
-                  )}
-                </InputRow>
+                      {t("mediaKindImage")}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setMediaKindFront("audio")}
+                    style={[
+                      styles.typeChip,
+                      mediaKindFront === "audio" && styles.typeChipOn,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.typeChipTxt,
+                        mediaKindFront === "audio" && styles.typeChipTxtOn,
+                      ]}
+                    >
+                      {t("mediaKindAudio")}
+                    </Text>
+                  </Pressable>
+                </View>
               </Field>
 
-              {/* BACK IMAGE URL */}
               <Field label={t("backImageUrl")}>
                 <InputRow
                   icon="link-2"
@@ -348,8 +818,43 @@ export default function AddCardScreen() {
                   )}
                 </InputRow>
               </Field>
+              <Field label={t("mediaKindBack")}>
+                <View style={styles.typeRow}>
+                  <Pressable
+                    onPress={() => setMediaKindBack("image")}
+                    style={[
+                      styles.typeChip,
+                      mediaKindBack === "image" && styles.typeChipOn,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.typeChipTxt,
+                        mediaKindBack === "image" && styles.typeChipTxtOn,
+                      ]}
+                    >
+                      {t("mediaKindImage")}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setMediaKindBack("audio")}
+                    style={[
+                      styles.typeChip,
+                      mediaKindBack === "audio" && styles.typeChipOn,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.typeChipTxt,
+                        mediaKindBack === "audio" && styles.typeChipTxtOn,
+                      ]}
+                    >
+                      {t("mediaKindAudio")}
+                    </Text>
+                  </Pressable>
+                </View>
+              </Field>
 
-              {/* DIVIDER */}
               <View style={styles.divider} />
 
               {/* NOTES */}
@@ -385,6 +890,35 @@ export default function AddCardScreen() {
             </View>
 
             {/* ── BUTTONS ── */}
+            <View style={styles.previewActionWrap}>
+              <TouchableOpacity
+                style={[
+                  styles.btnPreviewStudy,
+                  !isValid && styles.btnPreviewStudyOff,
+                ]}
+                onPress={() => {
+                  setStudyPreviewPairSlot(1);
+                  setStudyPreviewShowBack(false);
+                  setStudyPreviewOpen(true);
+                }}
+                disabled={!isValid}
+                activeOpacity={0.85}
+              >
+                <Feather
+                  name="eye"
+                  size={18}
+                  color={isValid ? "#4255ff" : "#c4cbd8"}
+                />
+                <Text
+                  style={[
+                    styles.btnPreviewStudyTxt,
+                    !isValid && styles.btnPreviewStudyTxtOff,
+                  ]}
+                >
+                  {t("addCardPreviewStudy")}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.buttons}>
               <TouchableOpacity
                 style={styles.btnCancel}
@@ -419,6 +953,215 @@ export default function AddCardScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={studyPreviewOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setStudyPreviewOpen(false)}
+      >
+        <View style={styles.studyPreviewRoot}>
+          <TouchableOpacity
+            style={styles.studyPreviewBackdrop}
+            activeOpacity={1}
+            onPress={() => setStudyPreviewOpen(false)}
+          />
+          <View style={styles.studyPreviewCenter}>
+            <View style={styles.studyPreviewSheet}>
+            <View style={styles.studyPreviewHeader}>
+              <Text style={styles.studyPreviewTitle}>{t("addCardPreviewTitle")}</Text>
+              <Pressable
+                hitSlop={12}
+                onPress={() => setStudyPreviewOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel={t("addCardPreviewClose")}
+              >
+                <Feather name="x" size={22} color="#6b7280" />
+              </Pressable>
+            </View>
+            {showPairStudySwitcher ? (
+              <View style={styles.studyPreviewPairRow}>
+                <Pressable
+                  onPress={() => {
+                    setStudyPreviewPairSlot(1);
+                    setStudyPreviewShowBack(false);
+                  }}
+                  style={[
+                    styles.studyPreviewPairChip,
+                    studyPreviewPairSlot === 1 && styles.studyPreviewPairChipOn,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.studyPreviewPairChipTxt,
+                      studyPreviewPairSlot === 1 &&
+                        styles.studyPreviewPairChipTxtOn,
+                    ]}
+                  >
+                    {t("addCardPreviewPair1")}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setStudyPreviewPairSlot(2);
+                    setStudyPreviewShowBack(false);
+                  }}
+                  style={[
+                    styles.studyPreviewPairChip,
+                    studyPreviewPairSlot === 2 && styles.studyPreviewPairChipOn,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.studyPreviewPairChipTxt,
+                      studyPreviewPairSlot === 2 &&
+                        styles.studyPreviewPairChipTxtOn,
+                    ]}
+                  >
+                    {t("addCardPreviewPair2")}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.studyPreviewScrollInner}
+            >
+              <TouchableOpacity
+                activeOpacity={1}
+                style={styles.studyPreviewCard}
+                onPress={() => setStudyPreviewShowBack((v) => !v)}
+              >
+                <View style={styles.studyPreviewCardInner}>
+                  {cardType === "cloze" && isClozeGapComplete(clozePartsPreview) ? (
+                    <>
+                      {!studyPreviewShowBack &&
+                      (frontImageUrl.trim() ? (
+                        <CardSideMedia
+                          url={frontImageUrl.trim()}
+                          kind={effectiveMediaKind(
+                            frontImageUrl.trim(),
+                            mediaKindFront,
+                            "front",
+                            { mediaFront: mediaKindFront, mediaBack: mediaKindBack },
+                          )}
+                        />
+                      ) : null)}
+                      {studyPreviewShowBack &&
+                      (backImageUrl.trim() ? (
+                        <CardSideMedia
+                          url={backImageUrl.trim()}
+                          kind={effectiveMediaKind(
+                            backImageUrl.trim(),
+                            mediaKindBack,
+                            "back",
+                            { mediaFront: mediaKindFront, mediaBack: mediaKindBack },
+                          )}
+                        />
+                      ) : null)}
+                      {!studyPreviewShowBack ? (
+                        <AddCardStudyClozeFront parts={clozePartsPreview} />
+                      ) : (
+                        <AddCardStudyClozeBack parts={clozePartsPreview} />
+                      )}
+                    </>
+                  ) : cardType === "basic" ? (
+                    <>
+                      {studyPreviewPairSlot === 1 ? (
+                        <>
+                          {!studyPreviewShowBack &&
+                          (frontImageUrl.trim() ? (
+                            <CardSideMedia
+                              url={frontImageUrl.trim()}
+                              kind={effectiveMediaKind(
+                                frontImageUrl.trim(),
+                                mediaKindFront,
+                                "front",
+                                {
+                                  mediaFront: mediaKindFront,
+                                  mediaBack: mediaKindBack,
+                                },
+                              )}
+                            />
+                          ) : null)}
+                          {studyPreviewShowBack &&
+                          (backImageUrl.trim() ? (
+                            <CardSideMedia
+                              url={backImageUrl.trim()}
+                              kind={effectiveMediaKind(
+                                backImageUrl.trim(),
+                                mediaKindBack,
+                                "back",
+                                {
+                                  mediaFront: mediaKindFront,
+                                  mediaBack: mediaKindBack,
+                                },
+                              )}
+                            />
+                          ) : null)}
+                          <Text style={styles.studyPreviewCardTitle}>
+                            {studyPreviewShowBack ? backText.trim() : frontText.trim()}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          {!studyPreviewShowBack &&
+                          (backImageUrl.trim() ? (
+                            <CardSideMedia
+                              url={backImageUrl.trim()}
+                              kind={effectiveMediaKind(
+                                backImageUrl.trim(),
+                                mediaKindBack,
+                                "front",
+                                {
+                                  mediaFront: mediaKindBack,
+                                  mediaBack: mediaKindFront,
+                                },
+                              )}
+                            />
+                          ) : null)}
+                          {studyPreviewShowBack &&
+                          (frontImageUrl.trim() ? (
+                            <CardSideMedia
+                              url={frontImageUrl.trim()}
+                              kind={effectiveMediaKind(
+                                frontImageUrl.trim(),
+                                mediaKindFront,
+                                "back",
+                                {
+                                  mediaFront: mediaKindBack,
+                                  mediaBack: mediaKindFront,
+                                },
+                              )}
+                            />
+                          ) : null)}
+                          <Text style={styles.studyPreviewCardTitle}>
+                            {studyPreviewShowBack
+                              ? frontText.trim()
+                              : backText.trim()}
+                          </Text>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <Text style={styles.studyPreviewCardTitle}>
+                      {t("addCardPreviewIncomplete")}
+                    </Text>
+                  )}
+                  {studyPreviewShowBack && notes.trim() ? (
+                    <Text style={styles.studyPreviewNotes}>{notes.trim()}</Text>
+                  ) : null}
+                  {!studyPreviewShowBack ? (
+                    <Text style={styles.studyPreviewTapHint}>{t("showAnswer")}</Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            </ScrollView>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ConfirmModal
         visible={Boolean(errorModal)}
@@ -678,5 +1421,214 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: "#fff",
+  },
+  previewActionWrap: {
+    width: "100%",
+    marginTop: 4,
+  },
+  btnPreviewStudy: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: "#4255ff",
+  },
+  btnPreviewStudyOff: {
+    borderColor: "#e2e4ec",
+    opacity: 0.85,
+  },
+  btnPreviewStudyTxt: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#4255ff",
+  },
+  btnPreviewStudyTxtOff: {
+    color: "#c4cbd8",
+  },
+  studyPreviewRoot: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  studyPreviewBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  studyPreviewCenter: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 16,
+    zIndex: 1,
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
+  },
+  studyPreviewSheet: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    maxHeight: "88%",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  studyPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  studyPreviewTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#111827",
+    flex: 1,
+    marginRight: 8,
+  },
+  studyPreviewPairRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  studyPreviewPairChip: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#f7f8fb",
+    borderWidth: 1.5,
+    borderColor: "#e8eaee",
+    alignItems: "center",
+  },
+  studyPreviewPairChipOn: {
+    borderColor: "#4255ff",
+    backgroundColor: "#eff1ff",
+  },
+  studyPreviewPairChipTxt: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6b7280",
+    textAlign: "center",
+  },
+  studyPreviewPairChipTxtOn: {
+    color: "#4255ff",
+  },
+  studyPreviewScrollInner: {
+    padding: 16,
+    paddingBottom: 24,
+  },
+  studyPreviewCard: {
+    width: "100%",
+    minHeight: 200,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    borderLeftWidth: 6,
+    borderLeftColor: "#66BB6A",
+  },
+  studyPreviewCardInner: {
+    alignItems: "center",
+    width: "100%",
+  },
+  studyPreviewCardTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1f2937",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  studyPreviewNotes: {
+    fontSize: 15,
+    color: "#6b7280",
+    fontStyle: "italic",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  studyPreviewTapHint: {
+    fontSize: 14,
+    color: "#9ca3af",
+    marginTop: 16,
+  },
+
+  typeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  typeChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: "#f7f8fb",
+    borderWidth: 1.5,
+    borderColor: "#e8eaee",
+  },
+  typeChipOn: {
+    borderColor: "#4255ff",
+    backgroundColor: "#eff1ff",
+  },
+  typeChipTxt: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  typeChipTxtOn: {
+    color: "#4255ff",
+  },
+  clozeIntro: {
+    fontSize: 14,
+    color: "#4b5563",
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  inputClozeGapHint: {
+    minHeight: 56,
+    fontStyle: "italic",
+    fontWeight: "500",
+    color: "#4b5563",
+    textAlignVertical: "top",
+  },
+  inputClozeHidden: {
+    minHeight: 56,
+    fontWeight: "600",
+    color: "#111827",
+    textAlignVertical: "top",
+  },
+  revToggle: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  revToggleTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  revToggleHint: {
+    fontSize: 12,
+    color: "#9ca3af",
+    lineHeight: 17,
+  },
+  revEditHint: {
+    fontSize: 12,
+    color: "#6b7280",
+    lineHeight: 17,
+    marginTop: 4,
   },
 });

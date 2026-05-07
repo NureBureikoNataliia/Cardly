@@ -4,7 +4,7 @@ import {
   nextEasePermille,
   scheduleNextReview,
   type ReviewRating,
-} from "./ankiScheduler";
+} from "./reviewScheduler";
 import {
   type CardScheduleSnapshot,
   type GlobalSpacedRepetitionSettings,

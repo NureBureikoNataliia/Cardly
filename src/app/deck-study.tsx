@@ -1,43 +1,105 @@
+import { CardSideMedia } from "@/src/components/CardSideMedia";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { useLanguage } from "@/src/contexts/LanguageContext";
+import { useStudySettings } from "@/src/contexts/StudySettingsContext";
+import {
+    effectiveMediaKind,
+    getClozePartsFromCard,
+    isClozeGapComplete,
+    normalizeCardType,
+    parseCardExtra,
+    type ClozeParts,
+} from "@/src/lib/cardModel";
+import { formatScheduleLabel } from "@/src/lib/formatScheduleLabel";
+import { loadDueCardsForDeck, type DueCard } from "@/src/lib/reviewQueue";
+import {
+    submitCardReviewInvoke,
+    type SubmitCardReviewRating,
+} from "@/src/lib/submitCardReview";
+import { supabase } from "@/src/lib/supabase";
+import { scheduleAfterAnswer } from "@cardly/srs/cardScheduling";
+import {
+    applyRatingToProgressRow,
+    appSettingsRowToGlobal,
+    delayDaysForReview,
+    progressRowToSnapshot,
+} from "@cardly/srs/dbMapping";
+import type { AppSpacedRepetitionSettingsRow } from "@cardly/srs/dbTypes";
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, {
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import {
-  Alert,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { supabase } from "@/src/lib/supabase";
-import { useLanguage } from "@/src/contexts/LanguageContext";
-import { useAuth } from "@/src/contexts/AuthContext";
-import { useStudySettings } from "@/src/contexts/StudySettingsContext";
-import { formatScheduleLabel } from "@/src/lib/formatScheduleLabel";
-import {
-  applyRatingToProgressRow,
-  appSettingsRowToGlobal,
-  delayDaysForReview,
-  progressRowToSnapshot,
-} from "@cardly/srs/dbMapping";
-import type { AppSpacedRepetitionSettingsRow } from "@cardly/srs/dbTypes";
-import { scheduleAfterAnswer } from "@cardly/srs/cardScheduling";
-import {
-  loadDueCardsForDeck,
-  type DueCard,
-} from "@/src/lib/reviewQueue";
-import {
-  submitCardReviewInvoke,
-  type SubmitCardReviewRating,
-} from "@/src/lib/submitCardReview";
 
 const RATINGS: SubmitCardReviewRating[] = ["again", "hard", "good", "easy"];
 
-/** Same-session learning: show card again before this many seconds elapse (Anki-like intraday queue). */
+function ClozeFrontParts({ parts }: { parts: ClozeParts }) {
+  const gap =
+    parts.gapFront.trim().length > 0 ? (
+      <Text style={clozeTextStyles.gapHint}> {parts.gapFront.trim()} </Text>
+    ) : (
+      <Text style={clozeTextStyles.gap}> ▯▯▯ </Text>
+    );
+  return (
+    <Text style={clozeTextStyles.title}>
+      {parts.before}
+      {gap}
+      {parts.after}
+    </Text>
+  );
+}
+
+function ClozeBackParts({ parts }: { parts: ClozeParts }) {
+  return (
+    <Text style={clozeTextStyles.title}>
+      {parts.before}
+      <Text style={clozeTextStyles.answer}>{parts.hidden}</Text>
+      {parts.after}
+    </Text>
+  );
+}
+
+const clozeTextStyles = StyleSheet.create({
+  title: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1f2937",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  gap: {
+    color: "#9ca3af",
+    letterSpacing: 3,
+    textDecorationLine: "underline",
+  },
+  gapHint: {
+    color: "#4b5563",
+    fontStyle: "italic",
+    fontWeight: "500",
+  },
+  answer: {
+    fontWeight: "800",
+    color: "#059669",
+  },
+});
+
+/** Same-session learning: show card again before this many seconds elapse (intraday queue). */
 const SESSION_REQUEUE_MAX_SECONDS = 20 * 60;
 
 type ApiSubmitOutcome = {
@@ -48,7 +110,9 @@ type ApiSubmitOutcome = {
   ease_permille: number;
 };
 
-function shouldRequeueInSession(outcome: ApiSubmitOutcome | undefined): boolean {
+function shouldRequeueInSession(
+  outcome: ApiSubmitOutcome | undefined,
+): boolean {
   const s = outcome?.due_in_seconds_from_now;
   if (s == null || s <= 0) return false;
   return s <= SESSION_REQUEUE_MAX_SECONDS;
@@ -68,7 +132,8 @@ export default function DeckStudyScreen() {
   const { settings: studySettings } = useStudySettings();
 
   const [queue, setQueue] = useState<DueCard[]>([]);
-  const [settings, setSettings] = useState<AppSpacedRepetitionSettingsRow | null>(null);
+  const [settings, setSettings] =
+    useState<AppSpacedRepetitionSettingsRow | null>(null);
   const [showBack, setShowBack] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sessionComplete, setSessionComplete] = useState(false);
@@ -81,13 +146,18 @@ export default function DeckStudyScreen() {
       return;
     }
     setLoading(true);
-    const [{ data: settingsData, error: settingsError }, dueList] = await Promise.all([
-      supabase.from("app_spaced_repetition_settings").select("*").eq("id", 1).single(),
-      loadDueCardsForDeck(deckId, {
-        includeScheduledToday,
-        srsDayStartHour: studySettings.srsDayStartHour,
-      }),
-    ]);
+    const [{ data: settingsData, error: settingsError }, dueList] =
+      await Promise.all([
+        supabase
+          .from("app_spaced_repetition_settings")
+          .select("*")
+          .eq("id", 1)
+          .single(),
+        loadDueCardsForDeck(deckId, {
+          includeScheduledToday,
+          srsDayStartHour: studySettings.srsDayStartHour,
+        }),
+      ]);
 
     if (settingsError || !settingsData) {
       Alert.alert(t("error"), "SRS settings not found. Apply DB migrations.");
@@ -100,7 +170,13 @@ export default function DeckStudyScreen() {
     setShowBack(false);
     setSessionComplete(false);
     setLoading(false);
-  }, [deckId, user?.id, t, includeScheduledToday, studySettings.srsDayStartHour]);
+  }, [
+    deckId,
+    user?.id,
+    t,
+    includeScheduledToday,
+    studySettings.srsDayStartHour,
+  ]);
 
   useEffect(() => {
     loadSession();
@@ -195,7 +271,10 @@ export default function DeckStudyScreen() {
     return (
       <View style={styles.container}>
         <Text style={styles.emptyText}>{t("mustBeLoggedInStudy")}</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
         </TouchableOpacity>
       </View>
@@ -206,7 +285,10 @@ export default function DeckStudyScreen() {
     return (
       <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
         <Text style={styles.emptyText}>{t("noCardsToReview")}</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
         </TouchableOpacity>
       </View>
@@ -220,7 +302,10 @@ export default function DeckStudyScreen() {
           <Feather name="check-circle" size={64} color="#66BB6A" />
           <Text style={styles.completeTitle}>{t("reviewComplete")}</Text>
         </View>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
         </TouchableOpacity>
       </View>
@@ -232,8 +317,21 @@ export default function DeckStudyScreen() {
     .replace("{current}", "1")
     .replace("{total}", String(total));
 
+  const cardExtra = parseCardExtra(currentCard.card_extra);
+  const ctype = normalizeCardType(currentCard.card_type);
+  const clozeParts = getClozePartsFromCard(currentCard);
+  const clozeOk =
+    ctype === "cloze" && clozeParts && isClozeGapComplete(clozeParts);
+  const frontU = currentCard.front_media_url?.trim();
+  const backU = currentCard.back_media_url?.trim();
+
   return (
-    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
+    <View
+      style={[
+        styles.root,
+        { paddingTop: insets.top, paddingBottom: insets.bottom + 8 },
+      ]}
+    >
       <Text style={styles.counter}>{cardCounterText}</Text>
 
       <ScrollView
@@ -241,25 +339,68 @@ export default function DeckStudyScreen() {
         contentContainerStyle={styles.scrollInner}
         keyboardShouldPersistTaps="handled"
       >
-        <TouchableOpacity style={styles.card} onPress={handleCardPress} activeOpacity={1}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={handleCardPress}
+          activeOpacity={1}
+        >
           <View style={styles.cardInner}>
-            {showBack && currentCard.back_media_url ? (
-              <Image
-                source={{ uri: currentCard.back_media_url }}
-                style={styles.cardMedia}
-                resizeMode="contain"
-              />
-            ) : !showBack && currentCard.front_media_url ? (
-              <Image
-                source={{ uri: currentCard.front_media_url }}
-                style={styles.cardMedia}
-                resizeMode="contain"
-              />
-            ) : null}
-
-            <Text style={styles.cardTitle}>
-              {showBack ? currentCard.back_text : currentCard.front_text}
-            </Text>
+            {clozeOk ? (
+              <>
+                {!showBack && frontU ? (
+                  <CardSideMedia
+                    url={frontU}
+                    kind={effectiveMediaKind(
+                      frontU,
+                      cardExtra.mediaFront,
+                      "front",
+                      cardExtra,
+                    )}
+                  />
+                ) : null}
+                {showBack && backU ? (
+                  <CardSideMedia
+                    url={backU}
+                    kind={effectiveMediaKind(
+                      backU,
+                      cardExtra.mediaBack,
+                      "back",
+                      cardExtra,
+                    )}
+                  />
+                ) : null}
+                {!showBack ? <ClozeFrontParts parts={clozeParts} /> : null}
+                {showBack ? <ClozeBackParts parts={clozeParts} /> : null}
+              </>
+            ) : (
+              <>
+                {!showBack && frontU ? (
+                  <CardSideMedia
+                    url={frontU}
+                    kind={effectiveMediaKind(
+                      frontU,
+                      cardExtra.mediaFront,
+                      "front",
+                      cardExtra,
+                    )}
+                  />
+                ) : null}
+                {showBack && backU ? (
+                  <CardSideMedia
+                    url={backU}
+                    kind={effectiveMediaKind(
+                      backU,
+                      cardExtra.mediaBack,
+                      "back",
+                      cardExtra,
+                    )}
+                  />
+                ) : null}
+                <Text style={styles.cardTitle}>
+                  {showBack ? currentCard.back_text : currentCard.front_text}
+                </Text>
+              </>
+            )}
             {showBack && currentCard.notes ? (
               <Text style={styles.cardNotes}>{currentCard.notes}</Text>
             ) : null}
@@ -288,7 +429,9 @@ export default function DeckStudyScreen() {
             >
               <Text style={styles.ratingBtnText}>{t(rating)}</Text>
               {intervalLabels ? (
-                <Text style={styles.intervalHint}>{intervalLabels[rating]}</Text>
+                <Text style={styles.intervalHint}>
+                  {intervalLabels[rating]}
+                </Text>
               ) : null}
             </Pressable>
           ))}
@@ -381,13 +524,6 @@ const styles = StyleSheet.create({
   cardInner: {
     alignItems: "center",
     width: "100%",
-  },
-  cardMedia: {
-    width: "100%",
-    height: 160,
-    borderRadius: 10,
-    marginBottom: 12,
-    backgroundColor: "#f3f4f6",
   },
   cardTitle: {
     fontSize: 22,

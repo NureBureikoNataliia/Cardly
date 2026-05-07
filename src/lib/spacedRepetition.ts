@@ -20,7 +20,7 @@ export interface CardSchedule {
 }
 
 export interface StudySettings {
-  /** Local hour 0–23 when the SRS “day” rolls over (Anki-style next day starts at). */
+  /** Local hour 0–23 when the SRS “day” rolls over (next study day starts at). */
   srsDayStartHour: number;
   againIntervalMinutes: number;
   hardIntervalMinutes: number;

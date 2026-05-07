@@ -1,4 +1,4 @@
-export * from "./ankiScheduler";
+export * from "./reviewScheduler";
 export * from "./globalSettings";
 export * from "./cardScheduling";
 export * from "./dbTypes";
