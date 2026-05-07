@@ -232,6 +232,8 @@ export function AppLogo({ size = 34 }: { size?: number }) {
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useSidebarDrawer } from '@/src/contexts/SidebarDrawerContext';
+import { useColorScheme } from '@/src/components/useColorScheme';
+import Colors from '@/src/constants/Colors';
 import ConfirmModal from '@/src/components/ConfirmModal';
 
 const MINI_W = 62;
@@ -242,7 +244,19 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { signOut, isAdmin } = useAuth();
   const { t } = useLanguage();
+  const cs = useColorScheme();
   const [logoutModal, setLogoutModal] = useState(false);
+
+  const themed = {
+    surface: { backgroundColor: Colors[cs].surface },
+    divider: { backgroundColor: cs === 'dark' ? '#374151' : '#f3f4f6', borderRightColor: cs === 'dark' ? '#374151' : '#e5e7eb' },
+    brandName: { color: Colors[cs].text },
+    navItemActive: { backgroundColor: cs === 'dark' ? '#1e1b4b' : '#f4f6ff', borderColor: cs === 'dark' ? '#4338ca' : '#e8ecff' },
+    navItemHover: { backgroundColor: cs === 'dark' ? '#374151' : '#fafafa', borderColor: cs === 'dark' ? '#4b5563' : '#f1f5f9' },
+    navItemPressed: { backgroundColor: cs === 'dark' ? '#374151' : '#f1f5f9' },
+    navLabel: { color: cs === 'dark' ? '#9ca3af' : '#6b7280' },
+    borderRight: { borderRightColor: cs === 'dark' ? '#374151' : '#e5e7eb' },
+  };
 
   const navItems = useMemo(() => {
     const items: { key: string; icon: string; path: string }[] = [
@@ -351,12 +365,12 @@ export default function Sidebar() {
           accessibilityLabel={isCompact ? 'Menu' : undefined}
         >
           <AppLogo size={34} />
-          <Animated.Text style={[styles.brandName, { opacity: lo }]} numberOfLines={1}>
+          <Animated.Text style={[styles.brandName, themed.brandName, { opacity: lo }]} numberOfLines={1}>
             Cardly
           </Animated.Text>
         </Pressable>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, themed.divider]} />
 
         {navItems.map((item) => {
           const active =
@@ -369,18 +383,18 @@ export default function Sidebar() {
               // @ts-ignore
               style={({ pressed, hovered: h }: any) => [
                 styles.navItem,
-                active && styles.navItemActive,
-                h && !active && styles.navItemHover,
-                pressed && styles.navItemPressed,
+                active && [styles.navItemActive, themed.navItemActive],
+                h && !active && [styles.navItemHover, themed.navItemHover],
+                pressed && [styles.navItemPressed, themed.navItemPressed],
               ]}
               onPress={() => navigate(item.path)}
               accessibilityRole="button"
             >
               <View style={styles.iconWrap}>
-                <Feather name={item.icon as any} size={20} color={active ? '#4f46e5' : '#64748b'} />
+                <Feather name={item.icon as any} size={20} color={active ? '#4f46e5' : (cs === 'dark' ? '#9ca3af' : '#64748b')} />
               </View>
               <Animated.Text
-                style={[styles.navLabel, active && styles.navLabelActive, { opacity: lo }]}
+                style={[styles.navLabel, themed.navLabel, active && styles.navLabelActive, { opacity: lo }]}
                 numberOfLines={1}
               >
                 {t(item.key)}
@@ -390,14 +404,14 @@ export default function Sidebar() {
         })}
 
         <View style={{ flex: 1 }} />
-        <View style={styles.divider} />
+        <View style={[styles.divider, themed.divider]} />
 
         <Pressable
           // @ts-ignore
           style={({ pressed, hovered: h }: any) => [
             styles.navItem,
-            h && styles.navItemHover,
-            pressed && styles.navItemPressed,
+            h && [styles.navItemHover, themed.navItemHover],
+            pressed && [styles.navItemPressed, themed.navItemPressed],
           ]}
           onPress={() => setLogoutModal(true)}
           accessibilityRole="button"
@@ -424,7 +438,7 @@ export default function Sidebar() {
           <Pressable style={styles.backdrop} onPress={closeDrawer} accessibilityLabel="Close menu" />
         ) : null}
 
-        <Animated.View style={[styles.sidebarDrawer, { width: FULL_W, transform: [{ translateX: drawerX }] }]}>
+        <Animated.View style={[styles.sidebarDrawer, themed.surface, themed.borderRight, { width: FULL_W, transform: [{ translateX: drawerX }] }]}>
           {sidebarBody({ labelOpacityStyle: 1 })}
         </Animated.View>
 
@@ -446,7 +460,7 @@ export default function Sidebar() {
   return (
     <>
       <Animated.View
-        style={[styles.sidebar, { width: sidebarWidth }]}
+        style={[styles.sidebar, themed.surface, themed.borderRight, { width: sidebarWidth }]}
         {...({ onMouseEnter: expand, onMouseLeave: collapse } as object)}
       >
         {sidebarBody({ labelOpacityStyle: labelOpacity })}

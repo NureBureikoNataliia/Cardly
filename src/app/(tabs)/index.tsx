@@ -11,6 +11,8 @@ import { supabase } from '@/src/lib/supabase';
 import ConfirmModal from '@/src/components/ConfirmModal';
 import ListOfDecks from '@/src/components/ListOfDecks';
 import { Text, View } from '@/src/components/Themed';
+import { useColorScheme } from '@/src/components/useColorScheme';
+import Colors from '@/src/constants/Colors';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 
@@ -27,6 +29,7 @@ export default function MainScreen() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { t } = useLanguage();
+  const colorScheme = useColorScheme();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [collaboratedDeckIds, setCollaboratedDeckIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -276,14 +279,23 @@ export default function MainScreen() {
                 </Text>
               </RNView>
               <RNView style={styles.controlsContainer}>
-                <RNView style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
-                  <Feather name="search" size={16} color={searchFocused ? '#4255ff' : '#b0b8c8'} />
+                <RNView style={[
+                  styles.searchContainer,
+                  {
+                    backgroundColor: colorScheme === 'dark' ? '#374151' : '#f7f8fb',
+                    borderColor: colorScheme === 'dark' ? '#4b5563' : '#e8eaee',
+                  },
+                  searchFocused && (colorScheme === 'dark'
+                    ? { borderColor: '#6366f1', backgroundColor: '#1f2937' }
+                    : styles.searchContainerFocused),
+                ]}>
+                  <Feather name="search" size={16} color={searchFocused ? Colors[colorScheme].tint : '#b0b8c8'} />
                   <TextInput
-                    style={styles.searchInput}
+                    style={[styles.searchInput, { color: Colors[colorScheme].text }]}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                     placeholder={t('searchDecks')}
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={colorScheme === 'dark' ? '#6b7280' : '#c4cbd8'}
                     onFocus={() => setSearchFocused(true)}
                     onBlur={() => setSearchFocused(false)}
                   />
@@ -300,7 +312,11 @@ export default function MainScreen() {
                     {sortOptions.map(({ key, label }) => (
                       <Pressable
                         key={key}
-                        style={[styles.chip, sortBy === key && styles.chipActive]}
+                        style={[
+                          styles.chip,
+                          { backgroundColor: Colors[colorScheme].surface, borderColor: colorScheme === 'dark' ? '#4b5563' : '#e5e7eb' },
+                          sortBy === key && styles.chipActive,
+                        ]}
                         onPress={() => setSortBy(key)}
                       >
                         <Text style={[styles.chipText, sortBy === key && styles.chipTextActive]}>{label}</Text>
@@ -312,30 +328,21 @@ export default function MainScreen() {
                 <RNView style={styles.controlBlock}>
                   <Text style={styles.chipsLabel}>{t('filterBy')}</Text>
                   <RNView style={styles.chipsRow}>
-                    <Pressable
-                      style={[styles.chip, visibilityFilter === 'all' && styles.chipActive]}
-                      onPress={() => setVisibilityFilter('all')}
-                    >
-                      <Text style={[styles.chipText, visibilityFilter === 'all' && styles.chipTextActive]}>
-                        {t('all')}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.chip, visibilityFilter === 'public' && styles.chipActive]}
-                      onPress={() => setVisibilityFilter('public')}
-                    >
-                      <Text style={[styles.chipText, visibilityFilter === 'public' && styles.chipTextActive]}>
-                        {t('public')}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.chip, visibilityFilter === 'private' && styles.chipActive]}
-                      onPress={() => setVisibilityFilter('private')}
-                    >
-                      <Text style={[styles.chipText, visibilityFilter === 'private' && styles.chipTextActive]}>
-                        {t('private')}
-                      </Text>
-                    </Pressable>
+                    {(['all', 'public', 'private'] as const).map((f) => (
+                      <Pressable
+                        key={f}
+                        style={[
+                          styles.chip,
+                          { backgroundColor: Colors[colorScheme].surface, borderColor: colorScheme === 'dark' ? '#4b5563' : '#e5e7eb' },
+                          visibilityFilter === f && styles.chipActive,
+                        ]}
+                        onPress={() => setVisibilityFilter(f)}
+                      >
+                        <Text style={[styles.chipText, visibilityFilter === f && styles.chipTextActive]}>
+                          {t(f)}
+                        </Text>
+                      </Pressable>
+                    ))}
                   </RNView>
                 </RNView>
               </RNView>
@@ -357,10 +364,10 @@ export default function MainScreen() {
 
       <ConfirmModal
         visible={Boolean(deckToDelete)}
-        title="Delete deck"
-        message="Are you sure you want to delete this deck? All cards in it will be deleted."
-        confirmText="Delete"
-        cancelText="Cancel"
+        title={t('deleteDeck')}
+        message={t('deleteDeckConfirm')}
+        confirmText={t('delete')}
+        cancelText={t('cancel')}
         destructive
         icon="trash-2"
         onConfirm={performDeleteDeck}
@@ -383,7 +390,6 @@ export default function MainScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f6f7fb',
   },
   contentWrapper: {
     width: '100%',
@@ -412,7 +418,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#111827',
   },
   sectionCount: {
     fontSize: 13,
@@ -440,9 +445,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   searchContainerFocused: {
-    borderColor: '#4255ff',
+    borderColor: '#1a1a1a',
     backgroundColor: '#fff',
-    shadowColor: '#4255ff',
+    shadowColor: '#1a1a1a',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.14,
     shadowRadius: 8,
@@ -487,7 +492,6 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 13,
-    color: '#4b5563',
   },
   chipTextActive: {
     color: '#4255ff',
@@ -511,7 +515,6 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1f2937',
     marginBottom: 8,
   },
   emptySubtitle: {

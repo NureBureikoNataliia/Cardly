@@ -4,6 +4,7 @@ import {
   Image,
   ScrollView,
   StyleSheet,
+  Switch,
   TextInput,
   TouchableOpacity,
   View as RNView,
@@ -17,6 +18,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useStudySettings } from '@/src/contexts/StudySettingsContext';
 import { supabase } from '@/src/lib/supabase';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
 
 function authProviderLabel(user: User | null, t: (key: string) => string): string {
@@ -34,6 +36,7 @@ export default function SettingsScreen() {
   const { t } = useLanguage();
   const { user, signOut } = useAuth();
   const router = useRouter();
+  const C = useAppColors();
 
   const [username, setUsername] = useState((user?.user_metadata?.username as string) ?? '');
   const [avatarUrl, setAvatarUrl] = useState((user?.user_metadata?.avatar_url as string) ?? '');
@@ -51,6 +54,43 @@ export default function SettingsScreen() {
     'account'
   );
   const { settings: studySettings, updateSettings } = useStudySettings();
+
+  // ── Notification preferences ──
+  type NotifPrefs = {
+    studyReminder: boolean;
+    studyReminderHour: number;
+    streakReminder: boolean;
+    weeklySummary: boolean;
+    newCards: boolean;
+  };
+  const defaultNotifPrefs: NotifPrefs = {
+    studyReminder: false,
+    studyReminderHour: 9,
+    streakReminder: true,
+    weeklySummary: false,
+    newCards: true,
+  };
+  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(defaultNotifPrefs);
+  const [savingNotif, setSavingNotif] = useState(false);
+  const [notifMsg, setNotifMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const saved = user.user_metadata?.notifications as NotifPrefs | undefined;
+    if (saved) setNotifPrefs({ ...defaultNotifPrefs, ...saved });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const handleSaveNotif = async (patch: Partial<NotifPrefs>) => {
+    const next = { ...notifPrefs, ...patch };
+    setNotifPrefs(next);
+    setSavingNotif(true);
+    setNotifMsg(null);
+    const { error: e } = await updateMetadata({ notifications: next as unknown as string });
+    setSavingNotif(false);
+    setNotifMsg(e ? t('notifSaveError') : t('notifSaved'));
+    setTimeout(() => setNotifMsg(null), 3000);
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -162,49 +202,36 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentOuter}><View style={styles.content}>
+    <ScrollView style={[styles.container, { backgroundColor: C.bg }]} contentContainerStyle={styles.contentOuter}><View style={styles.content}>
       <Text style={styles.title}>{t('account')}</Text>
 
-      <View style={styles.topMenuCard}>
+      <View style={[styles.topMenuCard, { backgroundColor: C.surface, borderColor: C.border }]}>
         <Text style={styles.topMenuTitle}>{t('settings')}</Text>
-        <Text style={styles.topMenuSubtitle}>{t('settingsMenuSubtitle')}</Text>
+        <Text style={[styles.topMenuSubtitle, { color: C.textSub }]}>{t('settingsMenuSubtitle')}</Text>
         <RNView style={styles.topMenuTabs}>
-          <TouchableOpacity
-            style={[styles.topMenuTab, activeSection === 'account' && styles.topMenuTabActive]}
-            onPress={() => setActiveSection('account')}
-          >
-            <Text style={[styles.topMenuTabText, activeSection === 'account' && styles.topMenuTabTextActive]}>
-              {t('accountSettingsTab')}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.topMenuTab, activeSection === 'notifications' && styles.topMenuTabActive]}
-            onPress={() => setActiveSection('notifications')}
-          >
-            <Text
-              style={[
-                styles.topMenuTabText,
-                activeSection === 'notifications' && styles.topMenuTabTextActive,
-              ]}
-            >
-              {t('notificationsTab')}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.topMenuTab, activeSection === 'learning' && styles.topMenuTabActive]}
-            onPress={() => setActiveSection('learning')}
-          >
-            <Text
-              style={[styles.topMenuTabText, activeSection === 'learning' && styles.topMenuTabTextActive]}
-            >
-              {t('learningTab')}
-            </Text>
-          </TouchableOpacity>
+          {(['account', 'notifications', 'learning'] as const).map((sec) => {
+            const isActive = activeSection === sec;
+            return (
+              <TouchableOpacity
+                key={sec}
+                style={[
+                  styles.topMenuTab,
+                  { backgroundColor: C.surface, borderColor: C.border },
+                  isActive && { backgroundColor: C.isDark ? C.tint : '#111827', borderColor: C.isDark ? C.tint : '#111827' },
+                ]}
+                onPress={() => setActiveSection(sec)}
+              >
+                <Text style={[styles.topMenuTabText, isActive && styles.topMenuTabTextActive]}>
+                  {sec === 'account' ? t('accountSettingsTab') : sec === 'notifications' ? t('notificationsTab') : t('learningTab')}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </RNView>
       </View>
 
       {activeSection === 'account' ? (
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
         <Text style={styles.sectionHeader}>{t('account')}</Text>
 
         <RNView style={styles.accountTopRow}>
@@ -216,8 +243,8 @@ export default function SettingsScreen() {
                 <Text style={styles.avatarFallbackText}>{avatarInitial}</Text>
               </RNView>
             )}
-            <TouchableOpacity style={styles.avatarEditButton} onPress={() => setEditingField('avatar')}>
-              <Feather name="edit-2" size={16} color="#111827" />
+            <TouchableOpacity style={[styles.avatarEditButton, { backgroundColor: C.surface, borderColor: C.border }]} onPress={() => setEditingField('avatar')}>
+              <Feather name="edit-2" size={16} color={C.text} />
             </TouchableOpacity>
           </RNView>
         </RNView>
@@ -226,10 +253,11 @@ export default function SettingsScreen() {
           <RNView style={styles.editBlock}>
             <Text style={styles.fieldLabel}>{t('avatarUrl')}</Text>
             <TextInput
-              style={styles.inlineInput}
+              style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
               value={avatarUrl}
               onChangeText={setAvatarUrl}
               placeholder="https://..."
+              placeholderTextColor={C.placeholder}
               autoCapitalize="none"
               editable={!savingAvatar && !deletingAccount}
             />
@@ -239,7 +267,7 @@ export default function SettingsScreen() {
                 onPress={handleSaveAvatar}
                 disabled={savingAvatar || deletingAccount}
               >
-                {savingAvatar ? <ActivityIndicator color="#374151" /> : <Text style={styles.buttonSecondaryText}>{t('save')}</Text>}
+                {savingAvatar ? <ActivityIndicator color={C.text} /> : <Text style={[styles.buttonSecondaryText, { color: C.text }]}>{t('save')}</Text>}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.buttonGhost}
@@ -252,7 +280,7 @@ export default function SettingsScreen() {
           </RNView>
         )}
 
-        <RNView style={styles.securitySection}>
+          <RNView style={[styles.securitySection, { borderTopColor: C.border }]}>
           <Text style={styles.securityTitle}>{t('accountSecurity')}</Text>
 
           <RNView style={styles.infoRow}>
@@ -260,10 +288,11 @@ export default function SettingsScreen() {
               <Text style={styles.infoLabel}>{t('username')}</Text>
               {editingField === 'username' ? (
                 <TextInput
-                  style={styles.inlineInput}
+                  style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
                   value={username}
                   onChangeText={setUsername}
                   placeholder={t('username')}
+                  placeholderTextColor={C.placeholder}
                   autoCapitalize="none"
                   editable={!savingUsername && !deletingAccount}
                 />
@@ -279,9 +308,9 @@ export default function SettingsScreen() {
                   disabled={savingUsername || deletingAccount}
                 >
                   {savingUsername ? (
-                    <ActivityIndicator color="#374151" />
+                    <ActivityIndicator color={C.text} />
                   ) : (
-                    <Text style={styles.buttonSecondaryText}>{t('save')}</Text>
+                    <Text style={[styles.buttonSecondaryText, { color: C.text }]}>{t('save')}</Text>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -294,11 +323,11 @@ export default function SettingsScreen() {
               </RNView>
             ) : (
               <TouchableOpacity
-                style={styles.buttonOutline}
+                style={[styles.buttonOutline, { backgroundColor: C.surface, borderColor: C.border }]}
                 onPress={() => setEditingField('username')}
                 disabled={deletingAccount}
               >
-                <Text style={styles.buttonOutlineText}>{t('change')}</Text>
+                <Text style={[styles.buttonOutlineText, { color: C.text }]}>{t('change')}</Text>
               </TouchableOpacity>
             )}
           </RNView>
@@ -308,10 +337,11 @@ export default function SettingsScreen() {
               <Text style={styles.infoLabel}>{t('email')}</Text>
               {editingField === 'email' ? (
                 <TextInput
-                  style={styles.inlineInput}
+                  style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
                   value={email}
                   onChangeText={setEmail}
                   placeholder={t('email')}
+                  placeholderTextColor={C.placeholder}
                   autoCapitalize="none"
                   keyboardType="email-address"
                   editable={!savingEmail && !deletingAccount}
@@ -328,9 +358,9 @@ export default function SettingsScreen() {
                   disabled={savingEmail || deletingAccount}
                 >
                   {savingEmail ? (
-                    <ActivityIndicator color="#374151" />
+                    <ActivityIndicator color={C.text} />
                   ) : (
-                    <Text style={styles.buttonSecondaryText}>{t('save')}</Text>
+                    <Text style={[styles.buttonSecondaryText, { color: C.text }]}>{t('save')}</Text>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -343,11 +373,11 @@ export default function SettingsScreen() {
               </RNView>
             ) : (
               <TouchableOpacity
-                style={styles.buttonOutline}
+                style={[styles.buttonOutline, { backgroundColor: C.surface, borderColor: C.border }]}
                 onPress={() => setEditingField('email')}
                 disabled={deletingAccount}
               >
-                <Text style={styles.buttonOutlineText}>{t('change')}</Text>
+                <Text style={[styles.buttonOutlineText, { color: C.text }]}>{t('change')}</Text>
               </TouchableOpacity>
             )}
           </RNView>
@@ -382,18 +412,137 @@ export default function SettingsScreen() {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
       ) : activeSection === 'notifications' ? (
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
           <Text style={styles.sectionHeader}>{t('notificationsTab')}</Text>
-          <Text style={styles.infoSubText}>{t('notificationsPlaceholder')}</Text>
+
+          {/* Browser note */}
+          <RNView style={styles.notifNote}>
+            <Feather name="info" size={14} color="#6366f1" />
+            <Text style={styles.notifNoteTxt}>{t('notifBrowserNote')}</Text>
+          </RNView>
+
+          {/* Study reminder */}
+          <RNView style={styles.notifRow}>
+            <RNView style={styles.notifRowLeft}>
+              <RNView style={styles.notifIconWrap}>
+                <Feather name="bell" size={18} color="#6366f1" />
+              </RNView>
+              <RNView style={styles.notifRowText}>
+                <Text style={styles.infoLabel}>{t('notifStudyReminder')}</Text>
+                <Text style={styles.infoSubText}>{t('notifStudyReminderDesc')}</Text>
+              </RNView>
+            </RNView>
+            <Switch
+              value={notifPrefs.studyReminder}
+              onValueChange={v => handleSaveNotif({ studyReminder: v })}
+              trackColor={{ false: '#e5e7eb', true: '#a5b4fc' }}
+              thumbColor={notifPrefs.studyReminder ? '#6366f1' : '#f4f4f5'}
+            />
+          </RNView>
+
+          {/* Time picker (visible only when study reminder is on) */}
+          {notifPrefs.studyReminder && (
+            <RNView style={styles.notifTimeRow}>
+              <Text style={styles.fieldLabel}>{t('notifStudyTime')}</Text>
+              <RNView style={styles.srsHourRow}>
+                <TouchableOpacity
+                  style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
+                  onPress={() => handleSaveNotif({ studyReminderHour: (notifPrefs.studyReminderHour + 23) % 24 })}
+                >
+                  <Feather name="minus" size={20} color={C.text} />
+                </TouchableOpacity>
+                <Text style={[styles.srsHourValue, { color: C.text }]}>
+                  {String(notifPrefs.studyReminderHour).padStart(2, '0')}:00
+                </Text>
+                <TouchableOpacity
+                  style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
+                  onPress={() => handleSaveNotif({ studyReminderHour: (notifPrefs.studyReminderHour + 1) % 24 })}
+                >
+                  <Feather name="plus" size={20} color={C.text} />
+                </TouchableOpacity>
+              </RNView>
+            </RNView>
+          )}
+
+          <RNView style={styles.notifDivider} />
+
+          {/* Streak reminder */}
+          <RNView style={styles.notifRow}>
+            <RNView style={styles.notifRowLeft}>
+              <RNView style={[styles.notifIconWrap, { backgroundColor: '#fef3c7' }]}>
+                <Feather name="zap" size={18} color="#d97706" />
+              </RNView>
+              <RNView style={styles.notifRowText}>
+                <Text style={styles.infoLabel}>{t('notifStreakReminder')}</Text>
+                <Text style={styles.infoSubText}>{t('notifStreakReminderDesc')}</Text>
+              </RNView>
+            </RNView>
+            <Switch
+              value={notifPrefs.streakReminder}
+              onValueChange={v => handleSaveNotif({ streakReminder: v })}
+              trackColor={{ false: '#e5e7eb', true: '#fde68a' }}
+              thumbColor={notifPrefs.streakReminder ? '#d97706' : '#f4f4f5'}
+            />
+          </RNView>
+
+          <RNView style={styles.notifDivider} />
+
+          {/* New cards */}
+          <RNView style={styles.notifRow}>
+            <RNView style={styles.notifRowLeft}>
+              <RNView style={[styles.notifIconWrap, { backgroundColor: '#d1fae5' }]}>
+                <Feather name="layers" size={18} color="#059669" />
+              </RNView>
+              <RNView style={styles.notifRowText}>
+                <Text style={styles.infoLabel}>{t('notifNewCards')}</Text>
+                <Text style={styles.infoSubText}>{t('notifNewCardsDesc')}</Text>
+              </RNView>
+            </RNView>
+            <Switch
+              value={notifPrefs.newCards}
+              onValueChange={v => handleSaveNotif({ newCards: v })}
+              trackColor={{ false: '#e5e7eb', true: '#a7f3d0' }}
+              thumbColor={notifPrefs.newCards ? '#059669' : '#f4f4f5'}
+            />
+          </RNView>
+
+          <RNView style={styles.notifDivider} />
+
+          {/* Weekly summary */}
+          <RNView style={styles.notifRow}>
+            <RNView style={styles.notifRowLeft}>
+              <RNView style={[styles.notifIconWrap, { backgroundColor: '#fce7f3' }]}>
+                <Feather name="bar-chart-2" size={18} color="#db2777" />
+              </RNView>
+              <RNView style={styles.notifRowText}>
+                <Text style={styles.infoLabel}>{t('notifWeeklySummary')}</Text>
+                <Text style={styles.infoSubText}>{t('notifWeeklySummaryDesc')}</Text>
+              </RNView>
+            </RNView>
+            <Switch
+              value={notifPrefs.weeklySummary}
+              onValueChange={v => handleSaveNotif({ weeklySummary: v })}
+              trackColor={{ false: '#e5e7eb', true: '#fbcfe8' }}
+              thumbColor={notifPrefs.weeklySummary ? '#db2777' : '#f4f4f5'}
+            />
+          </RNView>
+
+          {/* Status message */}
+          {savingNotif && <ActivityIndicator color="#6366f1" style={{ alignSelf: 'flex-start' }} />}
+          {notifMsg && (
+            <Text style={notifMsg === t('notifSaved') ? styles.successText : styles.errorText}>
+              {notifMsg}
+            </Text>
+          )}
         </View>
       ) : (
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
           <Text style={styles.sectionHeader}>{t('studySettings')}</Text>
           <Text style={styles.fieldLabel}>{t('srsDayStartTitle')}</Text>
           <Text style={styles.infoSubText}>{t('srsDayStartHint')}</Text>
           <RNView style={styles.srsHourRow}>
             <TouchableOpacity
-              style={styles.srsHourButton}
+              style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() =>
                 void updateSettings({
                   srsDayStartHour: (studySettings.srsDayStartHour + 23) % 24,
@@ -402,13 +551,13 @@ export default function SettingsScreen() {
               accessibilityRole="button"
               accessibilityLabel={t('srsDayStartTitle')}
             >
-              <Feather name="minus" size={22} color="#111827" />
+              <Feather name="minus" size={22} color={C.text} />
             </TouchableOpacity>
-            <Text style={styles.srsHourValue} accessibilityLiveRegion="polite">
+            <Text style={[styles.srsHourValue, { color: C.text }]} accessibilityLiveRegion="polite">
               {String(studySettings.srsDayStartHour).padStart(2, '0')}:00
             </Text>
             <TouchableOpacity
-              style={styles.srsHourButton}
+              style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() =>
                 void updateSettings({
                   srsDayStartHour: (studySettings.srsDayStartHour + 1) % 24,
@@ -417,7 +566,7 @@ export default function SettingsScreen() {
               accessibilityRole="button"
               accessibilityLabel={t('srsDayStartTitle')}
             >
-              <Feather name="plus" size={22} color="#111827" />
+              <Feather name="plus" size={22} color={C.text} />
             </TouchableOpacity>
           </RNView>
         </View>
@@ -450,7 +599,7 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
-    maxWidth: 900,
+    maxWidth: 1104,
     paddingHorizontal: 16,
     paddingBottom: 36,
     gap: 12,
@@ -466,11 +615,9 @@ const styles = StyleSheet.create({
   topMenuTitle: {
     fontSize: 34,
     fontWeight: '700',
-    color: '#111827',
   },
   topMenuSubtitle: {
     fontSize: 16,
-    color: '#374151',
     marginTop: -6,
   },
   topMenuTabs: {
@@ -492,7 +639,6 @@ const styles = StyleSheet.create({
   },
   topMenuTabText: {
     fontSize: 16,
-    color: '#111827',
     fontWeight: '600',
   },
   topMenuTabTextActive: {
@@ -504,15 +650,14 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 18,
-    gap: 14,
+    padding: 20,
+    gap: 18,
     borderWidth: 1,
     borderColor: '#eceff3',
   },
   sectionHeader: {
     fontSize: 34,
     fontWeight: '700',
-    color: '#111827',
   },
   accountTopRow: {
     flexDirection: 'row',
@@ -566,7 +711,6 @@ const styles = StyleSheet.create({
   securityTitle: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#111827',
   },
   infoRow: {
     flexDirection: 'row',
@@ -581,15 +725,12 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
   },
   infoValue: {
     fontSize: 16,
-    color: '#111827',
   },
   infoSubText: {
     fontSize: 14,
-    color: '#111827',
     lineHeight: 20,
   },
   inlineInput: {
@@ -616,7 +757,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   buttonOutlineText: {
-    color: '#111827',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -680,6 +820,26 @@ const styles = StyleSheet.create({
     color: '#dc2626',
     fontSize: 14,
   },
+  notifNote: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: '#EEF2FF', borderRadius: 10,
+    padding: 12,
+  },
+  notifNoteTxt: { flex: 1, fontSize: 13, color: '#4338ca', lineHeight: 18 },
+  notifRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', gap: 12,
+    paddingVertical: 10,
+  },
+  notifRowLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  notifIconWrap: {
+    width: 46, height: 46, borderRadius: 14,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  notifRowText: { flex: 1, gap: 5 },
+  notifDivider: { height: 1, backgroundColor: '#f3f4f6' },
+  notifTimeRow: { paddingLeft: 60, gap: 8 },
   srsHourRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -700,7 +860,6 @@ const styles = StyleSheet.create({
   srsHourValue: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
     minWidth: 88,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],

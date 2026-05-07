@@ -33,6 +33,7 @@ import {
   normalizeCardType,
   parseCardExtra,
 } from "@/src/lib/cardModel";
+import { useAppColors } from "@/src/contexts/ThemeContext";
 
 /** Web: hide browser default focus outline on TextInput (RN typings omit outlineStyle "none"). */
 const webTextInputNoOutline: TextStyle | undefined =
@@ -105,6 +106,7 @@ export default function AddCardScreen() {
       : null;
   const { t } = useLanguage();
   const { user } = useAuth();
+  const C = useAppColors();
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -451,7 +453,7 @@ export default function AddCardScreen() {
   /* ── Loading state ── */
   if (isLoading) {
     return (
-      <View style={styles.loadingWrap}>
+      <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
         <ActivityIndicator size="large" color="#4255ff" />
       </View>
     );
@@ -460,15 +462,15 @@ export default function AddCardScreen() {
   /* ── Deck not found ── */
   if (!deck) {
     return (
-      <View style={styles.loadingWrap}>
-        <Text style={{ color: "#6b7280", marginBottom: 16 }}>
+      <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
+        <Text style={{ color: C.textSub, marginBottom: 16 }}>
           {error ?? t("deckNotFound")}
         </Text>
         <TouchableOpacity
-          style={styles.btnCancel}
+          style={[styles.btnCancel, { backgroundColor: C.surface, borderColor: C.border }]}
           onPress={() => router.back()}
         >
-          <Text style={styles.btnCancelTxt}>{t("goBack")}</Text>
+          <Text style={[styles.btnCancelTxt, { color: C.textSub }]}>{t("goBack")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -478,12 +480,12 @@ export default function AddCardScreen() {
     <>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1, backgroundColor: "#f5f6fa" }}
+        style={{ flex: 1, backgroundColor: C.bg }}
       >
         <ScrollView
           contentContainerStyle={styles.scrollOuter}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={Platform.OS === 'web'}
         >
           <View style={styles.formContainer}>
             {/* ── HERO HEADER ── */}
@@ -496,17 +498,17 @@ export default function AddCardScreen() {
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.heroTitle}>
+                <Text style={[styles.heroTitle, { color: C.text }]}>
                   {isEdit ? t("editCard") : t("addCard")}
                 </Text>
-                <Text style={styles.heroSub} numberOfLines={1}>
+                <Text style={[styles.heroSub, { color: C.textSub }]} numberOfLines={1}>
                   {deck.title}
                 </Text>
               </View>
             </View>
 
             {/* ── FORM CARD ── */}
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: C.surface }]}>
               <Field label={t("cardTypeLabel")}>
                 <View style={styles.typeRow}>
                   {(
@@ -739,9 +741,9 @@ export default function AddCardScreen() {
                   onBlur={() => setFocusedField(null)}
                 >
                   <TextInput
-                    style={[styles.input, webTextInputNoOutline]}
+                    style={[styles.input, webTextInputNoOutline, { color: C.text }]}
                     placeholder="https://..."
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={frontImageUrl}
                     onChangeText={setFrontImageUrl}
                     onFocus={() => setFocusedField("frontImg")}
@@ -801,9 +803,9 @@ export default function AddCardScreen() {
                   onBlur={() => setFocusedField(null)}
                 >
                   <TextInput
-                    style={[styles.input, webTextInputNoOutline]}
+                    style={[styles.input, webTextInputNoOutline, { color: C.text }]}
                     placeholder="https://..."
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={backImageUrl}
                     onChangeText={setBackImageUrl}
                     onFocus={() => setFocusedField("backImg")}
@@ -867,9 +869,9 @@ export default function AddCardScreen() {
                   multiline
                 >
                   <TextInput
-                    style={[styles.input, styles.inputNotes, webTextInputNoOutline]}
+                    style={[styles.input, styles.inputNotes, webTextInputNoOutline, { color: C.text }]}
                     placeholder={t("notesPlaceholder")}
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={notes}
                     onChangeText={setNotes}
                     onFocus={() => setFocusedField("notes")}
@@ -921,11 +923,11 @@ export default function AddCardScreen() {
             </View>
             <View style={styles.buttons}>
               <TouchableOpacity
-                style={styles.btnCancel}
+                style={[styles.btnCancel, { backgroundColor: C.surface, borderColor: C.border }]}
                 onPress={() => router.back()}
                 activeOpacity={0.7}
               >
-                <Text style={styles.btnCancelTxt}>{t("cancel")}</Text>
+                <Text style={[styles.btnCancelTxt, { color: C.textSub }]}>{t("cancel")}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1180,18 +1182,23 @@ export default function AddCardScreen() {
 function Field({
   label,
   required,
+  labelRight,
   children,
 }: {
   label: string;
   required?: boolean;
+  labelRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <View style={{ gap: 7 }}>
-      <Text style={styles.fieldLabel}>
-        {label}
-        {required && <Text style={{ color: "#ef4444" }}> *</Text>}
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={styles.fieldLabel}>
+          {label}
+          {required && <Text style={{ color: "#ef4444" }}> *</Text>}
+        </Text>
+        {labelRight}
+      </View>
       {children}
     </View>
   );
@@ -1212,18 +1219,20 @@ function InputRow({
   multiline?: boolean;
   children: React.ReactNode;
 }) {
+  const C = useAppColors();
   return (
     <View
       style={[
         styles.inputRow,
+        { backgroundColor: C.inputBg, borderColor: C.inputBorder },
         multiline && styles.inputRowMulti,
-        focused && styles.inputRowFocused,
+        focused && [styles.inputRowFocused, C.isDark && { backgroundColor: C.surface, borderColor: '#6366f1' }],
       ]}
     >
       <Feather
         name={icon}
         size={16}
-        color={focused ? "#4255ff" : "#b0b8c8"}
+        color={focused ? C.tint : "#b0b8c8"}
         style={multiline ? { marginTop: 3 } : undefined}
       />
       {children}
@@ -1237,7 +1246,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f6fa",
   },
 
   scrollOuter: {
@@ -1313,6 +1321,20 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
 
+  aiBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  aiBtnTxt: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
   /* INPUT ROW */
   inputRow: {
     flexDirection: "row",
@@ -1330,9 +1352,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   inputRowFocused: {
-    borderColor: "#4255ff",
+    borderColor: "#1a1a1a",
     backgroundColor: "#fff",
-    shadowColor: "#4255ff",
+    shadowColor: "#1a1a1a",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.14,
     shadowRadius: 8,

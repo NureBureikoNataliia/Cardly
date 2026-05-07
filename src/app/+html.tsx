@@ -35,4 +35,38 @@ body {
   body {
     background-color: #000;
   }
+}
+*:focus {
+  outline-color: #1a1a1a !important;
+}
+input:focus, textarea:focus, select:focus {
+  outline-color: #1a1a1a !important;
+}
+
+/* ── Scrollbar visibility ── */
+html, body, * {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(0,0,0,0.22) transparent !important;
+}
+::-webkit-scrollbar {
+  display: block !important;
+  width: 8px !important;
+  height: 8px !important;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.2);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.38);
+  background-clip: content-box;
+  border: 2px solid transparent;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }`;

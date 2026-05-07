@@ -1,19 +1,22 @@
 import React, { useRef, useState } from 'react';
 import {
-  FlatList,
-  Image,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    FlatList,
+    Image,
+    Modal,
+    Platform,
+    Pressable,
+    StyleSheet,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from 'react-native';
 
 import { Deck } from '@/assets/data/decks';
 import { Text } from '@/src/components/Themed';
+import { useColorScheme } from '@/src/components/useColorScheme';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useAppColors } from '@/src/contexts/ThemeContext';
+import Colors from '@/src/constants/Colors';
 import Feather from '@expo/vector-icons/Feather';
 
 export interface ListOfDecksProps {
@@ -64,7 +67,10 @@ function DeckCardInner({
 }) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuLayout, setMenuLayout] = useState<{ x: number; y: number } | null>(null);
+  const [imgError, setImgError] = useState(false);
   const menuButtonRef = useRef<View>(null);
+  const cs = useColorScheme();
+  const C = useAppColors();
 
   const openMenu = () => {
     menuButtonRef.current?.measureInWindow((x, y, width, height) => {
@@ -90,18 +96,23 @@ function DeckCardInner({
   };
 
   return (
-    <View style={[styles.card, isGrid && styles.cardGrid]}>
+    <View style={[styles.card, isGrid && styles.cardGrid, { backgroundColor: Colors[cs].surface }]}>
       <TouchableOpacity
         style={[styles.cardTouchable, isGrid && styles.cardTouchableGrid]}
         onPress={onPress}
         activeOpacity={0.85}
         accessibilityRole="button"
       >
-        <View style={styles.coverWrap}>
-          {hasCover ? (
-            <Image source={{ uri: item.cover_image_url! }} style={styles.cover} resizeMode="cover" />
+        <View style={[styles.coverWrap, { backgroundColor: cs === 'dark' ? '#374151' : '#e8ecf2' }]}>
+          {hasCover && !imgError ? (
+            <Image
+              source={{ uri: item.cover_image_url! }}
+              style={styles.cover}
+              resizeMode="cover"
+              onError={() => setImgError(true)}
+            />
           ) : (
-            <View style={styles.coverPlaceholder}>
+            <View style={[styles.coverPlaceholder, { backgroundColor: cs === 'dark' ? '#374151' : '#eef1f6' }]}>
               <Feather name="image" size={28} color="#b8c0d0" />
             </View>
           )}
@@ -113,11 +124,11 @@ function DeckCardInner({
           <View style={[styles.cardBody, isGrid && styles.cardBodyGrid]}>
             <View style={isGrid ? styles.titleSlot : undefined}>
               <View style={styles.titleRow}>
-                <Text style={[styles.title, { flex: 1 }]} numberOfLines={2}>
+                <Text style={[styles.title, { flex: 1, color: C.text }]} numberOfLines={2}>
                   {item.title}
                 </Text>
                 {isCollaborated && (
-                  <View style={styles.collabBadge}>
+                  <View style={[styles.collabBadge, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF' }]}>
                     <Feather name="users" size={10} color="#6366f1" />
                     <Text style={styles.collabBadgeTxt}>{t('collaborators')}</Text>
                   </View>
@@ -127,14 +138,14 @@ function DeckCardInner({
             {(item.description || isGrid) && (
               <View style={isGrid ? styles.descriptionSlot : undefined}>
                 <Text
-                  style={[styles.description, isGrid && styles.descriptionInGrid]}
+                  style={[styles.description, isGrid && styles.descriptionInGrid, { color: C.textSub }]}
                   numberOfLines={2}
                 >
                   {item.description ? item.description : '\u00a0'}
                 </Text>
               </View>
             )}
-            <Text style={styles.meta}>
+            <Text style={[styles.meta, { color: C.textMuted }]}>
               {count} {count !== 1 ? t('cards') : t('card')}
               {item.is_public ? ` • ${t('public')}` : ` • ${t('private')}`}
             </Text>
@@ -176,17 +187,17 @@ function DeckCardInner({
       >
         <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
           {menuLayout && (
-            <View style={[styles.menuCard, { left: menuLayout.x, top: menuLayout.y }]}>
+            <View style={[styles.menuCard, { left: menuLayout.x, top: menuLayout.y, backgroundColor: Colors[cs].surface }]}>
               {readOnly && onReportDeck ? (
                 <TouchableOpacity style={styles.menuItem} onPress={handleReport}>
-                  <Feather name="flag" size={18} color="#1f2937" />
-                  <Text style={styles.menuItemText}>{t('reportBoard')}</Text>
+                  <Feather name="flag" size={18} color={C.text} />
+                  <Text style={[styles.menuItemText, { color: C.text }]}>{t('reportBoard')}</Text>
                 </TouchableOpacity>
               ) : (
                 <>
                   <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
-                    <Feather name="edit-2" size={18} color="#1f2937" />
-                    <Text style={styles.menuItemText}>{t('editBoard')}</Text>
+                    <Feather name="edit-2" size={18} color={C.text} />
+                    <Text style={[styles.menuItemText, { color: C.text }]}>{t('editBoard')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleDelete}>
                     <Feather name="trash-2" size={18} color="#dc2626" />
@@ -265,7 +276,7 @@ export function ListOfDecks({
         ListHeaderComponent={listHeaderComponent}
         style={styles.list}
         contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
       />
     </View>
   );

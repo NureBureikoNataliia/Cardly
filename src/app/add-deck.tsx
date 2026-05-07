@@ -20,6 +20,8 @@ import {
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useAppColors } from '@/src/contexts/ThemeContext';
+import { generateDeckDescription, generateCardImageUrl } from '@/src/lib/gemini';
 
 export default function AddDeckScreen() {
   const router = useRouter();
@@ -32,6 +34,7 @@ export default function AddDeckScreen() {
       : undefined;
   const { user } = useAuth();
   const { t } = useLanguage();
+  const C = useAppColors();
   const { width: screenWidth } = useWindowDimensions();
   const isEdit = Boolean(deckId);
 
@@ -44,6 +47,8 @@ export default function AddDeckScreen() {
   const [error, setError] = useState<string | null>(null);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [imgRatio, setImgRatio] = useState<number | null>(null);
+  const [isAiDesc, setIsAiDesc] = useState(false);
+  const [isAiCover, setIsAiCover] = useState(false);
 
   useEffect(() => {
     if (!deckId || !user) return;
@@ -110,12 +115,12 @@ export default function AddDeckScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1, backgroundColor: '#f5f6fa' }}
+      style={{ flex: 1, backgroundColor: C.bg }}
     >
       <ScrollView
         contentContainerStyle={styles.scrollOuter}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
       >
       <View style={styles.formContainer}>
 
@@ -125,10 +130,10 @@ export default function AddDeckScreen() {
             <Feather name={isEdit ? 'edit-3' : 'layers'} size={20} color="#4255ff" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>
+            <Text style={[styles.heroTitle, { color: C.text }]}>
               {isEdit ? t('editDeck') : t('createNewDeck')}
             </Text>
-            <Text style={styles.heroSub}>
+            <Text style={[styles.heroSub, { color: C.textSub }]}>
               {isEdit ? t('deckSubtitleEdit') : t('deckSubtitleCreate')}
             </Text>
           </View>
@@ -178,7 +183,7 @@ export default function AddDeckScreen() {
             </View>
 
             {/* ── FORM CARD ── */}
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: C.surface }]}>
 
               {/* TITLE */}
               <Field label={t('title')} required>
@@ -189,9 +194,9 @@ export default function AddDeckScreen() {
                   onBlur={() => setFocusedField(null)}
                 >
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: C.text }]}
                     placeholder={t('title')}
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={title}
                     onChangeText={setTitle}
                     onFocus={() => setFocusedField('title')}
@@ -207,7 +212,32 @@ export default function AddDeckScreen() {
               </Field>
 
               {/* DESCRIPTION */}
-              <Field label={t('description')}>
+              <Field
+                label={t('description')}
+                labelRight={
+                  <TouchableOpacity
+                    style={[styles.aiBtn, { backgroundColor: C.isDark ? 'rgba(165,180,252,0.12)' : 'rgba(66,85,255,0.08)', borderColor: C.isDark ? 'rgba(165,180,252,0.3)' : 'rgba(66,85,255,0.2)' }]}
+                    disabled={!title.trim() || isAiDesc}
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      if (!title.trim()) return;
+                      setIsAiDesc(true);
+                      const result = await generateDeckDescription(title.trim(), description);
+                      setIsAiDesc(false);
+                      if (result) setDescription(result);
+                    }}
+                  >
+                    {isAiDesc ? (
+                      <ActivityIndicator size="small" color={C.tint} />
+                    ) : (
+                      <Feather name="zap" size={12} color={C.tint} />
+                    )}
+                    <Text style={[styles.aiBtnTxt, { color: C.tint }]}>
+                      {isAiDesc ? t('aiGenerateDescLoading') : t('aiGenerateDesc')}
+                    </Text>
+                  </TouchableOpacity>
+                }
+              >
                 <InputRow
                   icon="align-left"
                   focused={focusedField === 'desc'}
@@ -216,9 +246,9 @@ export default function AddDeckScreen() {
                   multiline
                 >
                   <TextInput
-                    style={[styles.input, styles.inputMulti]}
+                    style={[styles.input, styles.inputMulti, { color: C.text }]}
                     placeholder={t('description')}
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={description}
                     onChangeText={setDescription}
                     onFocus={() => setFocusedField('desc')}
@@ -231,7 +261,32 @@ export default function AddDeckScreen() {
               </Field>
 
               {/* COVER URL */}
-              <Field label={t('coverImageUrl')}>
+              <Field
+                label={t('coverImageUrl')}
+                labelRight={
+                  <TouchableOpacity
+                    style={[styles.aiBtn, { backgroundColor: C.isDark ? 'rgba(165,180,252,0.12)' : 'rgba(66,85,255,0.08)', borderColor: C.isDark ? 'rgba(165,180,252,0.3)' : 'rgba(66,85,255,0.2)' }]}
+                    disabled={!title.trim() || isAiCover}
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      if (!title.trim()) return;
+                      setIsAiCover(true);
+                      const url = await generateCardImageUrl(title.trim(), title.trim(), description || null, 'front');
+                      setIsAiCover(false);
+                      if (url) { setCoverUrl(url); setImgRatio(null); }
+                    }}
+                  >
+                    {isAiCover ? (
+                      <ActivityIndicator size="small" color={C.tint} />
+                    ) : (
+                      <Feather name="image" size={12} color={C.tint} />
+                    )}
+                    <Text style={[styles.aiBtnTxt, { color: C.tint }]}>
+                      {isAiCover ? t('aiGenerateImageLoading') : t('aiGenerateImage')}
+                    </Text>
+                  </TouchableOpacity>
+                }
+              >
                 <InputRow
                   icon="link-2"
                   focused={focusedField === 'cover'}
@@ -239,9 +294,9 @@ export default function AddDeckScreen() {
                   onBlur={() => setFocusedField(null)}
                 >
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: C.text }]}
                     placeholder="https://..."
-                    placeholderTextColor="#c4cbd8"
+                    placeholderTextColor={C.placeholder}
                     value={coverUrl}
                     onChangeText={setCoverUrl}
                     onFocus={() => setFocusedField('cover')}
@@ -258,15 +313,15 @@ export default function AddDeckScreen() {
               </Field>
 
               {/* VISIBILITY */}
-              <View style={[styles.toggleRow, isPublic && styles.toggleRowActive]}>
+              <View style={[styles.toggleRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }, isPublic && styles.toggleRowActive]}>
                 <View style={[styles.toggleIcon, isPublic ? styles.toggleIconOn : styles.toggleIconOff]}>
                   <Feather name={isPublic ? 'globe' : 'lock'} size={17} color={isPublic ? '#4255ff' : '#9ca3af'} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.toggleLabel}>
-                    {isPublic ? t('public') : t('private')}
-                  </Text>
-                  <Text style={styles.toggleHint} numberOfLines={1}>{t('publicDeckHelp')}</Text>
+                <Text style={[styles.toggleLabel, { color: C.text }]}>
+                  {isPublic ? t('public') : t('private')}
+                </Text>
+                <Text style={[styles.toggleHint, { color: C.textMuted }]} numberOfLines={1}>{t('publicDeckHelp')}</Text>
                 </View>
                 <Switch
                   value={isPublic}
@@ -289,11 +344,11 @@ export default function AddDeckScreen() {
             {/* ── BUTTONS ── */}
             <View style={styles.buttons}>
               <TouchableOpacity
-                style={styles.btnCancel}
+                style={[styles.btnCancel, { backgroundColor: C.surface, borderColor: C.border }]}
                 onPress={() => router.back()}
                 activeOpacity={0.7}
               >
-                <Text style={styles.btnCancelTxt}>{t('cancel')}</Text>
+                <Text style={[styles.btnCancelTxt, { color: C.textSub }]}>{t('cancel')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -324,18 +379,23 @@ export default function AddDeckScreen() {
 function Field({
   label,
   required,
+  labelRight,
   children,
 }: {
   label: string;
   required?: boolean;
+  labelRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <View style={{ gap: 7 }}>
-      <Text style={styles.fieldLabel}>
-        {label}
-        {required && <Text style={{ color: '#ef4444' }}> *</Text>}
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={styles.fieldLabel}>
+          {label}
+          {required && <Text style={{ color: '#ef4444' }}> *</Text>}
+        </Text>
+        {labelRight}
+      </View>
       {children}
     </View>
   );
@@ -356,18 +416,20 @@ function InputRow({
   multiline?: boolean;
   children: React.ReactNode;
 }) {
+  const C = useAppColors();
   return (
     <View
       style={[
         styles.inputRow,
+        { backgroundColor: C.inputBg, borderColor: C.inputBorder },
         multiline && styles.inputRowMulti,
-        focused && styles.inputRowFocused,
+        focused && [styles.inputRowFocused, C.isDark && { backgroundColor: C.surface, borderColor: '#6366f1' }],
       ]}
     >
       <Feather
         name={icon}
         size={16}
-        color={focused ? '#4255ff' : '#b0b8c8'}
+        color={focused ? C.tint : '#b0b8c8'}
         style={multiline ? { marginTop: 3 } : undefined}
       />
       {children}
@@ -495,6 +557,20 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
+  aiBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  aiBtnTxt: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
   /* INPUT ROW */
   inputRow: {
     flexDirection: 'row',
@@ -512,9 +588,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   inputRowFocused: {
-    borderColor: '#4255ff',
+    borderColor: '#1a1a1a',
     backgroundColor: '#fff',
-    shadowColor: '#4255ff',
+    shadowColor: '#1a1a1a',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.14,
     shadowRadius: 8,

@@ -1,3 +1,4 @@
+import Feather from '@expo/vector-icons/Feather';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { HeaderBackButton } from '@react-navigation/elements';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
@@ -7,16 +8,19 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, type ReactNode } from 'react';
 import 'react-native-reanimated';
-import { Platform, Pressable, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import { useColorScheme } from '@/src/components/useColorScheme';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
 import NotificationBell from '@/src/components/NotificationBell';
 import Sidebar, { AppLogo } from '@/src/components/Sidebar';
+import ThemeToggle from '@/src/components/ThemeToggle';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { LanguageProvider } from '@/src/contexts/LanguageContext';
 import { SidebarDrawerProvider, useSidebarDrawer } from '@/src/contexts/SidebarDrawerContext';
 import { StudySettingsProvider } from '@/src/contexts/StudySettingsContext';
+import { ThemeProvider as AppThemeProvider } from '@/src/contexts/ThemeContext';
+import Colors from '@/src/constants/Colors';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -55,15 +59,16 @@ export default function RootLayout() {
     return null;
   }
 
-  // Wrap navigation in auth / language / study-settings providers
   return (
-    <LanguageProvider>
-      <StudySettingsProvider>
-        <AuthProvider>
-          <RootLayoutNav />
-        </AuthProvider>
-      </StudySettingsProvider>
-    </LanguageProvider>
+    <AppThemeProvider>
+      <LanguageProvider>
+        <StudySettingsProvider>
+          <AuthProvider>
+            <RootLayoutNav />
+          </AuthProvider>
+        </StudySettingsProvider>
+      </LanguageProvider>
+    </AppThemeProvider>
   );
 }
 
@@ -75,42 +80,58 @@ function WebAuthenticatedShell({
   sharedHeaderRight: () => ReactNode;
 }) {
   const { isCompact, toggleDrawer } = useSidebarDrawer();
+  const colorScheme = useColorScheme();
+  const headerBg = Colors[colorScheme].header;
+  const headerText = Colors[colorScheme].text;
+  const headerTint = Colors[colorScheme].tint;
 
   const headerLeft = useCallback(
     (props: { canGoBack?: boolean } & Record<string, unknown>) => (
       <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
         {props.canGoBack ? (
-          <HeaderBackButton {...(props as any)} labelVisible={false} tintColor="#1f2937" />
-        ) : null}
-        <Pressable
-          onPress={toggleDrawer}
-          style={({ pressed }) => ({
-            paddingVertical: 6,
-            paddingHorizontal: 8,
-            marginLeft: props.canGoBack ? 0 : 4,
-            opacity: pressed ? 0.75 : 1,
-          })}
-          accessibilityRole="button"
-          accessibilityLabel="Open menu"
-        >
-          <AppLogo size={28} />
-        </Pressable>
+          // On nested screens: just the back button — no hamburger clutter
+          <HeaderBackButton {...(props as any)} labelVisible={false} tintColor={headerText} />
+        ) : (
+          // On root screens: hamburger to open the drawer
+          <Pressable
+            onPress={toggleDrawer}
+            style={({ pressed }) => ({
+              paddingVertical: 6,
+              paddingHorizontal: 8,
+              marginLeft: 4,
+              opacity: pressed ? 0.75 : 1,
+            })}
+            accessibilityRole="button"
+            accessibilityLabel="Open menu"
+          >
+            <Feather name="menu" size={24} color={headerTint} />
+          </Pressable>
+        )}
       </View>
     ),
-    [toggleDrawer],
+    [toggleDrawer, headerText],
   );
 
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1, flexDirection: 'row' }}>
         {!isCompact ? <Sidebar /> : null}
-        <View style={{ flex: 1, overflow: 'hidden' }}>
+        <View style={{ flex: 1, overflow: Platform.OS === 'web' ? 'visible' : 'hidden' }}>
           <Stack
             screenOptions={{
-              headerStyle: { backgroundColor: '#fff' },
+              headerStyle: { backgroundColor: headerBg },
               headerShadowVisible: true,
-              headerTintColor: '#1f2937',
+              headerTintColor: headerText,
               headerTitleStyle: { fontSize: 18, fontWeight: '600' },
+              headerTitle: ({ children }: { children?: string }) => (
+                <Text
+                  numberOfLines={1}
+                  style={{ fontSize: 18, fontWeight: '600', color: headerText, flexShrink: 1, maxWidth: Platform.OS === 'web' ? undefined : 180 }}
+                >
+                  {children}
+                </Text>
+              ),
+              headerTitleContainerStyle: { flex: 1 },
               headerRight: sharedHeaderRight,
               headerLeft: isCompact ? headerLeft : undefined,
               animation: 'slide_from_right',
@@ -131,7 +152,7 @@ function WebAuthenticatedShell({
             <Stack.Screen name="help" options={{ headerShown: true }} />
             <Stack.Screen
               name="modal"
-              options={{ presentation: 'modal', title: 'Info', headerRight: undefined }}
+              options={{ presentation: 'modal', title: 'Info', headerRight: () => <View style={{ marginRight: 12 }}><LanguageDropdown /></View> }}
             />
           </Stack>
         </View>
@@ -146,6 +167,9 @@ function RootLayoutNav() {
   const { session, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const headerBg = Colors[colorScheme].header;
+  const headerText = Colors[colorScheme].text;
+  const headerTint = Colors[colorScheme].tint;
 
   useEffect(() => {
     if (loading) return;
@@ -164,13 +188,14 @@ function RootLayoutNav() {
   const sharedHeaderRight = () => (
     <View style={{ marginRight: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
       <NotificationBell />
+      <ThemeToggle />
       <LanguageDropdown />
       <Pressable onPress={() => router.push('/modal')}>
         {({ pressed }) => (
           <FontAwesome
             name="info-circle"
             size={25}
-            color="#111827"
+            color={headerTint}
             style={{ opacity: pressed ? 0.5 : 1 }}
           />
         )}
@@ -178,13 +203,25 @@ function RootLayoutNav() {
     </View>
   );
 
+  const makeHeaderTitle = (color: string) =>
+    ({ children }: { children?: string }) => (
+      <Text
+        numberOfLines={1}
+        style={{ fontSize: 18, fontWeight: '600', color, flexShrink: 1, maxWidth: Platform.OS === 'web' ? undefined : 180 }}
+      >
+        {children}
+      </Text>
+    );
+
   const stackNav = (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: '#fff' },
+        headerStyle: { backgroundColor: headerBg },
         headerShadowVisible: true,
-        headerTintColor: '#1f2937',
+        headerTintColor: headerText,
         headerTitleStyle: { fontSize: 18, fontWeight: '600' },
+        headerTitle: makeHeaderTitle(headerText),
+        headerTitleContainerStyle: { flex: 1 },
         headerRight: sharedHeaderRight,
         animation: 'slide_from_right',
       }}
@@ -204,7 +241,7 @@ function RootLayoutNav() {
       <Stack.Screen name="help" options={{ headerShown: true }} />
       <Stack.Screen
         name="modal"
-        options={{ presentation: 'modal', title: 'Info', headerRight: undefined }}
+        options={{ presentation: 'modal', title: 'Info', headerRight: () => <View style={{ marginRight: 12 }}><LanguageDropdown /></View> }}
       />
     </Stack>
   );

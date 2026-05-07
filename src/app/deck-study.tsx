@@ -46,6 +46,7 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppColors } from "@/src/contexts/ThemeContext";
 
 const RATINGS: SubmitCardReviewRating[] = ["again", "hard", "good", "easy"];
 
@@ -130,6 +131,7 @@ export default function DeckStudyScreen() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const { settings: studySettings } = useStudySettings();
+  const C = useAppColors();
 
   const [queue, setQueue] = useState<DueCard[]>([]);
   const [settings, setSettings] =
@@ -247,7 +249,7 @@ export default function DeckStudyScreen() {
       rateLockRef.current = false;
     });
 
-    void submitCardReviewInvoke(cardId, rating).then((result) => {
+    void submitCardReviewInvoke(cardId, rating, deckId ?? undefined).then((result) => {
       if (result.error) {
         Alert.alert(t("error"), result.error.message ?? "Request failed");
         loadSession();
@@ -261,20 +263,17 @@ export default function DeckStudyScreen() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.loadingText}>{t("loadingDeck")}</Text>
+      <View style={[styles.container, { backgroundColor: C.bg }]}>
+        <Text style={[styles.loadingText, { color: C.textSub }]}>{t("loadingDeck")}</Text>
       </View>
     );
   }
 
   if (!user) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.emptyText}>{t("mustBeLoggedInStudy")}</Text>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+      <View style={[styles.container, { backgroundColor: C.bg }]}>
+        <Text style={[styles.emptyText, { color: C.textSub }]}>{t("mustBeLoggedInStudy")}</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
         </TouchableOpacity>
       </View>
@@ -283,12 +282,9 @@ export default function DeckStudyScreen() {
 
   if (queue.length === 0 && !sessionComplete) {
     return (
-      <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
-        <Text style={styles.emptyText}>{t("noCardsToReview")}</Text>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+      <View style={[styles.container, { paddingBottom: insets.bottom + 16, backgroundColor: C.bg }]}>
+        <Text style={[styles.emptyText, { color: C.textSub }]}>{t("noCardsToReview")}</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>{t("goBack")}</Text>
         </TouchableOpacity>
       </View>
@@ -297,10 +293,10 @@ export default function DeckStudyScreen() {
 
   if (sessionComplete) {
     return (
-      <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
-        <View style={styles.completeCard}>
+      <View style={[styles.container, { paddingBottom: insets.bottom + 16, backgroundColor: C.bg }]}>
+        <View style={[styles.completeCard, { backgroundColor: C.surface }]}>
           <Feather name="check-circle" size={64} color="#66BB6A" />
-          <Text style={styles.completeTitle}>{t("reviewComplete")}</Text>
+          <Text style={[styles.completeTitle, { color: C.text }]}>{t("reviewComplete")}</Text>
         </View>
         <TouchableOpacity
           style={styles.backButton}
@@ -326,47 +322,28 @@ export default function DeckStudyScreen() {
   const backU = currentCard.back_media_url?.trim();
 
   return (
-    <View
-      style={[
-        styles.root,
-        { paddingTop: insets.top, paddingBottom: insets.bottom + 8 },
-      ]}
-    >
-      <Text style={styles.counter}>{cardCounterText}</Text>
+    <View style={[styles.root, { backgroundColor: C.bg, paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
+      <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollInner}
         keyboardShouldPersistTaps="handled"
       >
-        <TouchableOpacity
-          style={styles.card}
-          onPress={handleCardPress}
-          activeOpacity={1}
-        >
+        <TouchableOpacity style={[styles.card, { backgroundColor: C.surface }]} onPress={handleCardPress} activeOpacity={1}>
           <View style={styles.cardInner}>
             {clozeOk ? (
               <>
                 {!showBack && frontU ? (
                   <CardSideMedia
                     url={frontU}
-                    kind={effectiveMediaKind(
-                      frontU,
-                      cardExtra.mediaFront,
-                      "front",
-                      cardExtra,
-                    )}
+                    kind={effectiveMediaKind(frontU, cardExtra.mediaFront, "front", cardExtra)}
                   />
                 ) : null}
                 {showBack && backU ? (
                   <CardSideMedia
                     url={backU}
-                    kind={effectiveMediaKind(
-                      backU,
-                      cardExtra.mediaBack,
-                      "back",
-                      cardExtra,
-                    )}
+                    kind={effectiveMediaKind(backU, cardExtra.mediaBack, "back", cardExtra)}
                   />
                 ) : null}
                 {!showBack ? <ClozeFrontParts parts={clozeParts} /> : null}
@@ -377,34 +354,24 @@ export default function DeckStudyScreen() {
                 {!showBack && frontU ? (
                   <CardSideMedia
                     url={frontU}
-                    kind={effectiveMediaKind(
-                      frontU,
-                      cardExtra.mediaFront,
-                      "front",
-                      cardExtra,
-                    )}
+                    kind={effectiveMediaKind(frontU, cardExtra.mediaFront, "front", cardExtra)}
                   />
                 ) : null}
                 {showBack && backU ? (
                   <CardSideMedia
                     url={backU}
-                    kind={effectiveMediaKind(
-                      backU,
-                      cardExtra.mediaBack,
-                      "back",
-                      cardExtra,
-                    )}
+                    kind={effectiveMediaKind(backU, cardExtra.mediaBack, "back", cardExtra)}
                   />
                 ) : null}
-                <Text style={styles.cardTitle}>
+                <Text style={[styles.cardTitle, { color: C.text }]}>
                   {showBack ? currentCard.back_text : currentCard.front_text}
                 </Text>
               </>
             )}
             {showBack && currentCard.notes ? (
-              <Text style={styles.cardNotes}>{currentCard.notes}</Text>
+              <Text style={[styles.cardNotes, { color: C.textSub }]}>{currentCard.notes}</Text>
             ) : null}
-            {!showBack && <Text style={styles.hint}>{t("showAnswer")}</Text>}
+            {!showBack && <Text style={[styles.hint, { color: C.textMuted }]}>{t("showAnswer")}</Text>}
           </View>
         </TouchableOpacity>
       </ScrollView>

@@ -6,39 +6,59 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import DrawerMenu from '@/src/components/DrawerMenu';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
+import NotificationBell from '@/src/components/NotificationBell';
+import ThemeToggle from '@/src/components/ThemeToggle';
 import { useClientOnlyValue } from '@/src/components/useClientOnlyValue';
 import { useColorScheme } from '@/src/components/useColorScheme';
-import { useLanguage } from '@/src/contexts/LanguageContext';
 import Colors from '@/src/constants/Colors';
+import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useSidebarDrawerOptional } from '@/src/contexts/SidebarDrawerContext';
 
 const isWeb = Platform.OS === 'web';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  // Drawer state is only used on native; web has the persistent Sidebar in root layout
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { t } = useLanguage();
+  const sidebarDrawer = useSidebarDrawerOptional();
+
+  const cs = colorScheme ?? 'light';
+  const headerBg = Colors[cs].header;
+  const headerTint = Colors[cs].tint;
+  const headerText = Colors[cs].text;
+
+  const headerLeft = isWeb
+    ? sidebarDrawer?.isCompact
+      ? () => (
+          <Pressable
+            onPress={sidebarDrawer.toggleDrawer}
+            style={[styles.menuBtn, { marginLeft: 8 }]}
+          >
+            <Feather name="menu" size={24} color={headerTint} />
+          </Pressable>
+        )
+      : undefined
+    : () => (
+        <Pressable onPress={() => setDrawerOpen(true)} style={styles.menuBtn}>
+          <Feather name="menu" size={24} color={headerTint} />
+        </Pressable>
+      );
 
   return (
     <>
-      {/* Mobile-only overlay drawer (web uses Sidebar rendered at root level) */}
       {!isWeb && (
         <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
       )}
 
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+          tabBarActiveTintColor: Colors[cs].tint,
           headerShown: useClientOnlyValue(false, true),
           tabBarStyle: { display: 'none' },
-          // Hamburger only on native
-          headerLeft: isWeb
-            ? undefined
-            : () => (
-                <Pressable onPress={() => setDrawerOpen(true)} style={styles.menuBtn}>
-                  <Feather name="menu" size={24} color={Colors[colorScheme ?? 'light'].text} />
-                </Pressable>
-              ),
+          headerStyle: { backgroundColor: headerBg },
+          headerTintColor: headerText,
+          headerShadowVisible: true,
+          headerLeft,
         }}
       >
         <Tabs.Screen
@@ -47,6 +67,8 @@ export default function TabLayout() {
             title: t('appName'),
             headerRight: () => (
               <View style={styles.headerRight}>
+                <NotificationBell />
+                <ThemeToggle />
                 <LanguageDropdown />
                 <Link href="/modal" asChild>
                   <Pressable>
@@ -54,7 +76,7 @@ export default function TabLayout() {
                       <FontAwesome
                         name="info-circle"
                         size={25}
-                        color={Colors[colorScheme ?? 'light'].text}
+                        color={headerTint}
                         style={{ opacity: pressed ? 0.5 : 1 }}
                       />
                     )}

@@ -14,6 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 
 interface Invitation {
   deck_id: string;
@@ -26,6 +27,7 @@ interface Invitation {
 export default function NotificationBell() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const C = useAppColors();
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [open, setOpen] = useState(false);
   const [responding, setResponding] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export default function NotificationBell() {
   return (
     <View style={styles.wrap}>
       <TouchableOpacity style={styles.btn} onPress={() => setOpen(v => !v)} activeOpacity={0.7}>
-        <Feather name="bell" size={20} color="#4B5563" />
+        <Feather name="bell" size={20} color={C.tint} />
         {count > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{count > 9 ? '9+' : String(count)}</Text>
@@ -86,12 +88,12 @@ export default function NotificationBell() {
       >
         <Pressable style={styles.overlay} onPress={() => setOpen(false)}>
           {/* stopPropagation so tapping inside panel doesn't close it */}
-          <Pressable style={styles.panel} onPress={e => e.stopPropagation()}>
+          <Pressable style={[styles.panel, { backgroundColor: C.surface }]} onPress={e => e.stopPropagation()}>
             {/* Header */}
-            <View style={styles.panelHeader}>
+            <View style={[styles.panelHeader, { backgroundColor: C.surfaceAlt, borderBottomColor: C.border }]}>
               <View style={styles.panelHeaderLeft}>
                 <Feather name="bell" size={16} color="#6366f1" />
-                <Text style={styles.panelTitle}>{t('notifications')}</Text>
+                <Text style={[styles.panelTitle, { color: C.text }]}>{t('notifications')}</Text>
                 {count > 0 && (
                   <View style={styles.headerBadge}>
                     <Text style={styles.headerBadgeText}>{count}</Text>
@@ -120,7 +122,7 @@ export default function NotificationBell() {
                 renderItem={({ item }) => {
                   const isFlashing = flash?.id === item.deck_id;
                   return (
-                    <View style={[styles.card, isFlashing && styles.cardFlash]}>
+                    <View style={[styles.card, { borderBottomColor: C.border }, isFlashing && styles.cardFlash]}>
                       {/* Icon */}
                       <View style={[styles.cardIconWrap, isFlashing && (flash?.ok ? styles.cardIconOk : styles.cardIconNo)]}>
                         <Feather
@@ -138,9 +140,9 @@ export default function NotificationBell() {
                           </Text>
                         ) : (
                           <>
-                            <Text style={styles.cardTitle} numberOfLines={2}>
+                            <Text style={[styles.cardTitle, { color: C.text }]} numberOfLines={2}>
                               {t('coauthorInviteFrom')}{' '}
-                              <Text style={styles.cardBold}>{item.inviter_name}</Text>
+                              <Text style={[styles.cardBold, { color: C.text }]}>{item.inviter_name}</Text>
                             </Text>
                             <Text style={styles.cardDeck} numberOfLines={1}>
                               "{item.deck_title}"

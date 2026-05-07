@@ -13,7 +13,6 @@ import {
   View,
 } from 'react-native';
 
-import { Deck } from '@/assets/data/decks';
 import {
   DECK_COMPLAINT_ISSUE_KEYS,
   type DeckComplaintIssueKey,
@@ -33,14 +32,25 @@ const ISSUE_LABEL_KEYS: Record<DeckComplaintIssueKey, string> = {
   other: 'complaintIssueOther',
 };
 
-export interface DeckComplaintModalProps {
+export interface CardComplaintModalProps {
   visible: boolean;
-  deck: Deck | null;
+  cardId: string | null;
+  deckId: string | null;
+  cardFront: string | null;
+  deckTitle: string | null;
   reporterId: string | null;
   onClose: () => void;
 }
 
-export function DeckComplaintModal({ visible, deck, reporterId, onClose }: DeckComplaintModalProps) {
+export function CardComplaintModal({
+  visible,
+  cardId,
+  deckId,
+  cardFront,
+  deckTitle,
+  reporterId,
+  onClose,
+}: CardComplaintModalProps) {
   const { t } = useLanguage();
   const C = useAppColors();
   const [issueKey, setIssueKey] = useState<DeckComplaintIssueKey | null>(null);
@@ -58,50 +68,40 @@ export function DeckComplaintModal({ visible, deck, reporterId, onClose }: DeckC
   }, []);
 
   useEffect(() => {
-    if (!visible) {
-      reset();
-    }
+    if (!visible) reset();
   }, [visible, reset]);
 
   const handleSubmit = async () => {
-    if (!deck) return;
-    if (!reporterId) {
-      setError(t('mustBeLoggedIn'));
-      return;
-    }
-    if (!issueKey) {
-      setError(t('complaintSelectIssue'));
-      return;
-    }
+    if (!cardId || !deckId) return;
+    if (!reporterId) { setError(t('mustBeLoggedIn')); return; }
+    if (!issueKey) { setError(t('complaintSelectIssue')); return; }
     setError(null);
     setSubmitting(true);
+
     const trimmed = details.trim();
     const issueLabel = t(ISSUE_LABEL_KEYS[issueKey]);
     const gemini_summary = await summarizeComplaintForModeration({
-      deckTitle: deck.title ?? '',
+      deckTitle: cardFront ?? '',
       issueKey,
       issueLabel,
       details: trimmed.length > 0 ? trimmed : null,
     });
-    const { error: insertError } = await supabase.from('deck_complaints').insert({
-      deck_id: deck.deck_id,
+
+    const { error: insertError } = await supabase.from('card_complaints').insert({
+      card_id: cardId,
+      deck_id: deckId,
       reporter_id: reporterId,
       issue_key: issueKey,
       details: trimmed.length > 0 ? trimmed : null,
       ...(gemini_summary != null ? { gemini_summary } : {}),
     });
+
     setSubmitting(false);
-    if (insertError) {
-      setError(insertError.message || t('complaintFailed'));
-      return;
-    }
+    if (insertError) { setError(insertError.message || t('complaintFailed')); return; }
     setDone(true);
   };
 
-  const handleClose = () => {
-    if (submitting) return;
-    onClose();
-  };
+  const handleClose = () => { if (submitting) return; onClose(); };
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
@@ -112,14 +112,24 @@ export function DeckComplaintModal({ visible, deck, reporterId, onClose }: DeckC
         <Pressable style={styles.overlayPress} onPress={handleClose}>
           <Pressable style={[styles.card, { backgroundColor: C.surface }]} onPress={(e) => e.stopPropagation()}>
             <View style={styles.headerRow}>
-              <Text style={[styles.title, { color: C.text }]}>{t('complaintTitle')}</Text>
+              <Text style={[styles.title, { color: C.text }]}>{t('cardComplaintTitle')}</Text>
               <TouchableOpacity onPress={handleClose} hitSlop={12} disabled={submitting}>
                 <Feather name="x" size={22} color={C.textMuted} />
               </TouchableOpacity>
             </View>
-            {deck ? (
-              <Text style={[styles.deckName, { color: C.textSub }]} numberOfLines={2}>
-                {deck.title}
+
+            {cardFront ? (
+              <View style={[styles.cardPreview, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
+                <Feather name="credit-card" size={13} color={C.tint} />
+                <Text style={[styles.cardPreviewTxt, { color: C.text }]} numberOfLines={2}>
+                  {cardFront}
+                </Text>
+              </View>
+            ) : null}
+
+            {deckTitle ? (
+              <Text style={[styles.deckName, { color: C.textSub }]} numberOfLines={1}>
+                {deckTitle}
               </Text>
             ) : null}
 
@@ -136,11 +146,7 @@ export function DeckComplaintModal({ visible, deck, reporterId, onClose }: DeckC
             ) : (
               <>
                 <Text style={[styles.sectionLabel, { color: C.text }]}>{t('complaintWhatsWrong')}</Text>
-                <ScrollView
-                  style={styles.issueList}
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                >
+                <ScrollView style={styles.issueList} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                   {DECK_COMPLAINT_ISSUE_KEYS.map((key) => {
                     const selected = issueKey === key;
                     return (
@@ -151,10 +157,7 @@ export function DeckComplaintModal({ visible, deck, reporterId, onClose }: DeckC
                           { backgroundColor: C.inputBg, borderColor: C.inputBorder },
                           selected && { borderColor: C.tint, backgroundColor: C.isDark ? 'rgba(165,180,252,0.1)' : 'rgba(66,85,255,0.06)' },
                         ]}
-                        onPress={() => {
-                          setIssueKey(key);
-                          setError(null);
-                        }}
+                        onPress={() => { setIssueKey(key); setError(null); }}
                       >
                         <View style={[styles.radioOuter, { borderColor: C.isDark ? '#4b5563' : '#c4c9d4' }, selected && { borderColor: C.tint }]}>
                           {selected ? <View style={[styles.radioInner, { backgroundColor: C.tint }]} /> : null}
@@ -214,17 +217,12 @@ export function DeckComplaintModal({ visible, deck, reporterId, onClose }: DeckC
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
     padding: 20,
   },
-  overlayPress: {
-    flex: 1,
-    justifyContent: 'center',
-    width: '100%',
-  },
+  overlayPress: { flex: 1, justifyContent: 'center', width: '100%' },
   card: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 20,
     width: '100%',
@@ -233,7 +231,7 @@ const styles = StyleSheet.create({
     maxHeight: '88%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 8,
   },
@@ -242,29 +240,23 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
+    marginBottom: 10,
+  },
+  title: { flex: 1, fontSize: 18, fontWeight: '700' },
+  cardPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     marginBottom: 6,
   },
-  title: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  deckName: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 16,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  issueList: {
-    maxHeight: 220,
-    marginBottom: 14,
-  },
+  cardPreviewTxt: { flex: 1, fontSize: 14, fontWeight: '600' },
+  deckName: { fontSize: 13, marginBottom: 14 },
+  sectionLabel: { fontSize: 13, fontWeight: '600', marginBottom: 8 },
+  issueList: { maxHeight: 220, marginBottom: 14 },
   issueRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -273,114 +265,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     marginBottom: 6,
-    backgroundColor: '#fafafa',
-  },
-  issueRowSelected: {
-    borderColor: '#4255ff',
-    backgroundColor: 'rgba(66, 85, 255, 0.06)',
   },
   radioOuter: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 18, height: 18, borderRadius: 9,
     borderWidth: 2,
-    borderColor: '#c4c9d4',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-  radioOuterSelected: {
-    borderColor: '#4255ff',
-  },
-  radioInner: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: '#4255ff',
-  },
-  issueLabel: {
-    flex: 1,
-    fontSize: 14,
-    color: '#374151',
-  },
-  issueLabelSelected: {
-    color: '#1f2937',
-    fontWeight: '600',
-  },
+  radioInner: { width: 9, height: 9, borderRadius: 5 },
+  issueLabel: { flex: 1, fontSize: 14 },
   textArea: {
     minHeight: 88,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#111827',
     marginBottom: 12,
-    backgroundColor: '#f9fafb',
   },
-  errorText: {
-    fontSize: 13,
-    color: '#dc2626',
-    marginBottom: 10,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
+  errorText: { fontSize: 13, color: '#dc2626', marginBottom: 10 },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   secondaryBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    alignItems: 'center',
+    flex: 1, paddingVertical: 12,
+    borderRadius: 12, borderWidth: 1, alignItems: 'center',
   },
-  secondaryBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#4b5563',
-  },
+  secondaryBtnText: { fontSize: 15, fontWeight: '600' },
   primaryBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#4255ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 46,
+    flex: 1, paddingVertical: 12, borderRadius: 12,
+    backgroundColor: '#4255ff', alignItems: 'center',
+    justifyContent: 'center', minHeight: 46,
   },
-  primaryBtnDisabled: {
-    opacity: 0.7,
-  },
-  primaryBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  doneBlock: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
+  primaryBtnDisabled: { opacity: 0.7 },
+  primaryBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  doneBlock: { alignItems: 'center', paddingVertical: 12 },
   doneIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(5, 150, 105, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: 'rgba(5,150,105,0.12)',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
-  doneText: {
-    fontSize: 15,
-    color: '#374151',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 20,
-  },
-  /** Full-width OK on success — avoid flex:1 from primaryBtn (collapses on web in a column). */
+  doneText: { fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 20 },
   doneOkButton: {
     alignSelf: 'stretch',
     width: '100%' as const,
@@ -394,4 +317,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default DeckComplaintModal;
+export default CardComplaintModal;

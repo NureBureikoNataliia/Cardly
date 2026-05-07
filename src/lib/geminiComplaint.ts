@@ -4,7 +4,7 @@
  * If missing or the request fails, the report is still saved without a summary.
  */
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 function getGeminiApiKey(): string | undefined {
   const k = process.env.EXPO_PUBLIC_GEMINI_API_KEY;

@@ -1,6 +1,7 @@
 import { Deck } from "@/assets/data/decks";
 import { Card } from "@/assets/data/cards";
 import Feather from "@expo/vector-icons/Feather";
+import { exportDeckPdf } from "@/src/lib/exportDeckPdf";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +25,8 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
+import CardComplaintModal from "@/src/components/CardComplaintModal";
+import GenerateCardsModal from "@/src/components/GenerateCardsModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import {
   effectiveMediaKind,
@@ -33,6 +36,7 @@ import {
   normalizeCardType,
   parseCardExtra,
 } from "@/src/lib/cardModel";
+import { useAppColors } from "@/src/contexts/ThemeContext";
 
 const scrollPositions: Record<string, number> = {};
 
@@ -66,6 +70,7 @@ export default function DeckDetailScreen() {
   const params = useLocalSearchParams();
   const deckId = typeof params.id === "string" ? params.id : null;
   const { t } = useLanguage();
+  const C = useAppColors();
   const { width: windowWidth } = useWindowDimensions();
 
   const { user } = useAuth();
@@ -78,8 +83,11 @@ export default function DeckDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
+  const [reportCard, setReportCard] = useState<Card | null>(null);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [errorModal, setErrorModal] = useState<string | null>(null);
   const [isCopying, setIsCopying] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [hasCopy, setHasCopy] = useState<boolean | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -172,6 +180,20 @@ export default function DeckDetailScreen() {
   // ── Invite collaborator ──
   const handleInvite = useCallback(async (targetUserId: string, targetUsername?: string) => {
     if (!deckId || isInviting) return;
+
+    // Block inviting the owner of the original deck (to avoid duplicates in their "Your Decks")
+    if (deck?.original_deck_id) {
+      const { data: origDeck } = await supabase
+        .from("decks")
+        .select("creator_id")
+        .eq("deck_id", deck.original_deck_id)
+        .single();
+      if (origDeck?.creator_id === targetUserId) {
+        setInviteMsg({ text: t("cannotInviteOriginalCreator"), ok: false });
+        return;
+      }
+    }
+
     const existing = collaborators.find((c) => c.user_id === targetUserId);
     if (existing?.status === 'accepted') {
       setInviteMsg({ text: t("inviteAlready"), ok: false });
@@ -200,7 +222,7 @@ export default function DeckDetailScreen() {
       setSearchResults([]);
       loadCollaborators();
     }
-  }, [deckId, collaborators, isInviting, user?.id, t, loadCollaborators]);
+  }, [deckId, deck, collaborators, isInviting, user?.id, t, loadCollaborators]);
 
   // ── Remove collaborator ──
   const handleRemoveCollaborator = useCallback(async () => {
@@ -339,6 +361,26 @@ export default function DeckDetailScreen() {
 
   const handleDeleteCard = (card: Card) => setCardToDelete(card);
 
+  const handleExportPdf = useCallback(async () => {
+    if (!deck || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      await exportDeckPdf({
+        title: deck.title ?? "",
+        description: deck.description ?? null,
+        emptyMessage: "Ця дошка поки що немає карток",
+        cards: cards.map((c) => ({
+          front_text: c.front_text ?? "",
+          back_text: c.back_text ?? "",
+        })),
+      });
+    } catch (err) {
+      setErrorModal(err instanceof Error ? err.message : t("unexpectedError"));
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }, [cards, deck, isExportingPdf, t]);
+
   const performDeleteCard = async () => {
     if (!cardToDelete) return;
     const card = cardToDelete;
@@ -362,7 +404,7 @@ export default function DeckDetailScreen() {
   /* ── loading ── */
   if (loading) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { backgroundColor: C.bg }]}>
         <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
@@ -370,9 +412,9 @@ export default function DeckDetailScreen() {
 
   if (error || !deck) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { backgroundColor: C.bg }]}>
         <Feather name="alert-circle" size={40} color="#d1d5db" />
-        <Text style={styles.errorMsg}>{error ?? t("deckNotFound")}</Text>
+        <Text style={[styles.errorMsg, { color: C.textSub }]}>{error ?? t("deckNotFound")}</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backBtnTxt}>{t("goBack")}</Text>
         </TouchableOpacity>
@@ -387,58 +429,74 @@ export default function DeckDetailScreen() {
     <>
       <ScrollView
         ref={scrollViewRef}
-        style={styles.root}
+        style={[styles.root, { backgroundColor: C.bg }]}
         contentContainerStyle={styles.contentOuter}
         onScroll={(e) => { if (deckId) scrollPositions[deckId] = e.nativeEvent.contentOffset.y; }}
         scrollEventThrottle={100}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={Platform.OS === 'web'}
       >
         <View style={styles.pageWrap}>
 
           {/* ════════════ HERO ════════════ */}
-          <View style={styles.hero}>
+          <View style={[styles.hero, !deck.cover_image_url && { backgroundColor: C.isDark ? '#1a2535' : '#C6E3ED' }]}>
             {deck.cover_image_url ? (
               <>
                 <Image source={{ uri: deck.cover_image_url }} style={styles.heroImage} resizeMode="cover" />
                 <View style={styles.heroOverlay} />
               </>
-            ) : (
-              <View style={styles.heroGradient} />
-            )}
+            ) : null}
 
             {/* Badge row */}
             <View style={styles.heroBadgeRow}>
-              <View style={[styles.badge, deck.is_public ? styles.badgePublic : styles.badgePrivate]}>
-                <Feather name={deck.is_public ? "globe" : "lock"} size={11} color={deck.is_public ? "#059669" : "#9ca3af"} />
-                <Text style={[styles.badgeTxt, deck.is_public ? styles.badgeTxtPublic : styles.badgeTxtPrivate]}>
+              <View style={[
+                styles.badge,
+                deck.cover_image_url
+                  ? styles.badgeOnCover
+                  : (deck.is_public
+                      ? { backgroundColor: C.isDark ? 'rgba(5,150,105,0.18)' : 'rgba(5,150,105,0.12)', borderWidth: 1, borderColor: C.isDark ? 'rgba(5,150,105,0.4)' : 'rgba(5,150,105,0.25)' }
+                      : { backgroundColor: C.isDark ? 'rgba(99,102,241,0.12)' : 'rgba(71,85,105,0.1)', borderWidth: 1, borderColor: C.isDark ? 'rgba(99,102,241,0.25)' : 'rgba(71,85,105,0.2)' }),
+              ]}>
+                <Feather
+                  name={deck.is_public ? "globe" : "lock"}
+                  size={11}
+                  color={deck.cover_image_url ? "#fff" : (deck.is_public ? "#059669" : C.textSub)}
+                />
+                <Text style={[
+                  styles.badgeTxt,
+                  deck.cover_image_url
+                    ? styles.badgeTxtOnCover
+                    : (deck.is_public ? styles.badgeTxtPublic : { color: C.textSub }),
+                ]}>
                   {deck.is_public ? t("public") : t("private")}
                 </Text>
               </View>
               {isCopiedDeck && (
-                <View style={styles.badgeCopy}>
-                  <Feather name="copy" size={11} color="#8b5cf6" />
-                  <Text style={styles.badgeTxtCopy}>{t("copied")}</Text>
+                <View style={[styles.badgeCopy, deck.cover_image_url && styles.badgeOnCover]}>
+                  <Feather name="copy" size={11} color={deck.cover_image_url ? "#fff" : "#8b5cf6"} />
+                  <Text style={[styles.badgeTxtCopy, deck.cover_image_url && styles.badgeTxtOnCover]}>
+                    {t("copied")}
+                  </Text>
                 </View>
               )}
             </View>
 
             {/* Title + description */}
-            <Text style={[styles.heroTitle, deck.cover_image_url && styles.heroTitleOnCover]}>
+            <Text style={[styles.heroTitle, { color: C.text }, deck.cover_image_url && styles.heroTitleOnCover]}>
               {deck.title}
             </Text>
             {deck.description ? (
-              <Text style={[styles.heroDesc, deck.cover_image_url && styles.heroDescOnCover]}>
+              <Text style={[styles.heroDesc, { color: C.textSub }, deck.cover_image_url && styles.heroDescOnCover]}>
                 {deck.description}
               </Text>
             ) : null}
           </View>
 
           {/* ════════════ STATS ROW ════════════ */}
-          <View style={styles.statsRow}>
+          <View style={[styles.statsRow, { backgroundColor: C.surface }]}>
             <StatChip icon="layers" value={totalCards} label={t("totalCards")} color="#6366f1" />
-            <View style={styles.statsDivider} />
+            <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
             <StatChip icon="clock" value={dueToday} label={t("dueToday")} color="#d97706" />
-            <View style={styles.statsDivider} />
+            <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
             <StatChip
               icon="check-circle"
               value={`${progressPct}%`}
@@ -452,7 +510,7 @@ export default function DeckDetailScreen() {
           {/* ────── Progress bar ────── */}
           {totalCards > 0 && (
             <View style={styles.progressWrap}>
-              <View style={styles.progressTrack}>
+              <View style={[styles.progressTrack, { backgroundColor: C.border }]}>
                 <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
               </View>
               <View style={styles.progressLabelRow}>
@@ -522,11 +580,22 @@ export default function DeckDetailScreen() {
 
             {/* Secondary row */}
             <View style={styles.actionRowSecondary}>
+              <ActionBtn
+                icon="download"
+                label={isExportingPdf ? t("exportingPdf") : t("exportPdf")}
+                bg={C.surface}
+                textColor="#2563eb"
+                border
+                borderColor="rgba(37,99,235,0.25)"
+                onPress={handleExportPdf}
+                disabled={isExportingPdf}
+                flex
+              />
               {canEdit && (
                 <ActionBtn
                   icon="plus-circle"
                   label={t("addCard")}
-                  bg="#fff"
+                  bg={C.surface}
                   textColor="#6366f1"
                   border
                   borderColor="rgba(99,102,241,0.25)"
@@ -534,11 +603,23 @@ export default function DeckDetailScreen() {
                   flex
                 />
               )}
+              {canEdit && (
+                <ActionBtn
+                  icon="zap"
+                  label={t("aiGenerateCards")}
+                  bg={C.isDark ? 'rgba(99,102,241,0.12)' : '#eef0ff'}
+                  textColor={C.tint}
+                  border
+                  borderColor="rgba(99,102,241,0.25)"
+                  onPress={() => setShowGenerateModal(true)}
+                  flex
+                />
+              )}
               {user && (
                 <ActionBtn
                   icon="star"
                   label={t("rateComment")}
-                  bg="#fff"
+                  bg={C.surface}
                   textColor="#d97706"
                   border
                   borderColor="rgba(217,119,6,0.25)"
@@ -579,7 +660,7 @@ export default function DeckDetailScreen() {
 
           {/* ════════════ COLLABORATORS SECTION (owner only) ════════════ */}
           {isOwner && (
-            <View style={styles.collabSection}>
+            <View style={[styles.collabSection, { backgroundColor: C.surface }]}>
               {/* Toggle button */}
               <TouchableOpacity
                 style={styles.collabToggleBtn}
@@ -595,7 +676,7 @@ export default function DeckDetailScreen() {
                   <View style={styles.collabToggleIcon}>
                     <Feather name="users" size={16} color="#6366f1" />
                   </View>
-                  <Text style={styles.collabToggleTitle}>{t("collaborators")}</Text>
+                  <Text style={[styles.collabToggleTitle, { color: C.text }]}>{t("collaborators")}</Text>
                   {collaborators.filter(c => c.status !== 'pending' && c.status !== 'declined').length > 0 && (
                     <View style={styles.collabToggleBadge}>
                       <Text style={styles.collabToggleBadgeTxt}>
@@ -609,15 +690,15 @@ export default function DeckDetailScreen() {
 
               {/* Expandable content */}
               {collabOpen && (
-                <View style={styles.collabBody}>
+                <View style={[styles.collabBody, { borderTopColor: C.borderLight }]}>
                   {/* Invite input */}
                   <View style={styles.inviteRow}>
-                    <View style={styles.inviteInputWrap}>
+                    <View style={[styles.inviteInputWrap, { backgroundColor: C.inputBg, borderColor: C.inputBorder }]}>
                       <Feather name="search" size={15} color={collaboratorSearch.length > 0 ? "#6366f1" : "#b0b8c8"} />
                       <TextInput
-                        style={[styles.inviteInput, webTextInputNoOutline]}
+                        style={[styles.inviteInput, webTextInputNoOutline, { color: C.text }]}
                         placeholder={t("searchByUsername")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={collaboratorSearch}
                         onChangeText={handleSearchUser}
                         autoCapitalize="none"
@@ -640,7 +721,7 @@ export default function DeckDetailScreen() {
                         const isAccepted = existing?.status === 'accepted';
                         const isDisabled = isPending || isAccepted || isInviting;
                         return (
-                          <View key={u.user_id} style={styles.searchResultItem}>
+                          <View key={u.user_id} style={[styles.searchResultItem, { backgroundColor: C.surface, borderBottomColor: C.borderLight }]}>
                             <View style={styles.searchResultAvatar}>
                               {u.avatar_url
                                 ? <Image source={{ uri: u.avatar_url }} style={styles.searchResultAvatarImg} />
@@ -695,7 +776,7 @@ export default function DeckDetailScreen() {
                       {collaborators
                         .filter(c => c.status !== 'pending' && c.status !== 'declined')
                         .map((c) => (
-                          <View key={`${c.deck_id}_${c.user_id}`} style={styles.collabItem}>
+                          <View key={`${c.deck_id}_${c.user_id}`} style={[styles.collabItem, { borderBottomColor: C.borderLight }]}>
                             <View style={styles.collabAvatar}>
                               {c.avatar_url
                                 ? <Image source={{ uri: c.avatar_url }} style={styles.collabAvatarImg} />
@@ -703,8 +784,8 @@ export default function DeckDetailScreen() {
                               }
                             </View>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.collabName}>{c.display_name || c.username}</Text>
-                              <Text style={styles.collabMeta}>@{c.username}</Text>
+                              <Text style={[styles.collabName, { color: C.text }]}>{c.display_name || c.username}</Text>
+                              <Text style={[styles.collabMeta, { color: C.textMuted }]}>@{c.username}</Text>
                             </View>
                             <Pressable
                               style={styles.collabRemoveBtn}
@@ -725,7 +806,7 @@ export default function DeckDetailScreen() {
           {/* ════════════ CARDS SECTION ════════════ */}
           <View style={styles.cardsSection}>
             <View style={styles.cardsSectionHeader}>
-              <Text style={styles.cardsSectionTitle}>{t("cardsSectionTitle")}</Text>
+              <Text style={[styles.cardsSectionTitle, { color: C.text }]}>{t("cardsSectionTitle")}</Text>
               <Text style={styles.cardsSectionCount}>{totalCards}</Text>
             </View>
 
@@ -753,6 +834,7 @@ export default function DeckDetailScreen() {
                     card={card}
                     index={index}
                     isOwner={!!canEdit}
+                    canReport={isPublicFromOther && !!user}
                     numCols={numCols}
                     createdByName={
                       card.created_by
@@ -761,6 +843,7 @@ export default function DeckDetailScreen() {
                     }
                     onEdit={() => router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`)}
                     onDelete={() => handleDeleteCard(card)}
+                    onReport={() => setReportCard(card)}
                     t={t}
                   />
                 ))}
@@ -807,6 +890,30 @@ export default function DeckDetailScreen() {
         confirmText={t("ok")} cancelText={null}
         onConfirm={() => setErrorModal(null)} onCancel={() => setErrorModal(null)}
       />
+
+      <CardComplaintModal
+        visible={Boolean(reportCard)}
+        cardId={reportCard?.card_id ?? null}
+        deckId={deck?.deck_id ?? null}
+        cardFront={reportCard?.front_text ?? null}
+        deckTitle={deck?.title ?? null}
+        reporterId={user?.id ?? null}
+        onClose={() => setReportCard(null)}
+      />
+
+      {deck && (
+        <GenerateCardsModal
+          visible={showGenerateModal}
+          deckId={deck.deck_id}
+          deckTitle={deck.title ?? undefined}
+          deckDescription={deck.description}
+          onClose={() => setShowGenerateModal(false)}
+          onSaved={() => {
+            setShowGenerateModal(false);
+            loadData();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -884,16 +991,19 @@ function ActionBtn({
 }
 
 /* ─── CardTile ─── */
-function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDelete, t }: {
+function CardTile({ card, index, isOwner, canReport, numCols, createdByName, onEdit, onDelete, onReport, t }: {
   card: Card;
   index: number;
   isOwner: boolean;
+  canReport?: boolean;
   numCols: number;
   createdByName: string | null;
   onEdit: () => void;
   onDelete: () => void;
+  onReport?: () => void;
   t: (k: string) => string;
 }) {
+  const C = useAppColors();
   const accentColors = ["#4255ff", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"];
   const accent = accentColors[index % accentColors.length];
   const extra = parseCardExtra(card.card_extra);
@@ -908,7 +1018,7 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
       : null;
 
   return (
-    <View style={[styles.cardTile, numCols === 2 && styles.cardTileHalf]}>
+    <View style={[styles.cardTile, numCols === 2 && styles.cardTileHalf, { backgroundColor: C.surface }]}>
       {/* Number badge + author */}
       <View style={styles.cardTileHeader}>
         <View style={[styles.cardNumBadge, { backgroundColor: `${accent}18` }]}>
@@ -929,9 +1039,9 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
           </View>
         ) : null}
         {createdByName ? (
-          <View style={styles.cardAuthorRow}>
-            <Feather name="user" size={10} color="#9ca3af" />
-            <Text style={styles.cardAuthorTxt}>{createdByName}</Text>
+          <View style={[styles.cardAuthorRow, { backgroundColor: C.surfaceAlt }]}>
+            <Feather name="user" size={10} color={C.textMuted} />
+            <Text style={[styles.cardAuthorTxt, { color: C.textSub }]}>{createdByName}</Text>
           </View>
         ) : null}
       </View>
@@ -939,14 +1049,14 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
       {/* Front */}
       {card.front_media_url ? (
         frontKind === "image" ? (
-          <Image source={{ uri: card.front_media_url }} style={styles.cardMedia} resizeMode="contain" />
+          <Image source={{ uri: card.front_media_url }} style={[styles.cardMedia, { backgroundColor: C.surfaceAlt }]} resizeMode="contain" />
         ) : (
           <View style={[styles.cardMedia, styles.cardMediaAudio]}>
             <Feather name="volume-2" size={22} color="#4255ff" />
           </View>
         )
       ) : null}
-      <Text style={styles.cardFront} numberOfLines={4}>
+      <Text style={[styles.cardFront, { color: C.text }]} numberOfLines={4}>
         {clozePreview ?? card.front_text}
       </Text>
 
@@ -962,35 +1072,43 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
       {/* Back */}
       {card.back_media_url ? (
         backKind === "image" ? (
-          <Image source={{ uri: card.back_media_url }} style={styles.cardMedia} resizeMode="contain" />
+          <Image source={{ uri: card.back_media_url }} style={[styles.cardMedia, { backgroundColor: C.surfaceAlt }]} resizeMode="contain" />
         ) : (
           <View style={[styles.cardMedia, styles.cardMediaAudio]}>
             <Feather name="volume-2" size={22} color="#4255ff" />
           </View>
         )
       ) : null}
-      <Text style={styles.cardBack} numberOfLines={4}>
+      <Text style={[styles.cardBack, { color: C.textSub }]} numberOfLines={4}>
         {card.back_text}
       </Text>
 
       {/* Notes */}
       {card.notes ? (
         <View style={styles.cardNotesRow}>
-          <Feather name="file-text" size={12} color="#9ca3af" />
-          <Text style={styles.cardNotes} numberOfLines={2}>{card.notes}</Text>
+          <Feather name="file-text" size={12} color={C.textMuted} />
+          <Text style={[styles.cardNotes, { color: C.textMuted }]} numberOfLines={2}>{card.notes}</Text>
         </View>
       ) : null}
 
       {/* Actions */}
-      {isOwner && (
-        <View style={styles.cardActionsRow}>
-          <Pressable style={styles.cardActEdit} onPress={onEdit} hitSlop={6}>
-            <Feather name="edit-2" size={14} color="#4255ff" />
-            <Text style={styles.cardActEditTxt}>{t("edit")}</Text>
-          </Pressable>
-          <Pressable style={styles.cardActDel} onPress={onDelete} hitSlop={6}>
-            <Feather name="trash-2" size={14} color="#dc2626" />
-          </Pressable>
+      {(isOwner || canReport) && (
+        <View style={[styles.cardActionsRow, { borderTopColor: C.borderLight }]}>
+          {isOwner ? (
+            <>
+              <Pressable style={styles.cardActEdit} onPress={onEdit} hitSlop={6}>
+                <Feather name="edit-2" size={14} color="#4255ff" />
+                <Text style={styles.cardActEditTxt}>{t("edit")}</Text>
+              </Pressable>
+              <Pressable style={styles.cardActDel} onPress={onDelete} hitSlop={6}>
+                <Feather name="trash-2" size={14} color="#dc2626" />
+              </Pressable>
+            </>
+          ) : canReport ? (
+            <Pressable style={styles.cardActReport} onPress={onReport} hitSlop={6}>
+              <Feather name="flag" size={14} color="#dc2626" />
+            </Pressable>
+          ) : null}
         </View>
       )}
     </View>
@@ -999,11 +1117,11 @@ function CardTile({ card, index, isOwner, numCols, createdByName, onEdit, onDele
 
 /* ═══════════════════ STYLES ═══════════════════ */
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f5f6fa" },
+  root: { flex: 1 },
   contentOuter: { alignItems: "center", paddingBottom: 40 },
   pageWrap: { width: "100%", maxWidth: 1000, paddingHorizontal: 0 },
 
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: "#f5f6fa" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   errorMsg: { fontSize: 16, color: "#6b7280", textAlign: "center", paddingHorizontal: 32 },
   backBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, backgroundColor: "#eef0ff" },
   backBtnTxt: { color: "#6366f1", fontWeight: "600" },
@@ -1034,9 +1152,11 @@ const styles = StyleSheet.create({
   },
   badgePublic: { backgroundColor: "rgba(5,150,105,0.12)", borderWidth: 1, borderColor: "rgba(5,150,105,0.25)" },
   badgePrivate: { backgroundColor: "rgba(71,85,105,0.1)", borderWidth: 1, borderColor: "rgba(71,85,105,0.2)" },
+  badgeOnCover: { backgroundColor: "rgba(0,0,0,0.52)", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
   badgeTxt: { fontSize: 12, fontWeight: "600" },
   badgeTxtPublic: { color: "#047857" },
   badgeTxtPrivate: { color: "#475569" },
+  badgeTxtOnCover: { color: "#fff", textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   badgeCopy: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "rgba(99,102,241,0.1)", borderWidth: 1, borderColor: "rgba(99,102,241,0.22)",
@@ -1104,7 +1224,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 8, elevation: 2,
   },
   actionBtnDisabled: { opacity: 0.5, shadowOpacity: 0 },
-  actionBtnTxt: { fontSize: 15, fontWeight: "700" },
+  actionBtnTxt: { fontSize: 13, fontWeight: "700", textAlign: 'center' },
 
   /* ── CARDS SECTION ── */
   cardsSection: { marginHorizontal: 16, marginTop: 24 },
@@ -1188,6 +1308,7 @@ const styles = StyleSheet.create({
   cardActEdit: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, backgroundColor: "rgba(99,102,241,0.08)" },
   cardActEditTxt: { fontSize: 13, color: "#6366f1", fontWeight: "600" },
   cardActDel: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(220,38,38,0.07)" },
+  cardActReport: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(220,38,38,0.07)", marginLeft: "auto" as any },
 
   /* ── Collaborator badge (for co-authors) ── */
   collaboratorBadge: {

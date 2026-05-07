@@ -9,6 +9,7 @@ import {
 
 import Feather from "@expo/vector-icons/Feather";
 import { Text } from "./Themed";
+import { useAppColors } from "@/src/contexts/ThemeContext";
 
 export interface ConfirmModalProps {
   visible: boolean;
@@ -38,6 +39,7 @@ export function ConfirmModal({
   icon = "alert-circle",
 }: ConfirmModalProps) {
   const hasCancel = Boolean(cancelText);
+  const C = useAppColors();
 
   return (
     <Modal
@@ -51,7 +53,7 @@ export function ConfirmModal({
         onPress={hasCancel ? onCancel : onConfirm}
       >
         <Pressable
-          style={styles.modalCard}
+          style={[styles.modalCard, { backgroundColor: C.surface }]}
           onPress={(e) => e.stopPropagation()}
         >
           <View
@@ -71,11 +73,11 @@ export function ConfirmModal({
           <View style={styles.buttons}>
             {hasCancel && (
               <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
+                style={[styles.button, styles.cancelButton, { backgroundColor: C.surfaceAlt }]}
                 onPress={onCancel}
                 activeOpacity={0.8}
               >
-                <Text style={styles.cancelButtonText}>{cancelText}</Text>
+                <Text style={[styles.cancelButtonText, { color: C.textSub }]}>{cancelText}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity

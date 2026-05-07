@@ -19,6 +19,7 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { compareDeckTitles } from "@/src/lib/deckSort";
 import { supabase } from "@/src/lib/supabase";
+import { useAppColors } from "@/src/contexts/ThemeContext";
 
 type SortKey =
   | "newest"
@@ -33,6 +34,7 @@ export default function PublicDecksScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { t } = useLanguage();
+  const C = useAppColors();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cardCounts, setCardCounts] = useState<Record<string, number>>({});
   const [ratingByDeckId, setRatingByDeckId] = useState<Record<string, number>>({});
@@ -196,22 +198,28 @@ export default function PublicDecksScreen() {
   const listHeader = (
     <>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{t("publicDecks")}</Text>
-        <Text style={styles.sectionCount}>
+        <Text style={[styles.sectionTitle, { color: C.text }]}>{t("publicDecks")}</Text>
+        <Text style={[styles.sectionCount, { color: C.textMuted }]}>
           {filtered.length} {filtered.length !== 1 ? t("decks") : t("deck")}
         </Text>
       </View>
 
       <View style={styles.controlsContainer}>
         {/* search */}
-        <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
-          <Feather name="search" size={16} color={searchFocused ? '#4255ff' : '#b0b8c8'} />
+        <View style={[
+          styles.searchContainer,
+          { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+          searchFocused && (C.isDark
+            ? { borderColor: '#6366f1', backgroundColor: C.surface }
+            : styles.searchContainerFocused),
+        ]}>
+          <Feather name="search" size={16} color={searchFocused ? C.tint : '#b0b8c8'} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: C.text }]}
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder={t("searchDecks")}
-            placeholderTextColor="#c4cbd8"
+            placeholderTextColor={C.placeholder}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
           />
@@ -224,15 +232,19 @@ export default function PublicDecksScreen() {
 
         {/* sort */}
         <View style={styles.controlBlock}>
-          <Text style={styles.chipsLabel}>{t("sortBy")}</Text>
+          <Text style={[styles.chipsLabel, { color: C.textSub }]}>{t("sortBy")}</Text>
           <View style={styles.chipsRow}>
             {sortOptions.map(({ key, label }) => (
               <Pressable
                 key={key}
-                style={[styles.chip, sortBy === key && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  { backgroundColor: C.surface, borderColor: C.border },
+                  sortBy === key && { borderColor: C.tint, backgroundColor: C.isDark ? 'rgba(165,180,252,0.15)' : 'rgba(66,85,255,0.12)' },
+                ]}
                 onPress={() => setSortBy(key)}
               >
-                <Text style={[styles.chipText, sortBy === key && styles.chipTextActive]}>
+                <Text style={[styles.chipText, { color: C.textSub }, sortBy === key && { color: C.tint, fontWeight: '600' }]}>
                   {label}
                 </Text>
               </Pressable>
@@ -244,22 +256,22 @@ export default function PublicDecksScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#4255ff" />
         </View>
       ) : error ? (
         <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={[styles.errorText, { color: C.textSub }]}>{error}</Text>
         </View>
       ) : decks.length === 0 ? (
         <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Feather name="globe" size={48} color="#c7d2fe" />
+          <View style={[styles.emptyIcon, { backgroundColor: C.isDark ? 'rgba(165,180,252,0.1)' : 'rgba(66,85,255,0.08)' }]}>
+            <Feather name="globe" size={48} color={C.tint} />
           </View>
-          <Text style={styles.emptyTitle}>{t("noPublicDecks")}</Text>
-          <Text style={styles.emptySubtitle}>{t("noPublicDecksHint")}</Text>
+          <Text style={[styles.emptyTitle, { color: C.text }]}>{t("noPublicDecks")}</Text>
+          <Text style={[styles.emptySubtitle, { color: C.textSub }]}>{t("noPublicDecksHint")}</Text>
         </View>
       ) : (
         <ListOfDecks
@@ -342,9 +354,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   searchContainerFocused: {
-    borderColor: '#4255ff',
+    borderColor: '#1a1a1a',
     backgroundColor: '#fff',
-    shadowColor: '#4255ff',
+    shadowColor: '#1a1a1a',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.14,
     shadowRadius: 8,
