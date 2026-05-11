@@ -1,6 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
+import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -25,6 +26,7 @@ import { generateDeckDescription, generateCardImageUrl } from '@/src/lib/gemini'
 
 export default function AddDeckScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{ deckId?: string }>();
   const deckId =
     typeof params.deckId === 'string'
@@ -37,6 +39,12 @@ export default function AddDeckScreen() {
   const C = useAppColors();
   const { width: screenWidth } = useWindowDimensions();
   const isEdit = Boolean(deckId);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: isEdit ? t('editDeck') : t('createNewDeck'),
+    });
+  }, [navigation, isEdit, t]);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

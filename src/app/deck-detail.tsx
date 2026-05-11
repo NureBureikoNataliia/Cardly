@@ -416,6 +416,14 @@ export default function DeckDetailScreen() {
   /* ── responsive grid: 2 cols on wide, 1 on narrow ── */
   const numCols = Platform.OS === "web" && windowWidth >= 860 ? 2 : 1;
 
+  /** Secondary deck actions (export / add / AI / rate): wrap 2-per-row below ~520dp to avoid horizontal clip. */
+  const compactSecondaryActions = windowWidth < 520;
+  const secondaryActionsInnerW = Math.max(0, windowWidth - 32);
+  const secondaryCellWidth =
+    compactSecondaryActions
+      ? Math.max(138, Math.floor((secondaryActionsInnerW - 10) / 2))
+      : undefined;
+
   /* ── loading ── */
   if (loading) {
     return (
@@ -597,9 +605,14 @@ export default function DeckDetailScreen() {
               </View>
             )}
 
-            {/* Secondary row */}
+            {/* Secondary row — wraps to 2×2 on narrow viewports */}
             {(user || canEdit) ? (
-            <View style={styles.actionRowSecondary}>
+            <View
+              style={[
+                styles.actionRowSecondary,
+                compactSecondaryActions && styles.actionRowSecondaryWrap,
+              ]}
+            >
               {user ? (
                 <ActionBtn
                   icon="download"
@@ -610,7 +623,9 @@ export default function DeckDetailScreen() {
                   borderColor="rgba(37,99,235,0.25)"
                   onPress={handleExportPdf}
                   disabled={isExportingPdf}
-                  flex
+                  flex={!compactSecondaryActions}
+                  compactLayout={compactSecondaryActions}
+                  fixedWidth={secondaryCellWidth}
                 />
               ) : null}
               {canEdit && (
@@ -622,7 +637,9 @@ export default function DeckDetailScreen() {
                   border
                   borderColor="rgba(99,102,241,0.25)"
                   onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
-                  flex
+                  flex={!compactSecondaryActions}
+                  compactLayout={compactSecondaryActions}
+                  fixedWidth={secondaryCellWidth}
                 />
               )}
               {canEdit && (
@@ -634,7 +651,9 @@ export default function DeckDetailScreen() {
                   border
                   borderColor="rgba(99,102,241,0.25)"
                   onPress={() => setShowGenerateModal(true)}
-                  flex
+                  flex={!compactSecondaryActions}
+                  compactLayout={compactSecondaryActions}
+                  fixedWidth={secondaryCellWidth}
                 />
               )}
               {user ? (
@@ -646,7 +665,9 @@ export default function DeckDetailScreen() {
                   border
                   borderColor="rgba(217,119,6,0.25)"
                   onPress={() => router.push(`/deck-rate?id=${deck.deck_id}`)}
-                  flex
+                  flex={!compactSecondaryActions}
+                  compactLayout={compactSecondaryActions}
+                  fixedWidth={secondaryCellWidth}
                 />
               ) : null}
             </View>
@@ -1028,7 +1049,18 @@ function StatChip({ icon, value, label, color, onInfoPress, infoAccessibilityLab
 
 /* ─── ActionBtn ─── */
 function ActionBtn({
-  icon, label, bg, textColor = "#fff", border, borderColor, onPress, disabled, flex, fullWidth,
+  icon,
+  label,
+  bg,
+  textColor = "#fff",
+  border,
+  borderColor,
+  onPress,
+  disabled,
+  flex,
+  fullWidth,
+  compactLayout,
+  fixedWidth,
 }: {
   icon: keyof typeof Feather.glyphMap;
   label: string;
@@ -1040,6 +1072,9 @@ function ActionBtn({
   disabled?: boolean;
   flex?: boolean;
   fullWidth?: boolean;
+  /** Icon above label, smaller type — fits 2×2 action grid on phones */
+  compactLayout?: boolean;
+  fixedWidth?: number;
 }) {
   return (
     <TouchableOpacity
@@ -1047,16 +1082,27 @@ function ActionBtn({
         styles.actionBtn,
         { backgroundColor: bg },
         border && { borderWidth: 1.5, borderColor: borderColor ?? textColor },
-        flex && { flex: 1 },
+        flex && { flex: 1, minWidth: 0 },
         fullWidth && { width: "100%" },
+        fixedWidth != null && { width: fixedWidth, flexGrow: 0, flexShrink: 0 },
+        compactLayout && styles.actionBtnCompact,
         disabled && styles.actionBtnDisabled,
       ]}
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.8}
     >
-      <Feather name={icon} size={18} color={textColor} />
-      <Text style={[styles.actionBtnTxt, { color: textColor }]}>{label}</Text>
+      <Feather name={icon} size={compactLayout ? 20 : 18} color={textColor} />
+      <Text
+        style={[
+          styles.actionBtnTxt,
+          { color: textColor },
+          compactLayout && styles.actionBtnTxtCompact,
+        ]}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -1287,6 +1333,7 @@ const styles = StyleSheet.create({
   actions: { marginHorizontal: 16, marginTop: 16, gap: 10 },
   actionRowPrimary: { flexDirection: "row", gap: 10 },
   actionRowSecondary: { flexDirection: "row", gap: 10 },
+  actionRowSecondaryWrap: { flexWrap: "wrap" },
   actionBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 8, paddingVertical: 14, paddingHorizontal: 16,
@@ -1294,8 +1341,17 @@ const styles = StyleSheet.create({
     shadowColor: "#6366f1", shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08, shadowRadius: 8, elevation: 2,
   },
+  actionBtnCompact: {
+    flexDirection: "column",
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    minHeight: 76,
+    justifyContent: "center",
+  },
   actionBtnDisabled: { opacity: 0.5, shadowOpacity: 0 },
-  actionBtnTxt: { fontSize: 13, fontWeight: "700", textAlign: 'center' },
+  actionBtnTxt: { fontSize: 13, fontWeight: "700", textAlign: 'center', flexShrink: 1 },
+  actionBtnTxtCompact: { fontSize: 11, lineHeight: 14 },
 
   /* ── CARDS SECTION ── */
   cardsSection: { marginHorizontal: 16, marginTop: 24 },

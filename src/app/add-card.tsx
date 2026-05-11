@@ -1,6 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
+import { useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -34,6 +35,7 @@ import {
   parseCardExtra,
 } from "@/src/lib/cardModel";
 import { useAppColors } from "@/src/contexts/ThemeContext";
+import { generateCardBack, generateCardImageUrl } from "@/src/lib/gemini";
 
 /** Web: hide browser default focus outline on TextInput (RN typings omit outlineStyle "none"). */
 const webTextInputNoOutline: TextStyle | undefined =
@@ -93,6 +95,7 @@ function AddCardStudyClozeBack({ parts }: { parts: ClozeParts }) {
 
 export default function AddCardScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams();
   const deckId = Array.isArray(params.deckId)
     ? params.deckId[0]
@@ -107,6 +110,13 @@ export default function AddCardScreen() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const C = useAppColors();
+
+  const isEdit = Boolean(cardId);
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: isEdit ? t("editCard") : t("addCard"),
+    });
+  }, [navigation, isEdit, t]);
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,6 +162,70 @@ export default function AddCardScreen() {
   const [initialClozeGapFront, setInitialClozeGapFront] = useState("");
   const [initialClozeHidden, setInitialClozeHidden] = useState("");
   const [initialClozeAfter, setInitialClozeAfter] = useState("");
+
+  const [aiBackBusy, setAiBackBusy] = useState(false);
+  const [aiFrontImgBusy, setAiFrontImgBusy] = useState(false);
+  const [aiBackImgBusy, setAiBackImgBusy] = useState(false);
+
+  const handleAiFillBack = useCallback(async () => {
+    if (!deck || cardType !== "basic" || !frontText.trim()) {
+      setErrorModal(t("aiFillBackNeedFront"));
+      return;
+    }
+    setAiBackBusy(true);
+    const back = await generateCardBack(
+      frontText.trim(),
+      deck.title ?? "",
+      deck.description,
+    );
+    setAiBackBusy(false);
+    if (back) setBackText(back);
+    else setErrorModal(t("aiError"));
+  }, [cardType, deck, frontText, t]);
+
+  const handleAiFrontImage = useCallback(async () => {
+    if (!deck || cardType !== "basic" || !frontText.trim()) {
+      setErrorModal(t("aiFillImageNeedText"));
+      return;
+    }
+    setAiFrontImgBusy(true);
+    const url = await generateCardImageUrl(
+      frontText.trim(),
+      deck.title ?? "",
+      deck.description,
+      "front",
+    );
+    setAiFrontImgBusy(false);
+    if (url) {
+      setFrontImageUrl(url);
+      setMediaKindFront("image");
+    } else {
+      setErrorModal(t("aiError"));
+    }
+  }, [cardType, deck, frontText, t]);
+
+  const handleAiBackImage = useCallback(async () => {
+    if (!deck || cardType !== "basic") return;
+    const cue = backText.trim() || frontText.trim();
+    if (!cue) {
+      setErrorModal(t("aiFillImageNeedText"));
+      return;
+    }
+    setAiBackImgBusy(true);
+    const url = await generateCardImageUrl(
+      cue,
+      deck.title ?? "",
+      deck.description,
+      "back",
+    );
+    setAiBackImgBusy(false);
+    if (url) {
+      setBackImageUrl(url);
+      setMediaKindBack("image");
+    } else {
+      setErrorModal(t("aiError"));
+    }
+  }, [backText, cardType, deck, frontText, t]);
 
   useEffect(() => {
     if (!deckId) {
@@ -440,7 +514,6 @@ export default function AddCardScreen() {
     frontImageUrl !== initialFrontImage ||
     backImageUrl !== initialBackImage ||
     notes !== initialNotes;
-  const isEdit = Boolean(cardId);
   const showPairStudySwitcher =
     cardType === "basic" && createReversedPair && !isEdit;
   const clozePartsPreview: ClozeParts = {
@@ -681,7 +754,38 @@ export default function AddCardScreen() {
                       )}
                     </InputRow>
                   </Field>
-                  <Field label={t("back")} required>
+                  <Field
+                    label={t("back")}
+                    required
+                    labelRight={
+                      cardType === "basic" ? (
+                        <TouchableOpacity
+                          style={[
+                            styles.aiLabelBtn,
+                            {
+                              borderColor: C.tint,
+                              backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                              opacity: !frontText.trim() || aiBackBusy ? 0.5 : 1,
+                            },
+                          ]}
+                          onPress={handleAiFillBack}
+                          disabled={aiBackBusy || !frontText.trim()}
+                          activeOpacity={0.75}
+                          accessibilityRole="button"
+                          accessibilityLabel={t("aiGenerateBack")}
+                        >
+                          {aiBackBusy ? (
+                            <ActivityIndicator size="small" color={C.tint} />
+                          ) : (
+                            <Feather name="zap" size={14} color={C.tint} />
+                          )}
+                          <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+                            {aiBackBusy ? t("aiGenerateBackLoading") : t("aiGenerateBack")}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : undefined
+                    }
+                  >
                     <InputRow
                       icon="align-right"
                       focused={focusedField === "back"}
@@ -741,7 +845,37 @@ export default function AddCardScreen() {
 
               <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
 
-              <Field label={t("frontImageUrl")}>
+              <Field
+                label={t("frontImageUrl")}
+                labelRight={
+                  cardType === "basic" ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.aiLabelBtn,
+                        {
+                          borderColor: C.tint,
+                          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                          opacity: !frontText.trim() || aiFrontImgBusy ? 0.5 : 1,
+                        },
+                      ]}
+                      onPress={handleAiFrontImage}
+                      disabled={aiFrontImgBusy || !frontText.trim()}
+                      activeOpacity={0.75}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("aiGenerateImage")}
+                    >
+                      {aiFrontImgBusy ? (
+                        <ActivityIndicator size="small" color={C.tint} />
+                      ) : (
+                        <Feather name="image" size={14} color={C.tint} />
+                      )}
+                      <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+                        {aiFrontImgBusy ? t("aiGenerateImageLoading") : t("aiGenerateImage")}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : undefined
+                }
+              >
                 <InputRow
                   icon="link-2"
                   focused={focusedField === "frontImg"}
@@ -813,7 +947,40 @@ export default function AddCardScreen() {
                 </View>
               </Field>
 
-              <Field label={t("backImageUrl")}>
+              <Field
+                label={t("backImageUrl")}
+                labelRight={
+                  cardType === "basic" ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.aiLabelBtn,
+                        {
+                          borderColor: C.tint,
+                          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                          opacity:
+                            (!frontText.trim() && !backText.trim()) || aiBackImgBusy ? 0.5 : 1,
+                        },
+                      ]}
+                      onPress={handleAiBackImage}
+                      disabled={
+                        aiBackImgBusy || (!frontText.trim() && !backText.trim())
+                      }
+                      activeOpacity={0.75}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("aiGenerateImage")}
+                    >
+                      {aiBackImgBusy ? (
+                        <ActivityIndicator size="small" color={C.tint} />
+                      ) : (
+                        <Feather name="image" size={14} color={C.tint} />
+                      )}
+                      <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+                        {aiBackImgBusy ? t("aiGenerateImageLoading") : t("aiGenerateImage")}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : undefined
+                }
+              >
                 <InputRow
                   icon="link-2"
                   focused={focusedField === "backImg"}
@@ -1377,18 +1544,21 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
 
-  aiBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
+  aiLabelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
     borderWidth: 1,
+    maxWidth: "58%",
+    flexShrink: 1,
   },
-  aiBtnTxt: {
+  aiLabelBtnTxt: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "700",
+    flexShrink: 1,
   },
 
   /* INPUT ROW */

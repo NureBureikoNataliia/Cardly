@@ -8,6 +8,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, Toucha
 import { Deck } from '@/assets/data/decks';
 import { getNextSrsDayBoundary, getSrsDayStart } from '@/src/lib/srsDayBoundary';
 import { supabase } from '@/src/lib/supabase';
+import { CommentComplaintModal, type CommentComplaintTarget } from '@/src/components/CommentComplaintModal';
 import { Text } from '@/src/components/Themed';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
@@ -285,6 +286,7 @@ export default function DeckRateScreen() {
 
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [nameByUserId, setNameByUserId] = useState<Record<string, string>>({});
+  const [reportComment, setReportComment] = useState<CommentComplaintTarget | null>(null);
 
   const [feedSort, setFeedSort] = useState<SortOrder>('newest');
   const [feedDateFilter, setFeedDateFilter] = useState<DateFilter>('all');
@@ -528,6 +530,7 @@ export default function DeckRateScreen() {
   const stars = [1, 2, 3, 4, 5];
 
   return (
+    <>
     <ScrollView style={[styles.container, { backgroundColor: C.bg }]} contentContainerStyle={styles.scrollContent}>
       <View style={[styles.hero, { backgroundColor: C.surface }]}>
         <View style={{ gap: 6 }}>
@@ -605,7 +608,29 @@ export default function DeckRateScreen() {
             <View key={entry.userId} style={[styles.reviewCard, { backgroundColor: C.surface }]}>
               <View style={styles.commentTopRow}>
                 <Text style={styles.commentAuthor}>{displayName(entry.userId)}</Text>
-                <Text style={styles.commentDate}>{when ? new Date(when).toLocaleString() : ''}</Text>
+                <View style={styles.commentTopRight}>
+                  {user?.id &&
+                  entry.commentId &&
+                  entry.comment?.trim() &&
+                  entry.userId !== user.id ? (
+                    <TouchableOpacity
+                      onPress={() =>
+                        entry.commentId &&
+                        setReportComment({
+                          id: entry.commentId,
+                          content: entry.comment.trim(),
+                          user_id: entry.userId,
+                        })
+                      }
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('reportReview')}
+                    >
+                      <Feather name="flag" size={16} color={C.textMuted} />
+                    </TouchableOpacity>
+                  ) : null}
+                  <Text style={styles.commentDate}>{when ? new Date(when).toLocaleString() : ''}</Text>
+                </View>
               </View>
               {entry.rating !== null ? (
                 <View style={styles.starRowSmall}>
@@ -624,6 +649,14 @@ export default function DeckRateScreen() {
         })
       )}
     </ScrollView>
+    <CommentComplaintModal
+      visible={Boolean(reportComment && deck)}
+      deck={deck}
+      comment={reportComment}
+      reporterId={user?.id ?? null}
+      onClose={() => setReportComment(null)}
+    />
+    </>
   );
 }
 
@@ -773,6 +806,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
+  },
+  commentTopRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 0,
   },
   commentAuthor: {
     fontSize: 13,

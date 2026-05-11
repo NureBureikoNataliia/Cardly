@@ -3,35 +3,11 @@
  * Requires EXPO_PUBLIC_GEMINI_API_KEY in .env
  */
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
-
-function getApiKey(): string | undefined {
-  const k = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  return typeof k === 'string' && k.trim().length > 0 ? k.trim() : undefined;
-}
+import { geminiGenerateText } from '@/src/lib/geminiRequest';
 
 async function callGemini(prompt: string, maxTokens = 512): Promise<string | null> {
-  const apiKey = getApiKey();
-  if (!apiKey) return null;
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.4 },
-      }),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-    };
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    return typeof text === 'string' && text.trim() ? text.trim() : null;
-  } catch {
-    return null;
-  }
+  const r = await geminiGenerateText(prompt, { maxOutputTokens: maxTokens, temperature: 0.4 });
+  return r.ok ? r.text : null;
 }
 
 /**
@@ -180,6 +156,8 @@ export interface GeneratedCard {
   back: string;
 }
 
+export type GenerateCardsError = 'no_api_key' | 'service_error' | 'bad_output';
+
 /**
  * Generate a list of flashcard pairs.
  * Uses deck title + description as context so cards match the deck's purpose.
@@ -197,7 +175,7 @@ export async function generateCards(
   locale: 'en' | 'uk',
   deckTitle?: string,
   deckDesc?: string | null,
-): Promise<GeneratedCard[]> {
+): Promise<{ cards: GeneratedCard[]; error?: GenerateCardsError }> {
   const uiLang = locale === 'uk' ? 'Ukrainian' : 'English';
 
   const deckContext = [
@@ -223,15 +201,23 @@ Instructions:
 Return ONLY a valid JSON array, no markdown, no extra text:
 [{"front":"...","back":"..."},...]`;
 
-  const raw = await callGemini(prompt, count * 100);
-  if (!raw) return [];
+  const ai = await geminiGenerateText(prompt, { maxOutputTokens: Math.min(8192, count * 180), temperature: 0.4 });
+  if (!ai.ok) {
+    if (ai.noApiKey) {
+      return { cards: [], error: 'no_api_key' };
+    }
+    return { cards: [], error: 'service_error' };
+  }
 
+  const raw = ai.text;
   const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
   try {
     const parsed = JSON.parse(cleaned);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
+    if (!Array.isArray(parsed)) {
+      return { cards: [], error: 'bad_output' };
+    }
+    const cards = parsed
       .filter((item): item is GeneratedCard =>
         typeof item === 'object' &&
         item !== null &&
@@ -241,7 +227,11 @@ Return ONLY a valid JSON array, no markdown, no extra text:
         item.back.trim().length > 0,
       )
       .slice(0, count);
+    if (cards.length === 0) {
+      return { cards: [], error: 'bad_output' };
+    }
+    return { cards };
   } catch {
-    return [];
+    return { cards: [], error: 'bad_output' };
   }
 }

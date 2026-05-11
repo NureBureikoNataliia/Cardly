@@ -54,10 +54,22 @@ export default function GenerateCardsModal({ visible, deckId, deckTitle, deckDes
     if (!topic.trim()) return;
     setIsGenerating(true);
     setError(null);
-    const generated = await generateCards(topic.trim(), count, locale === 'uk' ? 'uk' : 'en', deckTitle, deckDescription);
+    const { cards: generated, error: genError } = await generateCards(
+      topic.trim(),
+      count,
+      locale === 'uk' ? 'uk' : 'en',
+      deckTitle,
+      deckDescription,
+    );
     setIsGenerating(false);
     if (generated.length === 0) {
-      setError(t('aiGenerateCardsEmpty'));
+      if (genError === 'no_api_key') {
+        setError(t('aiGenerateCardsNoKey'));
+      } else if (genError === 'service_error') {
+        setError(t('aiGenerateCardsServiceDown'));
+      } else {
+        setError(t('aiGenerateCardsEmpty'));
+      }
       return;
     }
     setCards(generated);

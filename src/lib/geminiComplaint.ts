@@ -4,12 +4,7 @@
  * If missing or the request fails, the report is still saved without a summary.
  */
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
-
-function getGeminiApiKey(): string | undefined {
-  const k = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  return typeof k === 'string' && k.trim().length > 0 ? k.trim() : undefined;
-}
+import { geminiGenerateText } from '@/src/lib/geminiRequest';
 
 export async function summarizeComplaintForModeration(input: {
   deckTitle: string;
@@ -17,9 +12,6 @@ export async function summarizeComplaintForModeration(input: {
   issueLabel: string;
   details: string | null;
 }): Promise<string | null> {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) return null;
-
   const userText = [
     `Deck title: ${input.deckTitle}`,
     `Report category (code): ${input.issueKey}`,
@@ -32,33 +24,52 @@ Read the report below and respond with a concise neutral summary (2–4 sentence
 
 ${userText}`;
 
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          maxOutputTokens: 400,
-          temperature: 0.2,
-        },
-      }),
-    });
-
-    if (!res.ok) {
-      return null;
-    }
-
-    const data = (await res.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-    };
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (typeof text !== 'string') return null;
-    const trimmed = text.trim();
-    if (!trimmed) return null;
-    return trimmed.length > 4000 ? trimmed.slice(0, 4000) : trimmed;
-  } catch {
+  const result = await geminiGenerateText(prompt, {
+    maxOutputTokens: 400,
+    temperature: 0.2,
+  });
+  if (!result.ok) {
     return null;
   }
+  const trimmed = result.text.trim();
+  if (!trimmed) return null;
+  return trimmed.length > 4000 ? trimmed.slice(0, 4000) : trimmed;
+}
+
+/** Summary for reports about a review comment (pack_comments). */
+export async function summarizeReviewComplaintForModeration(input: {
+  deckTitle: string;
+  commentExcerpt: string;
+  issueKey: string;
+  issueLabel: string;
+  details: string | null;
+}): Promise<string | null> {
+  const excerpt =
+    input.commentExcerpt.trim().length > 500
+      ? `${input.commentExcerpt.trim().slice(0, 500)}…`
+      : input.commentExcerpt.trim();
+
+  const userText = [
+    `Deck title: ${input.deckTitle}`,
+    `Review/comment excerpt: ${excerpt || '(empty)'}`,
+    `Report category (code): ${input.issueKey}`,
+    `Report category (label): ${input.issueLabel}`,
+    `Reporter additional details: ${input.details?.trim() || '(none provided)'}`,
+  ].join('\n');
+
+  const prompt = `You help moderators review reports about a user-written review comment on a shared flashcard deck.
+Summarize in 2–4 neutral sentences what the reporter is alleging about the quoted review. Do not invent facts.
+
+${userText}`;
+
+  const gen = await geminiGenerateText(prompt, {
+    maxOutputTokens: 400,
+    temperature: 0.2,
+  });
+  if (!gen.ok) {
+    return null;
+  }
+  const t2 = gen.text.trim();
+  if (!t2) return null;
+  return t2.length > 4000 ? t2.slice(0, 4000) : t2;
 }

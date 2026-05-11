@@ -78,7 +78,7 @@ export default function LoginScreen() {
         <View style={styles.content}>
           <View style={styles.header}>
             <BookOpen size={48} color={C.tint} />
-            <Text style={[styles.title, { color: C.text }]}>{t('flashCardMaster')}</Text>
+            <Text style={[styles.title, { color: C.text }]}>{t('appName')}</Text>
             <Text style={[styles.subtitle, { color: C.textSub }]}>{t('learnSmarter')}</Text>
           </View>
 

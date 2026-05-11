@@ -57,6 +57,22 @@ type CardComplaint = {
   reporter_name: string;
 };
 
+type CommentComplaint = {
+  id: string;
+  created_at: string;
+  issue_key: string;
+  details: string | null;
+  gemini_summary: string | null;
+  comment_id: string;
+  comment_content: string;
+  comment_author_id: string;
+  deck_id: string;
+  deck_title: string;
+  reporter_id: string;
+  reporter_name: string;
+  comment_author_name: string;
+};
+
 type Comment = {
   id: string;
   content: string;
@@ -105,7 +121,8 @@ export default function AdminPanelScreen() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [cardComplaints, setCardComplaints] = useState<CardComplaint[]>([]);
-  const [complaintFilter, setComplaintFilter] = useState<'decks' | 'words'>('decks');
+  const [commentComplaints, setCommentComplaints] = useState<CommentComplaint[]>([]);
+  const [complaintFilter, setComplaintFilter] = useState<'decks' | 'words' | 'reviews'>('decks');
   const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
   const [supportFilter, setSupportFilter] = useState<'all' | 'unread' | 'bug' | 'suggestion' | 'complaint'>('all');
   const [supportToDelete, setSupportToDelete] = useState<SupportMessage | null>(null);
@@ -121,6 +138,8 @@ export default function AdminPanelScreen() {
   const [deckToDelete, setDeckToDelete] = useState<Complaint | null>(null);
   const [cardComplaintToDismiss, setCardComplaintToDismiss] = useState<CardComplaint | null>(null);
   const [cardToDelete, setCardToDelete] = useState<CardComplaint | null>(null);
+  const [commentComplaintToDismiss, setCommentComplaintToDismiss] = useState<CommentComplaint | null>(null);
+  const [commentComplaintReviewToDelete, setCommentComplaintReviewToDelete] = useState<CommentComplaint | null>(null);
   const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
 
   useLayoutEffect(() => {
@@ -137,24 +156,28 @@ export default function AdminPanelScreen() {
   /* ── Load data ── */
   const load = useCallback(async () => {
     if (!isAdmin) return;
-    const [statsRes, complRes, cardComplRes, commRes, usersRes, supportRes] = await Promise.all([
+    const [statsRes, complRes, cardComplRes, commentComplRes, commRes, usersRes, supportRes] = await Promise.all([
       supabase.rpc('admin_get_stats'),
       supabase.rpc('admin_get_all_complaints'),
       supabase.rpc('admin_get_all_card_complaints'),
+      supabase.rpc('admin_get_all_comment_complaints'),
       supabase.rpc('admin_get_all_comments'),
       supabase.rpc('admin_get_all_users'),
       supabase.rpc('admin_get_all_support_messages'),
     ]);
     if (__DEV__) {
-      if (statsRes.error)     console.warn('[admin] stats error',          statsRes.error);
-      if (complRes.error)     console.warn('[admin] complaints error',     complRes.error);
-      if (cardComplRes.error) console.warn('[admin] card complaints error', cardComplRes.error);
-      if (commRes.error)      console.warn('[admin] comments error',        commRes.error);
-      if (usersRes.error)     console.warn('[admin] users error',           usersRes.error);
+      if (statsRes.error)          console.warn('[admin] stats error', statsRes.error);
+      if (complRes.error)          console.warn('[admin] complaints error', complRes.error);
+      if (cardComplRes.error)       console.warn('[admin] card complaints error', cardComplRes.error);
+      if (commentComplRes.error)   console.warn('[admin] comment complaints error', commentComplRes.error);
+      if (commRes.error)           console.warn('[admin] comments error', commRes.error);
+      if (usersRes.error)          console.warn('[admin] users error', usersRes.error);
+      if (supportRes.error)        console.warn('[admin] support messages error', supportRes.error);
     }
     if (statsRes.data?.[0]) setStats(statsRes.data[0] as Stats);
     setComplaints((complRes.data ?? []) as Complaint[]);
     setCardComplaints((cardComplRes.data ?? []) as CardComplaint[]);
+    setCommentComplaints((commentComplRes.data ?? []) as CommentComplaint[]);
     setComments((commRes.data ?? []) as Comment[]);
     setUsers((usersRes.data ?? []) as AdminUser[]);
     setSupportMessages((supportRes.data ?? []) as SupportMessage[]);
@@ -210,6 +233,24 @@ export default function AdminPanelScreen() {
     setCardComplaintToDismiss(null);
   };
 
+  const handleDismissCommentComplaint = async () => {
+    if (!commentComplaintToDismiss) return;
+    const { error } = await supabase.rpc('admin_dismiss_comment_complaint', { p_id: commentComplaintToDismiss.id });
+    if (error) { console.warn('[admin] dismiss comment complaint error', error); return; }
+    setCommentComplaints(prev => prev.filter(c => c.id !== commentComplaintToDismiss.id));
+    setCommentComplaintToDismiss(null);
+  };
+
+  const handleDeleteReviewCommentFromComplaint = async () => {
+    if (!commentComplaintReviewToDelete) return;
+    const commentId = commentComplaintReviewToDelete.comment_id;
+    const { error } = await supabase.rpc('admin_delete_comment', { p_id: commentId });
+    if (error) { console.warn('[admin] delete review comment error', error); return; }
+    setComments(prev => prev.filter(c => c.id !== commentId));
+    setCommentComplaints(prev => prev.filter(c => c.comment_id !== commentId));
+    setCommentComplaintReviewToDelete(null);
+  };
+
   const handleMarkSupportRead = async (msg: SupportMessage) => {
     await supabase.rpc('admin_read_support_message', { p_id: msg.id });
     setSupportMessages(prev => prev.map(m => m.id === msg.id ? { ...m, is_read: true } : m));
@@ -255,7 +296,7 @@ export default function AdminPanelScreen() {
   const TABS: { key: Tab; icon: keyof typeof Feather.glyphMap; label: string; count?: number }[] = [
     { key: 'overview',   icon: 'bar-chart-2',    label: t('adminTabOverview') },
     { key: 'users',      icon: 'users',           label: t('adminTabUsers'),      count: users.length },
-    { key: 'complaints', icon: 'alert-triangle',  label: t('adminTabComplaints'), count: complaints.length + cardComplaints.length },
+    { key: 'complaints', icon: 'alert-triangle',  label: t('adminTabComplaints'), count: complaints.length + cardComplaints.length + commentComplaints.length },
     { key: 'comments',   icon: 'message-square',  label: t('adminTabComments'),   count: comments.length },
     { key: 'support',    icon: 'inbox',           label: t('adminTabSupport'),    count: supportMessages.filter(m => !m.is_read).length || undefined },
   ];
@@ -524,13 +565,13 @@ export default function AdminPanelScreen() {
                   <Feather name="alert-triangle" size={18} color="#ef4444" />
                   <Text style={styles.sectionTitle}>{t('adminTabComplaints')}</Text>
                   <View style={[styles.countPill, C.isDark && { backgroundColor: 'rgba(239,68,68,0.15)' }]}>
-                    <Text style={styles.countPillTxt}>{complaints.length + cardComplaints.length}</Text>
+                    <Text style={styles.countPillTxt}>{complaints.length + cardComplaints.length + commentComplaints.length}</Text>
                   </View>
                 </View>
 
-                {/* Filter: Decks / Words */}
-                <View style={styles.complaintFilterRow}>
-                  {(['decks', 'words'] as const).map((f) => (
+                {/* Filter: Decks / Words / Reviews */}
+                <View style={[styles.complaintFilterRow, { flexWrap: 'wrap' }]}>
+                  {(['decks', 'words', 'reviews'] as const).map((f) => (
                     <Pressable
                       key={f}
                       style={[
@@ -541,12 +582,12 @@ export default function AdminPanelScreen() {
                       onPress={() => setComplaintFilter(f)}
                     >
                       <Feather
-                        name={f === 'decks' ? 'layers' : 'credit-card'}
+                        name={f === 'decks' ? 'layers' : f === 'words' ? 'credit-card' : 'message-circle'}
                         size={13}
                         color={complaintFilter === f ? C.tint : C.textMuted}
                       />
                       <Text style={[styles.filterChipTxt, { color: complaintFilter === f ? C.tint : C.textSub }, complaintFilter === f && { fontWeight: '700' }]}>
-                        {f === 'decks' ? t('adminFilterDecks') : t('adminFilterWords')}
+                        {f === 'decks' ? t('adminFilterDecks') : f === 'words' ? t('adminFilterWords') : t('adminFilterReviews')}
                       </Text>
                     </Pressable>
                   ))}
@@ -611,6 +652,71 @@ export default function AdminPanelScreen() {
                           >
                             <Feather name="trash-2" size={14} color="#fff" />
                             <Text style={styles.btnDangerTxt}>{t('adminDeleteCard')}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))
+                  )
+                ) : complaintFilter === 'reviews' ? (
+                  commentComplaints.length === 0 ? (
+                    <EmptyState icon="check-circle" text={t('adminNoCommentComplaints')} />
+                  ) : (
+                    commentComplaints.map(row => (
+                      <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
+                        <View style={styles.cardHead}>
+                          <View style={[styles.issueBadge, C.isDark && { backgroundColor: 'rgba(217,119,6,0.15)', borderColor: '#92400e' }]}>
+                            <Text style={[styles.issueTxt, C.isDark && { color: '#fbbf24' }]}>{row.issue_key}</Text>
+                          </View>
+                          <Text style={[styles.cardDate, { color: C.textMuted }]}>
+                            {new Date(row.created_at).toLocaleDateString()}
+                          </Text>
+                        </View>
+
+                        <View style={[styles.cardWordBox, { backgroundColor: C.isDark ? 'rgba(52,211,153,0.08)' : '#ecfdf5', borderColor: C.isDark ? 'rgba(52,211,153,0.25)' : '#a7f3d0' }]}>
+                          <Feather name="message-circle" size={13} color="#059669" />
+                          <Text style={[styles.cardWordTxt, { color: '#047857' }]}>{row.comment_content}</Text>
+                        </View>
+
+                        <Pressable
+                          style={[styles.deckRow, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF' }]}
+                          onPress={() => router.push(`/deck-detail?id=${row.deck_id}`)}
+                        >
+                          <Feather name="layers" size={13} color="#6366f1" />
+                          <Text style={styles.deckTitle} numberOfLines={1}>{row.deck_title}</Text>
+                          <Feather name="external-link" size={12} color="#6366f1" />
+                        </Pressable>
+
+                        <Text style={[styles.metaTxt, { color: C.textSub }]}>
+                          {t('adminReporter')}: <Text style={styles.metaBold}>{row.reporter_name}</Text>
+                        </Text>
+                        <Text style={[styles.metaTxt, { color: C.textSub }]}>
+                          {t('adminReviewCommentAuthor')}: <Text style={styles.metaBold}>{row.comment_author_name}</Text>
+                        </Text>
+                        {row.details ? <Text style={[styles.bodyTxt, { color: C.text }]}>{row.details}</Text> : null}
+                        {row.gemini_summary ? (
+                          <View style={[styles.aiBox, { backgroundColor: C.isDark ? '#1a2740' : '#f8faff' }]}>
+                            <Feather name="cpu" size={12} color="#6366f1" />
+                            <Text style={styles.aiLabel}>{t('adminGeminiSummary')}</Text>
+                            <Text style={[styles.aiTxt, { color: C.textSub }]}>{row.gemini_summary}</Text>
+                          </View>
+                        ) : null}
+
+                        <View style={styles.cardActions}>
+                          <TouchableOpacity
+                            style={[styles.btnDismiss, C.isDark && { backgroundColor: 'rgba(5,150,105,0.15)', borderColor: '#065f46' }]}
+                            onPress={() => setCommentComplaintToDismiss(row)}
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="check" size={14} color="#059669" />
+                            <Text style={styles.btnDismissTxt}>{t('adminDismissCommentComplaint')}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.btnDanger}
+                            onPress={() => setCommentComplaintReviewToDelete(row)}
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="trash-2" size={14} color="#fff" />
+                            <Text style={styles.btnDangerTxt}>{t('adminDeleteComment')}</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -934,6 +1040,27 @@ export default function AdminPanelScreen() {
         icon="check-circle"
         onConfirm={handleDismissCardComplaint}
         onCancel={() => setCardComplaintToDismiss(null)}
+      />
+      <ConfirmModal
+        visible={Boolean(commentComplaintToDismiss)}
+        title={t('adminDismissCommentComplaint')}
+        message={t('adminDismissCommentComplaintConfirm')}
+        confirmText={t('adminDismissCommentComplaint')}
+        cancelText={t('cancel')}
+        icon="check-circle"
+        onConfirm={handleDismissCommentComplaint}
+        onCancel={() => setCommentComplaintToDismiss(null)}
+      />
+      <ConfirmModal
+        visible={Boolean(commentComplaintReviewToDelete)}
+        title={t('adminDeleteComment')}
+        message={t('adminDeleteCommentConfirm')}
+        confirmText={t('adminDeleteComment')}
+        cancelText={t('cancel')}
+        destructive
+        icon="trash-2"
+        onConfirm={handleDeleteReviewCommentFromComplaint}
+        onCancel={() => setCommentComplaintReviewToDelete(null)}
       />
       <ConfirmModal
         visible={Boolean(cardToDelete)}

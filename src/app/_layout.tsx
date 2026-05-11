@@ -137,6 +137,21 @@ function NativeStackHeaderMenu() {
   );
 }
 
+/** Title row: flex minWidth 0 so long titles ellipsize instead of drawing under headerRight. */
+function StackHeaderTitle({ children, color }: { children?: string; color: string }) {
+  return (
+    <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
+      <Text
+        numberOfLines={1}
+        ellipsizeMode="tail"
+        style={{ fontSize: 18, fontWeight: '600', color }}
+      >
+        {children}
+      </Text>
+    </View>
+  );
+}
+
 function WebAuthenticatedShell({
   sharedHeaderRight,
 }: {
@@ -174,15 +189,11 @@ function WebAuthenticatedShell({
               headerShadowVisible: true,
               headerTintColor: headerText,
               headerTitleStyle: { fontSize: 18, fontWeight: '600' },
+              headerTitleAlign: 'left',
               headerTitle: ({ children }: { children?: string }) => (
-                <Text
-                  numberOfLines={1}
-                  style={{ fontSize: 18, fontWeight: '600', color: headerText, flexShrink: 1, maxWidth: Platform.OS === 'web' ? undefined : 180 }}
-                >
-                  {children}
-                </Text>
+                <StackHeaderTitle color={headerText}>{children}</StackHeaderTitle>
               ),
-              headerTitleContainerStyle: { flex: 1 },
+              headerTitleContainerStyle: { flex: 1, minWidth: 0 },
               headerRight: sharedHeaderRight,
               headerLeft: isCompact ? headerLeft : undefined,
               animation: 'slide_from_right',
@@ -258,7 +269,16 @@ function RootLayoutNav() {
       guestAllowedByPathname(isWeb ? pathname : undefined));
 
   const sharedHeaderRight = () => (
-    <View style={{ marginRight: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+    <View
+      style={{
+        marginRight: 8,
+        marginLeft: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flexShrink: 0,
+      }}
+    >
       {session ? (
         <>
           <NotificationBell />
@@ -292,16 +312,6 @@ function RootLayoutNav() {
     </View>
   );
 
-  const makeHeaderTitle = (color: string) =>
-    ({ children }: { children?: string }) => (
-      <Text
-        numberOfLines={1}
-        style={{ fontSize: 18, fontWeight: '600', color, flexShrink: 1, maxWidth: Platform.OS === 'web' ? undefined : 180 }}
-      >
-        {children}
-      </Text>
-    );
-
   const stackNav = (
     <Stack
       screenOptions={{
@@ -309,8 +319,11 @@ function RootLayoutNav() {
         headerShadowVisible: true,
         headerTintColor: headerText,
         headerTitleStyle: { fontSize: 18, fontWeight: '600' },
-        headerTitle: makeHeaderTitle(headerText),
-        headerTitleContainerStyle: { flex: 1 },
+        headerTitleAlign: 'left',
+        headerTitle: ({ children }: { children?: string }) => (
+          <StackHeaderTitle color={headerText}>{children}</StackHeaderTitle>
+        ),
+        headerTitleContainerStyle: { flex: 1, minWidth: 0 },
         headerRight: sharedHeaderRight,
         ...(nativeAuthenticated ? { headerLeft: () => <NativeStackHeaderMenu /> } : {}),
         animation: 'slide_from_right',
