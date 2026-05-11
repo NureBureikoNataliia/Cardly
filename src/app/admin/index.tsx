@@ -284,8 +284,14 @@ export default function AdminPanelScreen() {
                   onPress={() => setActiveTab(tab.key)}
                   activeOpacity={0.8}
                 >
-                  <Feather name={tab.icon} size={16} color={active ? '#6366f1' : '#6b7280'} />
-                  <Text style={[styles.topBarLabel, active && styles.topBarLabelActive]}>
+                  <Feather name={tab.icon} size={16} color={active ? C.tint : C.textSub} />
+                  <Text
+                    style={[
+                      styles.topBarLabel,
+                      active && styles.topBarLabelActive,
+                      { color: active ? C.tint : C.textSub },
+                    ]}
+                  >
                     {tab.label}
                   </Text>
                   {(tab.count ?? 0) > 0 && (
@@ -303,8 +309,8 @@ export default function AdminPanelScreen() {
               onPress={() => router.push('/(tabs)')}
               activeOpacity={0.8}
             >
-              <Feather name="arrow-left" size={15} color="#6b7280" />
-              <Text style={[styles.backBtnTxt, { display: 'flex' }]}>{t('adminBackToApp')}</Text>
+              <Feather name="arrow-left" size={15} color={C.textSub} />
+              <Text style={[styles.backBtnTxt, { display: 'flex', color: C.textSub }]}>{t('adminBackToApp')}</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -314,10 +320,10 @@ export default function AdminPanelScreen() {
       {!isNarrow && (
         <View style={[styles.sidebar, { backgroundColor: C.surface, borderRightColor: C.border }]}>
           <View style={[styles.sidebarHeader, { borderBottomColor: C.border }]}>
-            <View style={styles.sidebarIconWrap}>
-              <Feather name="shield" size={18} color="#6366f1" />
+            <View style={[styles.sidebarIconWrap, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF' }]}>
+              <Feather name="shield" size={18} color={C.tint} />
             </View>
-            <Text style={styles.sidebarTitle}>{t('adminPanel')}</Text>
+            <Text style={[styles.sidebarTitle, { color: C.text }]}>{t('adminPanel')}</Text>
           </View>
 
           {TABS.map(tab => (
@@ -330,8 +336,14 @@ export default function AdminPanelScreen() {
               onPress={() => setActiveTab(tab.key)}
               activeOpacity={0.8}
             >
-              <Feather name={tab.icon} size={17} color={activeTab === tab.key ? '#6366f1' : '#6b7280'} />
-              <Text style={[styles.navLabel, activeTab === tab.key && styles.navLabelActive]}>
+              <Feather name={tab.icon} size={17} color={activeTab === tab.key ? C.tint : C.textSub} />
+              <Text
+                style={[
+                  styles.navLabel,
+                  activeTab === tab.key && styles.navLabelActive,
+                  { color: activeTab === tab.key ? C.tint : C.textSub },
+                ]}
+              >
                 {tab.label}
               </Text>
               {(tab.count ?? 0) > 0 && (
@@ -345,8 +357,8 @@ export default function AdminPanelScreen() {
           ))}
 
           <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(tabs)')}>
-            <Feather name="arrow-left" size={15} color="#6b7280" />
-            <Text style={styles.backBtnTxt}>{t('adminBackToApp')}</Text>
+            <Feather name="arrow-left" size={15} color={C.textSub} />
+            <Text style={[styles.backBtnTxt, { color: C.textSub }]}>{t('adminBackToApp')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -416,30 +428,53 @@ export default function AdminPanelScreen() {
                     <View key={u.user_id} style={[styles.userCard, { backgroundColor: C.surface }]}>
                       {/* Avatar + info */}
                       <View style={styles.userCardLeft}>
-                        <View style={[styles.userAvatar, u.is_admin && styles.userAvatarAdmin]}>
-                          <Text style={[styles.userAvatarTxt, u.is_admin && { color: '#6366f1' }]}>
+                        <View
+                          style={[
+                            styles.userAvatar,
+                            {
+                              backgroundColor: u.is_admin
+                                ? (C.isDark ? 'rgba(99,102,241,0.22)' : '#EEF2FF')
+                                : (C.isDark ? '#2d3f55' : '#f3f4f6'),
+                              borderColor: u.is_admin
+                                ? (C.isDark ? 'rgba(165,180,252,0.4)' : '#c7d2fe')
+                                : C.border,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.userAvatarTxt, { color: u.is_admin ? C.tint : C.text }]}>
                             {u.username[0]?.toUpperCase() ?? '?'}
                           </Text>
                         </View>
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <View style={styles.userNameRow}>
-                            <Text style={[styles.userName, { flexShrink: 1 }]} numberOfLines={1}>{u.username}</Text>
+                            <Text style={[styles.userName, { color: C.text }]} numberOfLines={1}>{u.username}</Text>
                             {u.is_admin && (
-                              <View style={styles.adminBadge}>
-                                <Feather name="shield" size={10} color="#6366f1" />
-                                <Text style={styles.adminBadgeTxt}>{t('adminAdminBadge')}</Text>
+                              <View
+                                style={[
+                                  styles.adminBadge,
+                                  C.isDark
+                                    ? {
+                                        backgroundColor: 'rgba(99,102,241,0.2)',
+                                        borderWidth: 1,
+                                        borderColor: 'rgba(165,180,252,0.35)',
+                                      }
+                                    : { backgroundColor: '#EEF2FF' },
+                                ]}
+                              >
+                                <Feather name="shield" size={10} color={C.tint} />
+                                <Text style={[styles.adminBadgeTxt, { color: C.tint }]}>{t('adminAdminBadge')}</Text>
                               </View>
                             )}
                           </View>
-                          <Text style={styles.userEmail} numberOfLines={1}>{u.email}</Text>
+                          <Text style={[styles.userEmail, { color: C.textSub }]} numberOfLines={1}>{u.email}</Text>
                           <View style={styles.userMeta}>
                             <View style={styles.userMetaItem}>
-                              <Feather name="layers" size={11} color="#9ca3af" />
-                              <Text style={styles.userMetaTxt}>{u.deck_count} {t('adminUserDecks')}</Text>
+                              <Feather name="layers" size={11} color={C.textMuted} />
+                              <Text style={[styles.userMetaTxt, { color: C.textMuted }]}>{u.deck_count} {t('adminUserDecks')}</Text>
                             </View>
                             <View style={styles.userMetaItem}>
-                              <Feather name="clock" size={11} color="#9ca3af" />
-                              <Text style={styles.userMetaTxt}>
+                              <Feather name="clock" size={11} color={C.textMuted} />
+                              <Text style={[styles.userMetaTxt, { color: C.textMuted }]}>
                                 {u.last_sign_in
                                   ? new Date(u.last_sign_in).toLocaleDateString()
                                   : t('adminUserNever')}
@@ -929,7 +964,7 @@ function StatCard({ icon, color, value, label }: {
         <Feather name={icon} size={20} color={color} />
       </View>
       <Text style={[styles.statVal, { color }]}>{value.toLocaleString()}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statLabel, { color: C.textSub }]}>{label}</Text>
     </View>
   );
 }
@@ -939,9 +974,9 @@ function EmptyState({ icon, text }: { icon: keyof typeof Feather.glyphMap; text:
   return (
     <View style={styles.emptyWrap}>
       <View style={[styles.emptyIcon, { backgroundColor: C.isDark ? '#1d2a3a' : '#f9fafb' }]}>
-        <Feather name={icon} size={32} color="#d1d5db" />
+        <Feather name={icon} size={32} color={C.textMuted} />
       </View>
-      <Text style={styles.emptyTxt}>{text}</Text>
+      <Text style={[styles.emptyTxt, { color: C.textSub }]}>{text}</Text>
     </View>
   );
 }

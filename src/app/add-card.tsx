@@ -454,7 +454,7 @@ export default function AddCardScreen() {
   if (isLoading) {
     return (
       <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
-        <ActivityIndicator size="large" color="#4255ff" />
+        <ActivityIndicator size="large" color={C.tint} />
       </View>
     );
   }
@@ -490,11 +490,11 @@ export default function AddCardScreen() {
           <View style={styles.formContainer}>
             {/* ── HERO HEADER ── */}
             <View style={styles.hero}>
-              <View style={styles.heroBadge}>
+              <View style={[styles.heroBadge, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.18)' : '#eff1ff' }]}>
                 <Feather
                   name={isEdit ? "edit-3" : "credit-card"}
                   size={20}
-                  color="#4255ff"
+                  color={C.tint}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -520,12 +520,20 @@ export default function AddCardScreen() {
                     <Pressable
                       key={id}
                       onPress={() => setCardType(id)}
-                      style={[styles.typeChip, cardType === id && styles.typeChipOn]}
+                      style={[
+                        styles.typeChip,
+                        { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                        cardType === id && {
+                          borderColor: C.tint,
+                          backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                        },
+                      ]}
                     >
                       <Text
                         style={[
                           styles.typeChipTxt,
-                          cardType === id && styles.typeChipTxtOn,
+                          { color: C.textSub },
+                          cardType === id && { color: C.tint, fontWeight: '700' as const },
                         ]}
                       >
                         {t(lk)}
@@ -537,7 +545,7 @@ export default function AddCardScreen() {
 
               {cardType === "cloze" ? (
                 <>
-                  <Text style={styles.clozeIntro}>{t("clozeIntro")}</Text>
+                  <Text style={[styles.clozeIntro, { color: C.textSub }]}>{t("clozeIntro")}</Text>
                   <Field label={t("clozeFieldBefore")}>
                     <InputRow
                       icon="align-left"
@@ -549,7 +557,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
                         placeholder={t("clozePlaceholderBefore")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={clozeBefore}
                         onChangeText={setClozeBefore}
                         onFocus={() => setFocusedField("cBefore")}
@@ -570,7 +578,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, styles.inputClozeGapHint, webTextInputNoOutline]}
                         placeholder={t("clozePlaceholderGapFront")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={clozeGapFront}
                         onChangeText={setClozeGapFront}
                         onFocus={() => setFocusedField("cGap")}
@@ -584,7 +592,7 @@ export default function AddCardScreen() {
                           hitSlop={8}
                           style={{ marginTop: 2 }}
                         >
-                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                          <Feather name="x-circle" size={16} color={C.textMuted} />
                         </Pressable>
                       )}
                     </InputRow>
@@ -600,7 +608,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, styles.inputClozeHidden, webTextInputNoOutline]}
                         placeholder={t("clozePlaceholderHidden")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={clozeHidden}
                         onChangeText={setClozeHidden}
                         onFocus={() => setFocusedField("cHidden")}
@@ -614,7 +622,7 @@ export default function AddCardScreen() {
                           hitSlop={8}
                           style={{ marginTop: 2 }}
                         >
-                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                          <Feather name="x-circle" size={16} color={C.textMuted} />
                         </Pressable>
                       )}
                     </InputRow>
@@ -630,7 +638,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
                         placeholder={t("clozePlaceholderAfter")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={clozeAfter}
                         onChangeText={setClozeAfter}
                         onFocus={() => setFocusedField("cAfter")}
@@ -654,7 +662,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
                         placeholder={t("frontPlaceholder")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={frontText}
                         onChangeText={setFrontText}
                         onFocus={() => setFocusedField("front")}
@@ -668,7 +676,7 @@ export default function AddCardScreen() {
                           hitSlop={8}
                           style={{ marginTop: 2 }}
                         >
-                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                          <Feather name="x-circle" size={16} color={C.textMuted} />
                         </Pressable>
                       )}
                     </InputRow>
@@ -684,7 +692,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
                         placeholder={t("backPlaceholder")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={backText}
                         onChangeText={setBackText}
                         onFocus={() => setFocusedField("back")}
@@ -698,7 +706,7 @@ export default function AddCardScreen() {
                           hitSlop={8}
                           style={{ marginTop: 2 }}
                         >
-                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                          <Feather name="x-circle" size={16} color={C.textMuted} />
                         </Pressable>
                       )}
                     </InputRow>
@@ -711,27 +719,27 @@ export default function AddCardScreen() {
                       <Feather
                         name={createReversedPair ? "check-square" : "square"}
                         size={20}
-                        color={createReversedPair ? "#4255ff" : "#b0b8c8"}
+                        color={createReversedPair ? C.tint : C.textMuted}
                       />
                       <View style={{ flex: 1, gap: 4 }}>
-                        <Text style={styles.revToggleTitle}>
+                        <Text style={[styles.revToggleTitle, { color: C.text }]}>
                           {t("cardCreateReversedPair")}
                         </Text>
-                        <Text style={styles.revToggleHint}>
+                        <Text style={[styles.revToggleHint, { color: C.textSub }]}>
                           {t("cardCreateReversedHint")}
                         </Text>
                       </View>
                     </Pressable>
                   ) : null}
                   {isEdit && pairMeta.pairId ? (
-                    <Text style={styles.revEditHint}>
+                    <Text style={[styles.revEditHint, { color: C.textSub }]}>
                       {t("cardReversiblePairEditNote")}
                     </Text>
                   ) : null}
                 </>
               )}
 
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
 
               <Field label={t("frontImageUrl")}>
                 <InputRow
@@ -753,7 +761,7 @@ export default function AddCardScreen() {
                   />
                   {frontImageUrl.length > 0 && (
                     <Pressable onPress={() => setFrontImageUrl("")} hitSlop={8}>
-                      <Feather name="x-circle" size={16} color="#d1d5db" />
+                      <Feather name="x-circle" size={16} color={C.textMuted} />
                     </Pressable>
                   )}
                 </InputRow>
@@ -764,13 +772,18 @@ export default function AddCardScreen() {
                     onPress={() => setMediaKindFront("image")}
                     style={[
                       styles.typeChip,
-                      mediaKindFront === "image" && styles.typeChipOn,
+                      { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                      mediaKindFront === "image" && {
+                        borderColor: C.tint,
+                        backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                      },
                     ]}
                   >
                     <Text
                       style={[
                         styles.typeChipTxt,
-                        mediaKindFront === "image" && styles.typeChipTxtOn,
+                        { color: C.textSub },
+                        mediaKindFront === "image" && { color: C.tint, fontWeight: '700' as const },
                       ]}
                     >
                       {t("mediaKindImage")}
@@ -780,13 +793,18 @@ export default function AddCardScreen() {
                     onPress={() => setMediaKindFront("audio")}
                     style={[
                       styles.typeChip,
-                      mediaKindFront === "audio" && styles.typeChipOn,
+                      { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                      mediaKindFront === "audio" && {
+                        borderColor: C.tint,
+                        backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                      },
                     ]}
                   >
                     <Text
                       style={[
                         styles.typeChipTxt,
-                        mediaKindFront === "audio" && styles.typeChipTxtOn,
+                        { color: C.textSub },
+                        mediaKindFront === "audio" && { color: C.tint, fontWeight: '700' as const },
                       ]}
                     >
                       {t("mediaKindAudio")}
@@ -815,7 +833,7 @@ export default function AddCardScreen() {
                   />
                   {backImageUrl.length > 0 && (
                     <Pressable onPress={() => setBackImageUrl("")} hitSlop={8}>
-                      <Feather name="x-circle" size={16} color="#d1d5db" />
+                      <Feather name="x-circle" size={16} color={C.textMuted} />
                     </Pressable>
                   )}
                 </InputRow>
@@ -826,13 +844,18 @@ export default function AddCardScreen() {
                     onPress={() => setMediaKindBack("image")}
                     style={[
                       styles.typeChip,
-                      mediaKindBack === "image" && styles.typeChipOn,
+                      { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                      mediaKindBack === "image" && {
+                        borderColor: C.tint,
+                        backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                      },
                     ]}
                   >
                     <Text
                       style={[
                         styles.typeChipTxt,
-                        mediaKindBack === "image" && styles.typeChipTxtOn,
+                        { color: C.textSub },
+                        mediaKindBack === "image" && { color: C.tint, fontWeight: '700' as const },
                       ]}
                     >
                       {t("mediaKindImage")}
@@ -842,13 +865,18 @@ export default function AddCardScreen() {
                     onPress={() => setMediaKindBack("audio")}
                     style={[
                       styles.typeChip,
-                      mediaKindBack === "audio" && styles.typeChipOn,
+                      { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                      mediaKindBack === "audio" && {
+                        borderColor: C.tint,
+                        backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                      },
                     ]}
                   >
                     <Text
                       style={[
                         styles.typeChipTxt,
-                        mediaKindBack === "audio" && styles.typeChipTxtOn,
+                        { color: C.textSub },
+                        mediaKindBack === "audio" && { color: C.tint, fontWeight: '700' as const },
                       ]}
                     >
                       {t("mediaKindAudio")}
@@ -857,7 +885,7 @@ export default function AddCardScreen() {
                 </View>
               </Field>
 
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
 
               {/* NOTES */}
               <Field label={t("notes")}>
@@ -884,7 +912,15 @@ export default function AddCardScreen() {
 
               {/* ERROR */}
               {error ? (
-                <View style={styles.errorBox}>
+                <View
+                  style={[
+                    styles.errorBox,
+                    {
+                      backgroundColor: C.isDark ? 'rgba(220,38,38,0.12)' : '#fef2f2',
+                      borderColor: C.isDark ? 'rgba(248,113,113,0.35)' : '#fecaca',
+                    },
+                  ]}
+                >
                   <Feather name="alert-circle" size={15} color="#dc2626" />
                   <Text style={styles.errorTxt}>{error}</Text>
                 </View>
@@ -896,6 +932,10 @@ export default function AddCardScreen() {
               <TouchableOpacity
                 style={[
                   styles.btnPreviewStudy,
+                  {
+                    backgroundColor: C.surface,
+                    borderColor: isValid ? C.tint : C.border,
+                  },
                   !isValid && styles.btnPreviewStudyOff,
                 ]}
                 onPress={() => {
@@ -909,12 +949,12 @@ export default function AddCardScreen() {
                 <Feather
                   name="eye"
                   size={18}
-                  color={isValid ? "#4255ff" : "#c4cbd8"}
+                  color={isValid ? C.tint : C.placeholder}
                 />
                 <Text
                   style={[
                     styles.btnPreviewStudyTxt,
-                    !isValid && styles.btnPreviewStudyTxtOff,
+                    { color: isValid ? C.tint : C.placeholder },
                   ]}
                 >
                   {t("addCardPreviewStudy")}
@@ -969,16 +1009,16 @@ export default function AddCardScreen() {
             onPress={() => setStudyPreviewOpen(false)}
           />
           <View style={styles.studyPreviewCenter}>
-            <View style={styles.studyPreviewSheet}>
-            <View style={styles.studyPreviewHeader}>
-              <Text style={styles.studyPreviewTitle}>{t("addCardPreviewTitle")}</Text>
+            <View style={[styles.studyPreviewSheet, { backgroundColor: C.surface }]}>
+            <View style={[styles.studyPreviewHeader, { borderBottomColor: C.borderLight }]}>
+              <Text style={[styles.studyPreviewTitle, { color: C.text }]}>{t("addCardPreviewTitle")}</Text>
               <Pressable
                 hitSlop={12}
                 onPress={() => setStudyPreviewOpen(false)}
                 accessibilityRole="button"
                 accessibilityLabel={t("addCardPreviewClose")}
               >
-                <Feather name="x" size={22} color="#6b7280" />
+                <Feather name="x" size={22} color={C.textSub} />
               </Pressable>
             </View>
             {showPairStudySwitcher ? (
@@ -990,14 +1030,18 @@ export default function AddCardScreen() {
                   }}
                   style={[
                     styles.studyPreviewPairChip,
-                    studyPreviewPairSlot === 1 && styles.studyPreviewPairChipOn,
+                    { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                    studyPreviewPairSlot === 1 && {
+                      borderColor: C.tint,
+                      backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                    },
                   ]}
                 >
                   <Text
                     style={[
                       styles.studyPreviewPairChipTxt,
-                      studyPreviewPairSlot === 1 &&
-                        styles.studyPreviewPairChipTxtOn,
+                      { color: C.textSub },
+                      studyPreviewPairSlot === 1 && { color: C.tint, fontWeight: '700' as const },
                     ]}
                   >
                     {t("addCardPreviewPair1")}
@@ -1010,14 +1054,18 @@ export default function AddCardScreen() {
                   }}
                   style={[
                     styles.studyPreviewPairChip,
-                    studyPreviewPairSlot === 2 && styles.studyPreviewPairChipOn,
+                    { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                    studyPreviewPairSlot === 2 && {
+                      borderColor: C.tint,
+                      backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                    },
                   ]}
                 >
                   <Text
                     style={[
                       styles.studyPreviewPairChipTxt,
-                      studyPreviewPairSlot === 2 &&
-                        styles.studyPreviewPairChipTxtOn,
+                      { color: C.textSub },
+                      studyPreviewPairSlot === 2 && { color: C.tint, fontWeight: '700' as const },
                     ]}
                   >
                     {t("addCardPreviewPair2")}
@@ -1032,7 +1080,14 @@ export default function AddCardScreen() {
             >
               <TouchableOpacity
                 activeOpacity={1}
-                style={styles.studyPreviewCard}
+                style={[
+                  styles.studyPreviewCard,
+                  {
+                    backgroundColor: C.isDark ? C.surfaceAlt : '#fff',
+                    borderWidth: C.isDark ? 1 : 0,
+                    borderColor: C.border,
+                  },
+                ]}
                 onPress={() => setStudyPreviewShowBack((v) => !v)}
               >
                 <View style={styles.studyPreviewCardInner}>
@@ -1190,10 +1245,11 @@ function Field({
   labelRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const C = useAppColors();
   return (
     <View style={{ gap: 7 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={styles.fieldLabel}>
+        <Text style={[styles.fieldLabel, { color: C.textSub }]}>
           {label}
           {required && <Text style={{ color: "#ef4444" }}> *</Text>}
         </Text>
@@ -1232,7 +1288,7 @@ function InputRow({
       <Feather
         name={icon}
         size={16}
-        color={focused ? C.tint : "#b0b8c8"}
+        color={focused ? C.tint : C.textMuted}
         style={multiline ? { marginTop: 3 } : undefined}
       />
       {children}

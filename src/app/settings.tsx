@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View as RNView,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 
@@ -36,7 +37,12 @@ export default function SettingsScreen() {
   const { t } = useLanguage();
   const { user, signOut } = useAuth();
   const router = useRouter();
+  const navigation = useNavigation();
   const C = useAppColors();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: t('settings') });
+  }, [navigation, t]);
 
   const [username, setUsername] = useState((user?.user_metadata?.username as string) ?? '');
   const [avatarUrl, setAvatarUrl] = useState((user?.user_metadata?.avatar_url as string) ?? '');

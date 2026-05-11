@@ -57,8 +57,9 @@ export function useAppColors() {
     surface:      isDark ? '#1d2a3a' : '#ffffff',
     surfaceAlt:   isDark ? '#243547' : '#f7f8fb',
     text:         isDark ? '#eef2ff' : '#111827',
-    textSub:      isDark ? '#9ca3af' : '#6b7280',
-    textMuted:    isDark ? '#6b7280' : '#9ca3af',
+    /** Secondary copy — brighter in dark mode for WCAG-friendly contrast on navy surfaces */
+    textSub:      isDark ? '#c8d0e0' : '#6b7280',
+    textMuted:    isDark ? '#9fb0c8' : '#9ca3af',
     border:       isDark ? '#2d3f55' : '#e5e7eb',
     borderLight:  isDark ? '#243547' : '#f3f4f6',
     inputBg:      isDark ? '#243547' : '#f7f8fb',

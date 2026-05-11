@@ -1,6 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
+import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
@@ -517,8 +518,13 @@ export default function StatisticsScreen() {
   const { locale, t } = useLanguage();
   const { user } = useAuth();
   const router = useRouter();
+  const navigation = useNavigation();
   const C = useAppColors();
   const dateLocaleTag = bcp47ForAppLocale(locale);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: t('statistics') });
+  }, [navigation, t]);
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [wordStats, setWordStats] = useState<WordStats | null>(null);

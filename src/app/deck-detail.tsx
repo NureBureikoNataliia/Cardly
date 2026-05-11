@@ -119,13 +119,23 @@ export default function DeckDetailScreen() {
     if (deckError || cardsError) {
       setError(t("failedToLoadDeck"));
     } else {
-      setDeck(deckData as Deck);
-      const list = (cardsData as Card[]) ?? [];
-      setCards(list);
-      setTotalCards(list.length);
-      if (user?.id) {
-        const progress = await fetchUserProgressForDeck(user.id, list.map((c) => c.card_id));
-        setProgressMap(progress);
+      const d = deckData as Deck;
+      if (!user?.id && !d.is_public) {
+        setError(t("deckNotFound"));
+        setDeck(null);
+        setCards([]);
+        setTotalCards(0);
+      } else {
+        setDeck(d);
+        const list = (cardsData as Card[]) ?? [];
+        setCards(list);
+        setTotalCards(list.length);
+        if (user?.id) {
+          const progress = await fetchUserProgressForDeck(user.id, list.map((c) => c.card_id));
+          setProgressMap(progress);
+        } else {
+          setProgressMap(new Map());
+        }
       }
     }
     setLoading(false);
@@ -296,7 +306,9 @@ export default function DeckDetailScreen() {
     setHasCopy((data?.length ?? 0) > 0);
   }, [deck, user, isOwner]);
 
-  useEffect(() => { if (isPublicFromOther) checkHasCopy(); }, [isPublicFromOther, checkHasCopy]);
+  useEffect(() => {
+    if (isPublicFromOther && user) checkHasCopy();
+  }, [isPublicFromOther, user, checkHasCopy]);
 
   const handleAddToMyAccount = async () => {
     if (!deck || !user || isCopying || hasCopy) return;
@@ -392,9 +404,12 @@ export default function DeckDetailScreen() {
   };
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: t("appName") });
-    return () => { navigation.setOptions({ headerShown: undefined, tabBarStyle: undefined }); };
-  }, [navigation, t]);
+    // Avoid "Cardly" twice: left header already shows app name + menu.
+    navigation.setOptions({ title: deck?.title?.trim() ? deck.title : '' });
+    return () => {
+      navigation.setOptions({ headerShown: undefined, tabBarStyle: undefined });
+    };
+  }, [navigation, deck?.title]);
 
   const isCopiedDeck = Boolean(deck?.original_deck_id);
 
@@ -494,21 +509,25 @@ export default function DeckDetailScreen() {
           {/* ════════════ STATS ROW ════════════ */}
           <View style={[styles.statsRow, { backgroundColor: C.surface }]}>
             <StatChip icon="layers" value={totalCards} label={t("totalCards")} color="#6366f1" />
-            <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
-            <StatChip icon="clock" value={dueToday} label={t("dueToday")} color="#d97706" />
-            <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
-            <StatChip
-              icon="check-circle"
-              value={`${progressPct}%`}
-              label={t("learned")}
-              color="#059669"
-              onInfoPress={() => setLearnedInfoOpen(true)}
-              infoAccessibilityLabel={t("learnedPercentInfoTitle")}
-            />
+            {user ? (
+              <>
+                <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
+                <StatChip icon="clock" value={dueToday} label={t("dueToday")} color="#d97706" />
+                <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
+                <StatChip
+                  icon="check-circle"
+                  value={`${progressPct}%`}
+                  label={t("learned")}
+                  color="#059669"
+                  onInfoPress={() => setLearnedInfoOpen(true)}
+                  infoAccessibilityLabel={t("learnedPercentInfoTitle")}
+                />
+              </>
+            ) : null}
           </View>
 
           {/* ────── Progress bar ────── */}
-          {totalCards > 0 && (
+          {!!user && totalCards > 0 && (
             <View style={styles.progressWrap}>
               <View style={[styles.progressTrack, { backgroundColor: C.border }]}>
                 <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
@@ -579,18 +598,21 @@ export default function DeckDetailScreen() {
             )}
 
             {/* Secondary row */}
+            {(user || canEdit) ? (
             <View style={styles.actionRowSecondary}>
-              <ActionBtn
-                icon="download"
-                label={isExportingPdf ? t("exportingPdf") : t("exportPdf")}
-                bg={C.surface}
-                textColor="#2563eb"
-                border
-                borderColor="rgba(37,99,235,0.25)"
-                onPress={handleExportPdf}
-                disabled={isExportingPdf}
-                flex
-              />
+              {user ? (
+                <ActionBtn
+                  icon="download"
+                  label={isExportingPdf ? t("exportingPdf") : t("exportPdf")}
+                  bg={C.surface}
+                  textColor="#2563eb"
+                  border
+                  borderColor="rgba(37,99,235,0.25)"
+                  onPress={handleExportPdf}
+                  disabled={isExportingPdf}
+                  flex
+                />
+              ) : null}
               {canEdit && (
                 <ActionBtn
                   icon="plus-circle"
@@ -615,7 +637,7 @@ export default function DeckDetailScreen() {
                   flex
                 />
               )}
-              {user && (
+              {user ? (
                 <ActionBtn
                   icon="star"
                   label={t("rateComment")}
@@ -626,8 +648,24 @@ export default function DeckDetailScreen() {
                   onPress={() => router.push(`/deck-rate?id=${deck.deck_id}`)}
                   flex
                 />
-              )}
+              ) : null}
             </View>
+            ) : null}
+
+            {isOwner && (
+              <View style={{ width: "100%", marginTop: 10 }}>
+                <ActionBtn
+                  icon="upload"
+                  label={t("importCards")}
+                  bg={C.surface}
+                  textColor="#0f766e"
+                  border
+                  borderColor="rgba(15,118,110,0.28)"
+                  onPress={() => router.push(`/deck-import?deckId=${deck.deck_id}`)}
+                  fullWidth
+                />
+              </View>
+            )}
 
             {/* Copy/update row */}
             {isOwner && isCopiedDeck && (
@@ -643,7 +681,7 @@ export default function DeckDetailScreen() {
                 fullWidth
               />
             )}
-            {isPublicFromOther && (
+            {isPublicFromOther && user && (
               <ActionBtn
                 icon={hasCopy ? "check" : "download"}
                 label={hasCopy ? t("alreadyInCollection") : (isCopying ? `${t("saving")}...` : t("addToMyAccount"))}
@@ -655,6 +693,34 @@ export default function DeckDetailScreen() {
                 disabled={hasCopy === true || isCopying}
                 fullWidth
               />
+            )}
+            {isPublicFromOther && !user && (
+              <View
+                style={{
+                  marginTop: 4,
+                  padding: 16,
+                  borderRadius: 14,
+                  backgroundColor: C.isDark ? 'rgba(99,102,241,0.12)' : '#eef0ff',
+                  borderWidth: 1,
+                  borderColor: C.isDark ? 'rgba(165,180,252,0.25)' : 'rgba(99,102,241,0.25)',
+                }}
+              >
+                <Text style={{ color: C.textSub, fontSize: 15, lineHeight: 22 }}>{t('guestDeckCta')}</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
+                  <TouchableOpacity
+                    onPress={() => router.push('/auth/login')}
+                    style={{ backgroundColor: C.tint, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10 }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 15 }}>{t('signIn')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => router.push('/auth/signup')}
+                    style={{ borderWidth: 1.5, borderColor: C.tint, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10 }}
+                  >
+                    <Text style={{ color: C.tint, fontWeight: '600', fontSize: 15 }}>{t('signUp')}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
           </View>
 
@@ -673,8 +739,13 @@ export default function DeckDetailScreen() {
                 activeOpacity={0.8}
               >
                 <View style={styles.collabToggleLeft}>
-                  <View style={styles.collabToggleIcon}>
-                    <Feather name="users" size={16} color="#6366f1" />
+                  <View
+                    style={[
+                      styles.collabToggleIcon,
+                      { backgroundColor: C.isDark ? 'rgba(99,102,241,0.18)' : '#EEF2FF' },
+                    ]}
+                  >
+                    <Feather name="users" size={16} color={C.tint} />
                   </View>
                   <Text style={[styles.collabToggleTitle, { color: C.text }]}>{t("collaborators")}</Text>
                   {collaborators.filter(c => c.status !== 'pending' && c.status !== 'declined').length > 0 && (
@@ -685,7 +756,7 @@ export default function DeckDetailScreen() {
                     </View>
                   )}
                 </View>
-                <Feather name={collabOpen ? "chevron-up" : "chevron-down"} size={18} color="#6b7280" />
+                <Feather name={collabOpen ? "chevron-up" : "chevron-down"} size={18} color={C.textSub} />
               </TouchableOpacity>
 
               {/* Expandable content */}

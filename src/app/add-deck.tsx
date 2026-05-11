@@ -126,8 +126,8 @@ export default function AddDeckScreen() {
 
         {/* ── HERO HEADER ── */}
         <View style={styles.hero}>
-          <View style={styles.heroBadge}>
-            <Feather name={isEdit ? 'edit-3' : 'layers'} size={20} color="#4255ff" />
+          <View style={[styles.heroBadge, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.18)' : '#eff1ff' }]}>
+            <Feather name={isEdit ? 'edit-3' : 'layers'} size={20} color={C.tint} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.heroTitle, { color: C.text }]}>
@@ -141,12 +141,12 @@ export default function AddDeckScreen() {
 
         {isLoading ? (
           <View style={styles.loading}>
-            <ActivityIndicator size="large" color="#4255ff" />
+            <ActivityIndicator size="large" color={C.tint} />
           </View>
         ) : (
           <>
             {/* ── COVER BLOCK ── */}
-            <View style={[styles.coverWrap, { height: coverH }]}>
+            <View style={[styles.coverWrap, { height: coverH, backgroundColor: C.isDark ? C.surfaceAlt : '#edeef6' }]}>
               {hasCover ? (
                 <>
                   <Image
@@ -173,11 +173,11 @@ export default function AddDeckScreen() {
                 </>
               ) : (
                 <View style={styles.coverEmpty}>
-                  <View style={styles.coverEmptyIcon}>
-                    <Feather name="image" size={28} color="#a5b4fc" />
+                  <View style={[styles.coverEmptyIcon, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.12)' : '#e0e3f8' }]}>
+                    <Feather name="image" size={28} color={C.tint} />
                   </View>
-                  <Text style={styles.coverEmptyTitle}>{t('coverPreview')}</Text>
-                  <Text style={styles.coverEmptyHint}>{t('coverImageUrl')}</Text>
+                  <Text style={[styles.coverEmptyTitle, { color: C.textSub }]}>{t('coverPreview')}</Text>
+                  <Text style={[styles.coverEmptyHint, { color: C.textMuted }]}>{t('coverImageUrl')}</Text>
                 </View>
               )}
             </View>
@@ -205,7 +205,7 @@ export default function AddDeckScreen() {
                   />
                   {title.length > 0 && (
                     <Pressable onPress={() => setTitle('')} hitSlop={8}>
-                      <Feather name="x-circle" size={16} color="#d1d5db" />
+                      <Feather name="x-circle" size={16} color={C.textMuted} />
                     </Pressable>
                   )}
                 </InputRow>
@@ -306,35 +306,63 @@ export default function AddDeckScreen() {
                   />
                   {coverUrl.length > 0 && (
                     <Pressable onPress={() => { setCoverUrl(''); setImgRatio(null); }} hitSlop={8}>
-                      <Feather name="x-circle" size={16} color="#d1d5db" />
+                      <Feather name="x-circle" size={16} color={C.textMuted} />
                     </Pressable>
                   )}
                 </InputRow>
               </Field>
 
               {/* VISIBILITY */}
-              <View style={[styles.toggleRow, { backgroundColor: C.inputBg, borderColor: C.inputBorder }, isPublic && styles.toggleRowActive]}>
-                <View style={[styles.toggleIcon, isPublic ? styles.toggleIconOn : styles.toggleIconOff]}>
-                  <Feather name={isPublic ? 'globe' : 'lock'} size={17} color={isPublic ? '#4255ff' : '#9ca3af'} />
+              <View
+                style={[
+                  styles.toggleRow,
+                  { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                  isPublic && {
+                    borderColor: C.isDark ? 'rgba(165,180,252,0.35)' : 'rgba(66,85,255,0.25)',
+                    backgroundColor: C.isDark ? 'rgba(99,102,241,0.14)' : '#f6f7ff',
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.toggleIcon,
+                    isPublic ? styles.toggleIconOn : styles.toggleIconOff,
+                    isPublic && C.isDark && { backgroundColor: 'rgba(99,102,241,0.2)' },
+                  ]}
+                >
+                  <Feather name={isPublic ? 'globe' : 'lock'} size={17} color={isPublic ? C.tint : C.textMuted} />
                 </View>
                 <View style={{ flex: 1 }}>
-                <Text style={[styles.toggleLabel, { color: C.text }]}>
-                  {isPublic ? t('public') : t('private')}
-                </Text>
-                <Text style={[styles.toggleHint, { color: C.textMuted }]} numberOfLines={1}>{t('publicDeckHelp')}</Text>
+                  <Text style={[styles.toggleLabel, { color: C.text }]}>
+                    {isPublic ? t('public') : t('private')}
+                  </Text>
+                  <Text style={[styles.toggleHint, { color: C.textMuted }]} numberOfLines={1}>
+                    {t('publicDeckHelp')}
+                  </Text>
                 </View>
                 <Switch
                   value={isPublic}
                   onValueChange={setIsPublic}
-                  trackColor={{ false: '#e5e7eb', true: 'rgba(66,85,255,0.28)' }}
-                  thumbColor={isPublic ? '#4255ff' : '#d1d5db'}
-                  ios_backgroundColor="#e5e7eb"
+                  trackColor={{
+                    false: C.isDark ? '#3d4f66' : '#e5e7eb',
+                    true: C.isDark ? 'rgba(165,180,252,0.35)' : 'rgba(66,85,255,0.28)',
+                  }}
+                  thumbColor={isPublic ? C.tint : (C.isDark ? '#64748b' : '#d1d5db')}
+                  ios_backgroundColor={C.isDark ? '#3d4f66' : '#e5e7eb'}
                 />
               </View>
 
               {/* ERROR */}
               {error ? (
-                <View style={styles.errorBox}>
+                <View
+                  style={[
+                    styles.errorBox,
+                    {
+                      backgroundColor: C.isDark ? 'rgba(220,38,38,0.12)' : '#fef2f2',
+                      borderColor: C.isDark ? 'rgba(248,113,113,0.35)' : '#fecaca',
+                    },
+                  ]}
+                >
                   <Feather name="alert-circle" size={15} color="#dc2626" />
                   <Text style={styles.errorTxt}>{error}</Text>
                 </View>
@@ -387,10 +415,11 @@ function Field({
   labelRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const C = useAppColors();
   return (
     <View style={{ gap: 7 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={styles.fieldLabel}>
+        <Text style={[styles.fieldLabel, { color: C.textSub }]}>
           {label}
           {required && <Text style={{ color: '#ef4444' }}> *</Text>}
         </Text>
@@ -429,7 +458,7 @@ function InputRow({
       <Feather
         name={icon}
         size={16}
-        color={focused ? C.tint : '#b0b8c8'}
+        color={focused ? C.tint : C.textMuted}
         style={multiline ? { marginTop: 3 } : undefined}
       />
       {children}

@@ -139,10 +139,12 @@ const styles = StyleSheet.create({
   },
   item: {
     flexDirection: 'row',
-    alignItems:    'center',
-    paddingVertical: 12,
-    paddingHorizontal: 6,
-    borderRadius:  8,
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    minHeight: 48,
+    alignSelf: 'stretch',
   },
   itemText: {
     marginLeft: 12, fontSize: 16, color: '#1f2937',
