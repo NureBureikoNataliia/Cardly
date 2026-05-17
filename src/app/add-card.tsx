@@ -23,16 +23,22 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { supabase } from "@/src/lib/supabase";
 import type { Card } from "@/assets/data/cards";
-import type { CardExtra, CardTypeName, ClozeParts, MediaKind } from "@/src/lib/cardModel";
+import type { CardExtra, CardTypeName, ClozeParts } from "@/src/lib/cardModel";
 import {
   buildClozeFrontText,
-  effectiveMediaKind,
   getClozePartsFromCard,
   isClozeGapComplete,
   newPairId,
   normalizeCardType,
   parseCardExtra,
 } from "@/src/lib/cardModel";
+import {
+  cardMediaRowsToForm,
+  emptyCardMediaForm,
+  hasMediaFormChanges,
+  replaceCardMedia,
+  swapCardMediaFormSides,
+} from "@/src/lib/cardMedia";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 
 /** Web: hide browser default focus outline on TextInput (RN typings omit outlineStyle "none"). */
@@ -112,13 +118,11 @@ export default function AddCardScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [frontText, setFrontText] = useState("");
   const [backText, setBackText] = useState("");
-  const [frontImageUrl, setFrontImageUrl] = useState("");
-  const [backImageUrl, setBackImageUrl] = useState("");
+  const [mediaForm, setMediaForm] = useState(emptyCardMediaForm);
   const [notes, setNotes] = useState("");
   const [initialFront, setInitialFront] = useState("");
   const [initialBack, setInitialBack] = useState("");
-  const [initialFrontImage, setInitialFrontImage] = useState("");
-  const [initialBackImage, setInitialBackImage] = useState("");
+  const [initialMediaForm, setInitialMediaForm] = useState(emptyCardMediaForm);
   const [initialNotes, setInitialNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,10 +135,6 @@ export default function AddCardScreen() {
 
   const [cardType, setCardType] = useState<CardTypeName>("basic");
   const [initialCardType, setInitialCardType] = useState<CardTypeName>("basic");
-  const [mediaKindFront, setMediaKindFront] = useState<MediaKind>("image");
-  const [mediaKindBack, setMediaKindBack] = useState<MediaKind>("image");
-  const [initialMediaKindFront, setInitialMediaKindFront] = useState<MediaKind>("image");
-  const [initialMediaKindBack, setInitialMediaKindBack] = useState<MediaKind>("image");
   /** Optional second card with swapped sides when creating a new basic card. */
   const [createReversedPair, setCreateReversedPair] = useState(false);
   const [initialCreateReversed, setInitialCreateReversed] = useState(false);
@@ -153,6 +153,20 @@ export default function AddCardScreen() {
   const [initialClozeHidden, setInitialClozeHidden] = useState("");
   const [initialClozeAfter, setInitialClozeAfter] = useState("");
 
+  const setMediaUrl = (
+    side: "front" | "back",
+    mediaType: "image" | "audio" | "video",
+    value: string,
+  ) => {
+    setMediaForm((current) => ({
+      ...current,
+      [side]: {
+        ...current[side],
+        [mediaType]: value,
+      },
+    }));
+  };
+
   useEffect(() => {
     if (!deckId) {
       setError(t("deckNotFound"));
@@ -170,7 +184,7 @@ export default function AddCardScreen() {
       ] = await Promise.all([
         supabase.from("decks").select("*").eq("deck_id", deckId).single(),
         cardId
-          ? supabase.from("cards").select("*").eq("card_id", cardId).single()
+          ? supabase.from("cards").select("*, card_media(*)").eq("card_id", cardId).single()
           : Promise.resolve({ data: null, error: null }),
       ]);
 
@@ -180,30 +194,21 @@ export default function AddCardScreen() {
         setDeck(deckData as Deck);
         const front = cardData?.front_text ?? "";
         const back = cardData?.back_text ?? "";
-        const frontImg = cardData?.front_media_url ?? "";
-        const backImg = cardData?.back_media_url ?? "";
+        const loadedMediaForm = cardMediaRowsToForm(cardData?.card_media);
         const notesVal = cardData?.notes ?? "";
         setFrontText(front);
         setBackText(normalizeCardType(cardData?.card_type) === "cloze" ? "" : back);
-        setFrontImageUrl(frontImg);
-        setBackImageUrl(backImg);
+        setMediaForm(loadedMediaForm);
         setNotes(notesVal);
         setInitialFront(front);
         setInitialBack(normalizeCardType(cardData?.card_type) === "cloze" ? "" : back);
-        setInitialFrontImage(frontImg);
-        setInitialBackImage(backImg);
+        setInitialMediaForm(loadedMediaForm);
         setInitialNotes(notesVal);
 
         const ct = normalizeCardType(cardData?.card_type);
         setCardType(ct);
         setInitialCardType(ct);
         const extra = parseCardExtra(cardData?.card_extra);
-        const mf = extra.mediaFront ?? "image";
-        const mb = extra.mediaBack ?? "image";
-        setMediaKindFront(mf);
-        setMediaKindBack(mb);
-        setInitialMediaKindFront(mf);
-        setInitialMediaKindBack(mb);
         setPairMeta(
           extra.pairId
             ? { pairId: extra.pairId, pairRole: extra.pairRole }
@@ -266,8 +271,6 @@ export default function AddCardScreen() {
     setError(null);
 
     try {
-      const frontMedia = frontImageUrl.trim() || null;
-      const backMedia = backImageUrl.trim() || null;
       const notesVal = notes.trim() || null;
 
       const clozeParts: ClozeParts = {
@@ -280,14 +283,8 @@ export default function AddCardScreen() {
         cardType === "cloze" ? buildClozeFrontText(clozeParts) : frontText.trim();
       const outBack = cardType === "cloze" ? "" : backText.trim();
 
-      const baseMediaExtra = (): CardExtra => ({
-        mediaFront: mediaKindFront,
-        mediaBack: mediaKindBack,
-      });
-
       if (cardId) {
         const extraPayload: CardExtra = {
-          ...baseMediaExtra(),
           ...(pairMeta.pairId
             ? { pairId: pairMeta.pairId, pairRole: pairMeta.pairRole }
             : {}),
@@ -300,8 +297,6 @@ export default function AddCardScreen() {
             card_extra: extraPayload,
             front_text: outFront,
             back_text: outBack,
-            front_media_url: frontMedia,
-            back_media_url: backMedia,
             notes: notesVal,
             updated_at: new Date().toISOString(),
           })
@@ -314,6 +309,7 @@ export default function AddCardScreen() {
           setErrorModal(msg);
           return;
         }
+        await replaceCardMedia(cardId, mediaForm);
         router.back();
         return;
       }
@@ -327,13 +323,10 @@ export default function AddCardScreen() {
       if (cardType === "basic" && createReversedPair) {
         const pairId = newPairId();
         const forwardExtra: CardExtra = {
-          ...baseMediaExtra(),
           pairId,
           pairRole: "forward",
         };
         const reverseExtra: CardExtra = {
-          mediaFront: mediaKindBack,
-          mediaBack: mediaKindFront,
           pairId,
           pairRole: "reverse",
         };
@@ -346,8 +339,6 @@ export default function AddCardScreen() {
             card_extra: forwardExtra,
             front_text: outFront,
             back_text: outBack,
-            front_media_url: frontMedia,
-            back_media_url: backMedia,
             notes: notesVal,
             created_by: user?.id ?? null,
           })
@@ -360,53 +351,51 @@ export default function AddCardScreen() {
           setErrorModal(msg);
           return;
         }
+        await replaceCardMedia(firstRow.card_id, mediaForm);
 
-        const { error: e2 } = await supabase.from("cards").insert({
+        const { data: secondRow, error: e2 } = await supabase.from("cards").insert({
           deck_id: deckId,
           card_type: "basic",
           card_extra: reverseExtra,
           front_text: outBack,
           back_text: outFront,
-          front_media_url: backMedia,
-          back_media_url: frontMedia,
           notes: notesVal,
           created_by: user?.id ?? null,
-        });
-        if (e2) {
+        }).select("card_id").single();
+        if (e2 || !secondRow?.card_id) {
           await supabase.from("cards").delete().eq("card_id", firstRow.card_id);
-          const msg = e2.message || t("failedToSaveCard");
+          const msg = e2?.message || t("failedToSaveCard");
           setError(msg);
           setIsSaving(false);
           setErrorModal(msg);
           return;
         }
+        await replaceCardMedia(secondRow.card_id, swapCardMediaFormSides(mediaForm));
         router.back();
         return;
       }
 
       const extraPayload: CardExtra = {
-        ...baseMediaExtra(),
         ...(cardType === "cloze" ? { cloze: clozeParts } : {}),
       };
-      const { error: upsertError } = await supabase.from("cards").insert({
+      const { data: insertedCard, error: upsertError } = await supabase.from("cards").insert({
         deck_id: deckId,
         card_type: cardType,
         card_extra: extraPayload,
         front_text: outFront,
         back_text: outBack,
-        front_media_url: frontMedia,
-        back_media_url: backMedia,
         notes: notesVal,
         created_by: user?.id ?? null,
-      });
+      }).select("card_id").single();
 
-      if (upsertError) {
-        const msg = upsertError.message || t("failedToSaveCard");
+      if (upsertError || !insertedCard?.card_id) {
+        const msg = upsertError?.message || t("failedToSaveCard");
         setError(msg);
         setIsSaving(false);
         setErrorModal(msg);
         return;
       }
+      await replaceCardMedia(insertedCard.card_id, mediaForm);
 
       router.back();
     } catch (err) {
@@ -428,8 +417,7 @@ export default function AddCardScreen() {
       : frontText.trim().length > 0 && backText.trim().length > 0;
   const hasChanges =
     cardType !== initialCardType ||
-    mediaKindFront !== initialMediaKindFront ||
-    mediaKindBack !== initialMediaKindBack ||
+    hasMediaFormChanges(mediaForm, initialMediaForm) ||
     createReversedPair !== initialCreateReversed ||
     clozeBefore !== initialClozeBefore ||
     clozeGapFront !== initialClozeGapFront ||
@@ -437,8 +425,6 @@ export default function AddCardScreen() {
     clozeAfter !== initialClozeAfter ||
     frontText !== initialFront ||
     backText !== initialBack ||
-    frontImageUrl !== initialFrontImage ||
-    backImageUrl !== initialBackImage ||
     notes !== initialNotes;
   const isEdit = Boolean(cardId);
   const showPairStudySwitcher =
@@ -449,6 +435,16 @@ export default function AddCardScreen() {
     hidden: clozeHidden.trim(),
     after: clozeAfter,
   };
+  const frontPreviewMedia = (["image", "audio", "video"] as const)
+    .map((kind) => ({ kind, url: mediaForm.front[kind].trim() }))
+    .filter((item) => item.url.length > 0);
+  const backPreviewMedia = (["image", "audio", "video"] as const)
+    .map((kind) => ({ kind, url: mediaForm.back[kind].trim() }))
+    .filter((item) => item.url.length > 0);
+  const renderPreviewMedia = (items: typeof frontPreviewMedia) =>
+    items.map((item) => (
+      <CardSideMedia key={`${item.kind}-${item.url}`} url={item.url} kind={item.kind} />
+    ));
 
   /* ── Loading state ── */
   if (isLoading) {
@@ -734,127 +730,41 @@ export default function AddCardScreen() {
               <View style={styles.divider} />
 
               <Field label={t("frontImageUrl")}>
-                <InputRow
-                  icon="link-2"
-                  focused={focusedField === "frontImg"}
-                  onFocus={() => setFocusedField("frontImg")}
-                  onBlur={() => setFocusedField(null)}
-                >
-                  <TextInput
-                    style={[styles.input, webTextInputNoOutline, { color: C.text }]}
-                    placeholder="https://..."
-                    placeholderTextColor={C.placeholder}
-                    value={frontImageUrl}
-                    onChangeText={setFrontImageUrl}
-                    onFocus={() => setFocusedField("frontImg")}
-                    onBlur={() => setFocusedField(null)}
-                    autoCapitalize="none"
-                    keyboardType="url"
-                  />
-                  {frontImageUrl.length > 0 && (
-                    <Pressable onPress={() => setFrontImageUrl("")} hitSlop={8}>
-                      <Feather name="x-circle" size={16} color="#d1d5db" />
-                    </Pressable>
-                  )}
+                <InputRow icon="image" focused={focusedField === "frontImage"} onFocus={() => setFocusedField("frontImage")} onBlur={() => setFocusedField(null)}>
+                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.front.image} onChangeText={(value) => setMediaUrl("front", "image", value)} onFocus={() => setFocusedField("frontImage")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
+                  {mediaForm.front.image.length > 0 && <Pressable onPress={() => setMediaUrl("front", "image", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
                 </InputRow>
               </Field>
-              <Field label={t("mediaKindFront")}>
-                <View style={styles.typeRow}>
-                  <Pressable
-                    onPress={() => setMediaKindFront("image")}
-                    style={[
-                      styles.typeChip,
-                      mediaKindFront === "image" && styles.typeChipOn,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.typeChipTxt,
-                        mediaKindFront === "image" && styles.typeChipTxtOn,
-                      ]}
-                    >
-                      {t("mediaKindImage")}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setMediaKindFront("audio")}
-                    style={[
-                      styles.typeChip,
-                      mediaKindFront === "audio" && styles.typeChipOn,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.typeChipTxt,
-                        mediaKindFront === "audio" && styles.typeChipTxtOn,
-                      ]}
-                    >
-                      {t("mediaKindAudio")}
-                    </Text>
-                  </Pressable>
-                </View>
+              <Field label={t("frontAudioUrl")}>
+                <InputRow icon="volume-2" focused={focusedField === "frontAudio"} onFocus={() => setFocusedField("frontAudio")} onBlur={() => setFocusedField(null)}>
+                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.front.audio} onChangeText={(value) => setMediaUrl("front", "audio", value)} onFocus={() => setFocusedField("frontAudio")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
+                  {mediaForm.front.audio.length > 0 && <Pressable onPress={() => setMediaUrl("front", "audio", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
+                </InputRow>
+              </Field>
+              <Field label={t("frontVideoUrl")}>
+                <InputRow icon="video" focused={focusedField === "frontVideo"} onFocus={() => setFocusedField("frontVideo")} onBlur={() => setFocusedField(null)}>
+                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.front.video} onChangeText={(value) => setMediaUrl("front", "video", value)} onFocus={() => setFocusedField("frontVideo")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
+                  {mediaForm.front.video.length > 0 && <Pressable onPress={() => setMediaUrl("front", "video", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
+                </InputRow>
               </Field>
 
               <Field label={t("backImageUrl")}>
-                <InputRow
-                  icon="link-2"
-                  focused={focusedField === "backImg"}
-                  onFocus={() => setFocusedField("backImg")}
-                  onBlur={() => setFocusedField(null)}
-                >
-                  <TextInput
-                    style={[styles.input, webTextInputNoOutline, { color: C.text }]}
-                    placeholder="https://..."
-                    placeholderTextColor={C.placeholder}
-                    value={backImageUrl}
-                    onChangeText={setBackImageUrl}
-                    onFocus={() => setFocusedField("backImg")}
-                    onBlur={() => setFocusedField(null)}
-                    autoCapitalize="none"
-                    keyboardType="url"
-                  />
-                  {backImageUrl.length > 0 && (
-                    <Pressable onPress={() => setBackImageUrl("")} hitSlop={8}>
-                      <Feather name="x-circle" size={16} color="#d1d5db" />
-                    </Pressable>
-                  )}
+                <InputRow icon="image" focused={focusedField === "backImage"} onFocus={() => setFocusedField("backImage")} onBlur={() => setFocusedField(null)}>
+                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.back.image} onChangeText={(value) => setMediaUrl("back", "image", value)} onFocus={() => setFocusedField("backImage")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
+                  {mediaForm.back.image.length > 0 && <Pressable onPress={() => setMediaUrl("back", "image", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
                 </InputRow>
               </Field>
-              <Field label={t("mediaKindBack")}>
-                <View style={styles.typeRow}>
-                  <Pressable
-                    onPress={() => setMediaKindBack("image")}
-                    style={[
-                      styles.typeChip,
-                      mediaKindBack === "image" && styles.typeChipOn,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.typeChipTxt,
-                        mediaKindBack === "image" && styles.typeChipTxtOn,
-                      ]}
-                    >
-                      {t("mediaKindImage")}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setMediaKindBack("audio")}
-                    style={[
-                      styles.typeChip,
-                      mediaKindBack === "audio" && styles.typeChipOn,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.typeChipTxt,
-                        mediaKindBack === "audio" && styles.typeChipTxtOn,
-                      ]}
-                    >
-                      {t("mediaKindAudio")}
-                    </Text>
-                  </Pressable>
-                </View>
+              <Field label={t("backAudioUrl")}>
+                <InputRow icon="volume-2" focused={focusedField === "backAudio"} onFocus={() => setFocusedField("backAudio")} onBlur={() => setFocusedField(null)}>
+                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.back.audio} onChangeText={(value) => setMediaUrl("back", "audio", value)} onFocus={() => setFocusedField("backAudio")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
+                  {mediaForm.back.audio.length > 0 && <Pressable onPress={() => setMediaUrl("back", "audio", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
+                </InputRow>
+              </Field>
+              <Field label={t("backVideoUrl")}>
+                <InputRow icon="video" focused={focusedField === "backVideo"} onFocus={() => setFocusedField("backVideo")} onBlur={() => setFocusedField(null)}>
+                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.back.video} onChangeText={(value) => setMediaUrl("back", "video", value)} onFocus={() => setFocusedField("backVideo")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
+                  {mediaForm.back.video.length > 0 && <Pressable onPress={() => setMediaUrl("back", "video", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
+                </InputRow>
               </Field>
 
               <View style={styles.divider} />
@@ -1038,30 +948,7 @@ export default function AddCardScreen() {
                 <View style={styles.studyPreviewCardInner}>
                   {cardType === "cloze" && isClozeGapComplete(clozePartsPreview) ? (
                     <>
-                      {!studyPreviewShowBack &&
-                      (frontImageUrl.trim() ? (
-                        <CardSideMedia
-                          url={frontImageUrl.trim()}
-                          kind={effectiveMediaKind(
-                            frontImageUrl.trim(),
-                            mediaKindFront,
-                            "front",
-                            { mediaFront: mediaKindFront, mediaBack: mediaKindBack },
-                          )}
-                        />
-                      ) : null)}
-                      {studyPreviewShowBack &&
-                      (backImageUrl.trim() ? (
-                        <CardSideMedia
-                          url={backImageUrl.trim()}
-                          kind={effectiveMediaKind(
-                            backImageUrl.trim(),
-                            mediaKindBack,
-                            "back",
-                            { mediaFront: mediaKindFront, mediaBack: mediaKindBack },
-                          )}
-                        />
-                      ) : null)}
+                      {renderPreviewMedia(studyPreviewShowBack ? backPreviewMedia : frontPreviewMedia)}
                       {!studyPreviewShowBack ? (
                         <AddCardStudyClozeFront parts={clozePartsPreview} />
                       ) : (
@@ -1072,72 +959,14 @@ export default function AddCardScreen() {
                     <>
                       {studyPreviewPairSlot === 1 ? (
                         <>
-                          {!studyPreviewShowBack &&
-                          (frontImageUrl.trim() ? (
-                            <CardSideMedia
-                              url={frontImageUrl.trim()}
-                              kind={effectiveMediaKind(
-                                frontImageUrl.trim(),
-                                mediaKindFront,
-                                "front",
-                                {
-                                  mediaFront: mediaKindFront,
-                                  mediaBack: mediaKindBack,
-                                },
-                              )}
-                            />
-                          ) : null)}
-                          {studyPreviewShowBack &&
-                          (backImageUrl.trim() ? (
-                            <CardSideMedia
-                              url={backImageUrl.trim()}
-                              kind={effectiveMediaKind(
-                                backImageUrl.trim(),
-                                mediaKindBack,
-                                "back",
-                                {
-                                  mediaFront: mediaKindFront,
-                                  mediaBack: mediaKindBack,
-                                },
-                              )}
-                            />
-                          ) : null)}
+                          {renderPreviewMedia(studyPreviewShowBack ? backPreviewMedia : frontPreviewMedia)}
                           <Text style={styles.studyPreviewCardTitle}>
                             {studyPreviewShowBack ? backText.trim() : frontText.trim()}
                           </Text>
                         </>
                       ) : (
                         <>
-                          {!studyPreviewShowBack &&
-                          (backImageUrl.trim() ? (
-                            <CardSideMedia
-                              url={backImageUrl.trim()}
-                              kind={effectiveMediaKind(
-                                backImageUrl.trim(),
-                                mediaKindBack,
-                                "front",
-                                {
-                                  mediaFront: mediaKindBack,
-                                  mediaBack: mediaKindFront,
-                                },
-                              )}
-                            />
-                          ) : null)}
-                          {studyPreviewShowBack &&
-                          (frontImageUrl.trim() ? (
-                            <CardSideMedia
-                              url={frontImageUrl.trim()}
-                              kind={effectiveMediaKind(
-                                frontImageUrl.trim(),
-                                mediaKindFront,
-                                "back",
-                                {
-                                  mediaFront: mediaKindBack,
-                                  mediaBack: mediaKindFront,
-                                },
-                              )}
-                            />
-                          ) : null)}
+                          {renderPreviewMedia(studyPreviewShowBack ? frontPreviewMedia : backPreviewMedia)}
                           <Text style={styles.studyPreviewCardTitle}>
                             {studyPreviewShowBack
                               ? frontText.trim()

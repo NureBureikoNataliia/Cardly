@@ -3,13 +3,12 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import {
-    effectiveMediaKind,
     getClozePartsFromCard,
     isClozeGapComplete,
     normalizeCardType,
-    parseCardExtra,
     type ClozeParts,
 } from "@/src/lib/cardModel";
+import { getCardMediaForSide } from "@/src/lib/cardMedia";
 import { formatScheduleLabel } from "@/src/lib/formatScheduleLabel";
 import { loadDueCardsForDeck, type DueCard } from "@/src/lib/reviewQueue";
 import {
@@ -148,18 +147,17 @@ export default function DeckStudyScreen() {
       return;
     }
     setLoading(true);
-    const [{ data: settingsData, error: settingsError }, dueList] =
-      await Promise.all([
-        supabase
-          .from("app_spaced_repetition_settings")
-          .select("*")
-          .eq("id", 1)
-          .single(),
-        loadDueCardsForDeck(deckId, {
-          includeScheduledToday,
-          srsDayStartHour: studySettings.srsDayStartHour,
-        }),
-      ]);
+    const [{ data: settingsData, error: settingsError }, dueList] = await Promise.all([
+      supabase
+        .from("app_spaced_repetition_settings")
+        .select("*")
+        .eq("id", 1)
+        .single(),
+      loadDueCardsForDeck(deckId, {
+        includeScheduledToday,
+        srsDayStartHour: studySettings.srsDayStartHour,
+      }),
+    ]);
 
     if (settingsError || !settingsData) {
       Alert.alert(t("error"), "SRS settings not found. Apply DB migrations.");
@@ -313,13 +311,13 @@ export default function DeckStudyScreen() {
     .replace("{current}", "1")
     .replace("{total}", String(total));
 
-  const cardExtra = parseCardExtra(currentCard.card_extra);
   const ctype = normalizeCardType(currentCard.card_type);
   const clozeParts = getClozePartsFromCard(currentCard);
   const clozeOk =
     ctype === "cloze" && clozeParts && isClozeGapComplete(clozeParts);
-  const frontU = currentCard.front_media_url?.trim();
-  const backU = currentCard.back_media_url?.trim();
+  const frontMedia = getCardMediaForSide(currentCard, "front");
+  const backMedia = getCardMediaForSide(currentCard, "back");
+  const visibleMedia = showBack ? backMedia : frontMedia;
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg, paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
@@ -334,35 +332,17 @@ export default function DeckStudyScreen() {
           <View style={styles.cardInner}>
             {clozeOk ? (
               <>
-                {!showBack && frontU ? (
-                  <CardSideMedia
-                    url={frontU}
-                    kind={effectiveMediaKind(frontU, cardExtra.mediaFront, "front", cardExtra)}
-                  />
-                ) : null}
-                {showBack && backU ? (
-                  <CardSideMedia
-                    url={backU}
-                    kind={effectiveMediaKind(backU, cardExtra.mediaBack, "back", cardExtra)}
-                  />
-                ) : null}
+                {visibleMedia.map((item) => (
+                  <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
+                ))}
                 {!showBack ? <ClozeFrontParts parts={clozeParts} /> : null}
                 {showBack ? <ClozeBackParts parts={clozeParts} /> : null}
               </>
             ) : (
               <>
-                {!showBack && frontU ? (
-                  <CardSideMedia
-                    url={frontU}
-                    kind={effectiveMediaKind(frontU, cardExtra.mediaFront, "front", cardExtra)}
-                  />
-                ) : null}
-                {showBack && backU ? (
-                  <CardSideMedia
-                    url={backU}
-                    kind={effectiveMediaKind(backU, cardExtra.mediaBack, "back", cardExtra)}
-                  />
-                ) : null}
+                {visibleMedia.map((item) => (
+                  <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
+                ))}
                 <Text style={[styles.cardTitle, { color: C.text }]}>
                   {showBack ? currentCard.back_text : currentCard.front_text}
                 </Text>

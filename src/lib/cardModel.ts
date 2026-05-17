@@ -1,7 +1,7 @@
 import type { Card } from "@/assets/data/cards";
 
 /** Stored in `cards.card_extra` (jsonb). */
-export type MediaKind = "image" | "audio";
+export type MediaKind = "image" | "audio" | "video";
 
 /**
  * One gap: before / explanation in gap (front) / answer (back) / after.
@@ -81,8 +81,8 @@ export function parseCardExtra(raw: unknown): CardExtra {
   if (raw == null || typeof raw !== "object") return {};
   const o = raw as Record<string, unknown>;
   const extra: CardExtra = {};
-  if (o.mediaFront === "image" || o.mediaFront === "audio") extra.mediaFront = o.mediaFront;
-  if (o.mediaBack === "image" || o.mediaBack === "audio") extra.mediaBack = o.mediaBack;
+  if (o.mediaFront === "image" || o.mediaFront === "audio" || o.mediaFront === "video") extra.mediaFront = o.mediaFront;
+  if (o.mediaBack === "image" || o.mediaBack === "audio" || o.mediaBack === "video") extra.mediaBack = o.mediaBack;
   if (typeof o.pairId === "string" && o.pairId.trim()) extra.pairId = o.pairId.trim();
   if (o.pairRole === "forward" || o.pairRole === "reverse") extra.pairRole = o.pairRole;
   if (o.cloze && typeof o.cloze === "object") {
@@ -112,6 +112,7 @@ export function inferMediaKind(url: string | null | undefined): MediaKind {
   if (!url?.trim()) return "image";
   const u = url.trim().toLowerCase().split("?")[0];
   if (/\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)$/.test(u)) return "audio";
+  if (/\.(mp4|mov|m4v|avi|mkv|webm)$/.test(u)) return "video";
   return "image";
 }
 

@@ -13,6 +13,7 @@ import { Platform, Pressable, Text, View } from 'react-native';
 import { useColorScheme } from '@/src/components/useColorScheme';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
 import NotificationBell from '@/src/components/NotificationBell';
+import { StudyReminderNotificationSync } from '@/src/components/StudyReminderNotificationSync';
 import Sidebar, { AppLogo } from '@/src/components/Sidebar';
 import ThemeToggle from '@/src/components/ThemeToggle';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
@@ -64,6 +65,7 @@ export default function RootLayout() {
       <LanguageProvider>
         <StudySettingsProvider>
           <AuthProvider>
+            <StudyReminderNotificationSync />
             <RootLayoutNav />
           </AuthProvider>
         </StudySettingsProvider>
@@ -131,7 +133,6 @@ function WebAuthenticatedShell({
                   {children}
                 </Text>
               ),
-              headerTitleContainerStyle: { flex: 1 },
               headerRight: sharedHeaderRight,
               headerLeft: isCompact ? headerLeft : undefined,
               animation: 'slide_from_right',
@@ -221,7 +222,6 @@ function RootLayoutNav() {
         headerTintColor: headerText,
         headerTitleStyle: { fontSize: 18, fontWeight: '600' },
         headerTitle: makeHeaderTitle(headerText),
-        headerTitleContainerStyle: { flex: 1 },
         headerRight: sharedHeaderRight,
         animation: 'slide_from_right',
       }}

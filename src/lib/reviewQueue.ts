@@ -1,5 +1,6 @@
 import type { Card } from "@/assets/data/cards";
 import {
+    getSrsDayStart,
     getNextSrsDayBoundary,
     normalizeSrsDayStartHour,
     SRS_DAY_START_HOUR_LOCAL,
@@ -79,6 +80,87 @@ export type LoadDueCardsOptions = {
   srsDayStartHour?: number;
 };
 
+type DeckStudyLimits = {
+  newCardsPerDay: number | null;
+  cardsPerDay: number | null;
+};
+
+function parseNonNegativeLimit(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  return Math.floor(value);
+}
+
+function parseDeckStudyLimits(overrides: unknown): DeckStudyLimits {
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    return { newCardsPerDay: null, cardsPerDay: null };
+  }
+  const o = overrides as Record<string, unknown>;
+  return {
+    newCardsPerDay: parseNonNegativeLimit(o.new_cards_per_day),
+    cardsPerDay: parseNonNegativeLimit(o.cards_per_day),
+  };
+}
+
+async function getTodayReviewUsage(
+  userId: string,
+  deckId: string,
+  dayStartIso: string,
+): Promise<{ reviewedToday: number; newReviewedToday: number }> {
+  const { data: todayRows, error } = await supabase
+    .from("review_logs")
+    .select("card_id")
+    .eq("user_id", userId)
+    .eq("deck_id", deckId)
+    .gte("reviewed_at", dayStartIso);
+
+  if (error || !todayRows?.length) {
+    return { reviewedToday: 0, newReviewedToday: 0 };
+  }
+
+  const todayCardIds = Array.from(new Set(todayRows.map((row) => row.card_id as string)));
+  const { data: previousRows } = await supabase
+    .from("review_logs")
+    .select("card_id")
+    .eq("user_id", userId)
+    .eq("deck_id", deckId)
+    .lt("reviewed_at", dayStartIso)
+    .in("card_id", todayCardIds);
+
+  const previouslyReviewed = new Set((previousRows ?? []).map((row) => row.card_id as string));
+  const newReviewedToday = todayCardIds.filter((cardId) => !previouslyReviewed.has(cardId)).length;
+  return { reviewedToday: todayCardIds.length, newReviewedToday };
+}
+
+function applyDeckStudyLimits(
+  dueCards: DueCard[],
+  limits: DeckStudyLimits,
+  usage: { reviewedToday: number; newReviewedToday: number },
+): DueCard[] {
+  const remainingNew =
+    limits.newCardsPerDay == null
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, limits.newCardsPerDay - usage.newReviewedToday);
+  const remainingTotal =
+    limits.cardsPerDay == null
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, limits.cardsPerDay - usage.reviewedToday);
+
+  if (remainingTotal <= 0) return [];
+
+  let newCount = 0;
+  const limited: DueCard[] = [];
+  for (const item of dueCards) {
+    const isNew = item.progress.status === "new";
+    if (isNew) {
+      if (newCount >= remainingNew) continue;
+      newCount += 1;
+    }
+    limited.push(item);
+    if (limited.length >= remainingTotal) break;
+  }
+  return limited;
+}
+
 /** Cards in the deck that are due now, or (optionally) everything due before the next SRS day boundary. */
 export async function loadDueCardsForDeck(
   deckId: string,
@@ -88,11 +170,18 @@ export async function loadDueCardsForDeck(
   const user = userData.user;
   if (!user) return [];
 
-  const { data: cardsData, error: cardsError } = await supabase
-    .from("cards")
-    .select("*")
-    .eq("deck_id", deckId)
-    .order("created_at", { ascending: true });
+  const [{ data: cardsData, error: cardsError }, { data: deckData }] = await Promise.all([
+    supabase
+      .from("cards")
+      .select("*, card_media(*)")
+      .eq("deck_id", deckId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("decks")
+      .select("srs_overrides")
+      .eq("deck_id", deckId)
+      .maybeSingle(),
+  ]);
 
   if (cardsError || !cardsData?.length) return [];
 
@@ -133,7 +222,18 @@ export async function loadDueCardsForDeck(
     }
   }
 
-  return includeToday ? sortDueCardsForTodaySession(due, now) : due;
+  const sortedDue = includeToday ? sortDueCardsForTodaySession(due, now) : due;
+  const limits = parseDeckStudyLimits(deckData?.srs_overrides);
+  if (limits.newCardsPerDay == null && limits.cardsPerDay == null) {
+    return sortedDue;
+  }
+
+  const usage = await getTodayReviewUsage(
+    user.id,
+    deckId,
+    getSrsDayStart(new Date(now), startHour).toISOString(),
+  );
+  return applyDeckStudyLimits(sortedDue, limits, usage);
 }
 
 export async function getDueCountForDeck(deckId: string): Promise<number> {

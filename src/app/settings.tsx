@@ -18,6 +18,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useStudySettings } from '@/src/contexts/StudySettingsContext';
 import { supabase } from '@/src/lib/supabase';
+import { syncStudyDailyReminder } from '@/src/lib/studyReminderNotifications';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
 
@@ -86,9 +87,37 @@ export default function SettingsScreen() {
     setNotifPrefs(next);
     setSavingNotif(true);
     setNotifMsg(null);
-    const { error: e } = await updateMetadata({ notifications: next as unknown as string });
+    const { error: e } = await updateMetadata({ notifications: next });
     setSavingNotif(false);
-    setNotifMsg(e ? t('notifSaveError') : t('notifSaved'));
+
+    if (e) {
+      setNotifMsg(t('notifSaveError'));
+      setTimeout(() => setNotifMsg(null), 3000);
+      return;
+    }
+
+    const needsSync =
+      patch.studyReminder !== undefined || patch.studyReminderHour !== undefined;
+    if (needsSync) {
+      const r = await syncStudyDailyReminder({
+        enabled: next.studyReminder,
+        hour: next.studyReminderHour,
+        title: t('pushRepeatWordsTitle'),
+        body: t('pushRepeatWordsBody'),
+      });
+      if (next.studyReminder && r.ok === false && r.reason === 'permission_denied') {
+        setNotifMsg(t('notifPermissionDenied'));
+        setTimeout(() => setNotifMsg(null), 5000);
+        return;
+      }
+      if (next.studyReminder && r.ok === false && r.reason === 'web') {
+        setNotifMsg(t('notifWebReminderNote'));
+        setTimeout(() => setNotifMsg(null), 5000);
+        return;
+      }
+    }
+
+    setNotifMsg(t('notifSaved'));
     setTimeout(() => setNotifMsg(null), 3000);
   };
 
@@ -108,9 +137,9 @@ export default function SettingsScreen() {
     const value = (username || user?.email || 'U').trim();
     return value.charAt(0).toUpperCase();
   }, [username, user?.email]);
-  const updateMetadata = async (patch: Record<string, string>) => {
-    const currentMeta = (user?.user_metadata ?? {}) as Record<string, string>;
-    return supabase.auth.updateUser({ data: { ...currentMeta, ...patch } });
+  const updateMetadata = async (patch: Record<string, unknown>) => {
+    const currentMeta = { ...(user?.user_metadata ?? {}) } as Record<string, unknown>;
+    return supabase.auth.updateUser({ data: { ...currentMeta, ...patch } as Record<string, unknown> });
   };
 
   const handleSaveUsername = async () => {

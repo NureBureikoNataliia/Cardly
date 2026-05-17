@@ -1,7 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
-import { Audio } from "expo-av";
+import { Audio, ResizeMode, Video } from "expo-av";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Image, Pressable, StyleSheet, Text } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import type { MediaKind } from "@/src/lib/cardModel";
@@ -14,6 +14,18 @@ type Props = {
 export function CardSideMedia({ url, kind }: Props) {
   if (kind === "image") {
     return <Image source={{ uri: url }} style={styles.media} resizeMode="contain" />;
+  }
+  if (kind === "video") {
+    return (
+      <View style={styles.videoBox}>
+        <Video
+          source={{ uri: url }}
+          style={styles.video}
+          useNativeControls
+          resizeMode={ResizeMode.CONTAIN}
+        />
+      </View>
+    );
   }
   return <CardAudioButton uri={url} />;
 }
@@ -85,6 +97,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 12,
     backgroundColor: "#f3f4f6",
+  },
+  videoBox: {
+    width: "100%",
+    height: 180,
+    borderRadius: 10,
+    marginBottom: 12,
+    overflow: "hidden",
+    backgroundColor: "#111827",
+  },
+  video: {
+    width: "100%",
+    height: "100%",
   },
   audioBox: {
     width: "100%",

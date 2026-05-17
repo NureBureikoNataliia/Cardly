@@ -23,19 +23,21 @@ import type { TextStyle } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
+import { CardSideMedia } from "@/src/components/CardSideMedia";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
+import DeckSrsOverridesPanel from "@/src/components/DeckSrsOverridesPanel";
 import CardComplaintModal from "@/src/components/CardComplaintModal";
 import GenerateCardsModal from "@/src/components/GenerateCardsModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import {
-  effectiveMediaKind,
   getClozePartsFromCard,
   isClozeGapComplete,
   isReversiblePairCard,
   normalizeCardType,
   parseCardExtra,
 } from "@/src/lib/cardModel";
+import { getCardMediaForSide, normalizeCardMediaRows } from "@/src/lib/cardMedia";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 
 const scrollPositions: Record<string, number> = {};
@@ -95,6 +97,7 @@ export default function DeckDetailScreen() {
   // ── Collaborators ──
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [learnedInfoOpen, setLearnedInfoOpen] = useState(false);
+  const [dueTodayInfoOpen, setDueTodayInfoOpen] = useState(false);
   const [collabOpen, setCollabOpen] = useState(false);
   const [collaboratorSearch, setCollaboratorSearch] = useState("");
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
@@ -113,7 +116,7 @@ export default function DeckDetailScreen() {
     const [{ data: deckData, error: deckError }, { data: cardsData, error: cardsError }] =
       await Promise.all([
         supabase.from("decks").select("*").eq("deck_id", deckId).single(),
-        supabase.from("cards").select("*").eq("deck_id", deckId).order("created_at", { ascending: false }),
+        supabase.from("cards").select("*, card_media(*)").eq("deck_id", deckId).order("created_at", { ascending: false }),
       ]);
 
     if (deckError || cardsError) {
@@ -267,6 +270,14 @@ export default function DeckDetailScreen() {
     );
   }, [user, totalCards, cards, progressMap, studySettings.srsDayStartHour]);
 
+  const hasDeckStudyLimits = useMemo(() => {
+    const o = deck?.srs_overrides;
+    if (!o || typeof o !== "object" || Array.isArray(o)) return false;
+    const r = o as Record<string, unknown>;
+    const isLimit = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
+    return isLimit(r.new_cards_per_day) || isLimit(r.cards_per_day);
+  }, [deck?.srs_overrides]);
+
   const dueNowCount = useMemo(() => {
     if (!user) return 0;
     const now = Date.now();
@@ -303,24 +314,40 @@ export default function DeckDetailScreen() {
     setIsCopying(true); setError(null);
     try {
       const { data: newDeck, error: deckErr } = await supabase.from("decks").insert({
-        creator_id: user.id, title: deck.title, description: deck.description,
-        cover_image_url: deck.cover_image_url, is_public: false, original_deck_id: deck.deck_id,
+        creator_id: user.id,
+        title: deck.title,
+        description: deck.description,
+        cover_image_url: deck.cover_image_url,
+        is_public: false,
+        original_deck_id: deck.deck_id,
+        srs_overrides: deck.srs_overrides ?? null,
       }).select("deck_id").single();
       if (deckErr) { setErrorModal(deckErr.message ?? t("failedToLoadData")); setIsCopying(false); return; }
       if (cards.length > 0) {
-        const { error: cardsErr } = await supabase.from("cards").insert(
+        const { data: copiedCards, error: cardsErr } = await supabase.from("cards").insert(
           cards.map((c) => ({
             deck_id: newDeck.deck_id,
             card_type: c.card_type ?? "basic",
             card_extra: c.card_extra ?? {},
             front_text: c.front_text,
             back_text: c.back_text,
-            front_media_url: c.front_media_url,
-            back_media_url: c.back_media_url,
             notes: c.notes,
           })),
-        );
+        ).select("card_id");
         if (cardsErr) { setErrorModal(cardsErr.message ?? t("failedToLoadData")); setIsCopying(false); return; }
+        const mediaRows = cards.flatMap((c, index) =>
+          normalizeCardMediaRows(c.card_media).map((m) => ({
+            card_id: copiedCards?.[index]?.card_id,
+            side: m.side,
+            media_type: m.media_type,
+            url: m.url,
+            position: m.position,
+          })).filter((row) => Boolean(row.card_id)),
+        );
+        if (mediaRows.length > 0) {
+          const { error: mediaErr } = await supabase.from("card_media").insert(mediaRows);
+          if (mediaErr) { setErrorModal(mediaErr.message ?? t("failedToLoadData")); setIsCopying(false); return; }
+        }
       }
       setHasCopy(true);
       router.replace(`/deck-detail?id=${newDeck.deck_id}`);
@@ -334,25 +361,36 @@ export default function DeckDetailScreen() {
     setIsUpdating(true); setError(null);
     try {
       const { data: originalCards, error: fetchErr } = await supabase.from("cards")
-        .select("front_text, back_text, notes, card_type, card_extra, front_media_url, back_media_url")
+        .select("front_text, back_text, notes, card_type, card_extra, card_media(*)")
         .eq("deck_id", deck.original_deck_id);
       if (fetchErr) { setErrorModal(fetchErr.message ?? t("failedToLoadData")); setIsUpdating(false); return; }
       const existingKeys = new Set(cards.map((c) => `${c.front_text}\0${c.back_text}`));
       const toAdd = (originalCards ?? []).filter((oc) => !existingKeys.has(`${oc.front_text}\0${oc.back_text}`));
       if (toAdd.length === 0) { setErrorModal(t("noNewCards")); setIsUpdating(false); return; }
-      const { error: insertErr } = await supabase.from("cards").insert(
+      const { data: insertedCards, error: insertErr } = await supabase.from("cards").insert(
         toAdd.map((c) => ({
           deck_id: deck.deck_id,
           card_type: c.card_type ?? "basic",
           card_extra: c.card_extra ?? {},
           front_text: c.front_text,
           back_text: c.back_text,
-          front_media_url: c.front_media_url,
-          back_media_url: c.back_media_url,
           notes: c.notes,
         })),
-      );
+      ).select("card_id");
       if (insertErr) { setErrorModal(insertErr.message ?? t("failedToLoadData")); setIsUpdating(false); return; }
+      const mediaRows = toAdd.flatMap((c, index) =>
+        normalizeCardMediaRows(c.card_media).map((m) => ({
+          card_id: insertedCards?.[index]?.card_id,
+          side: m.side,
+          media_type: m.media_type,
+          url: m.url,
+          position: m.position,
+        })).filter((row) => Boolean(row.card_id)),
+      );
+      if (mediaRows.length > 0) {
+        const { error: mediaErr } = await supabase.from("card_media").insert(mediaRows);
+        if (mediaErr) { setErrorModal(mediaErr.message ?? t("failedToLoadData")); setIsUpdating(false); return; }
+      }
       await loadData();
     } catch (err) {
       setErrorModal(err instanceof Error ? err.message : t("unexpectedError"));
@@ -495,7 +533,14 @@ export default function DeckDetailScreen() {
           <View style={[styles.statsRow, { backgroundColor: C.surface }]}>
             <StatChip icon="layers" value={totalCards} label={t("totalCards")} color="#6366f1" />
             <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
-            <StatChip icon="clock" value={dueToday} label={t("dueToday")} color="#d97706" />
+            <StatChip
+              icon="clock"
+              value={dueToday}
+              label={t("dueToday")}
+              color="#d97706"
+              onInfoPress={hasDeckStudyLimits ? () => setDueTodayInfoOpen(true) : undefined}
+              infoAccessibilityLabel={t("dueTodayInfoTitle")}
+            />
             <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
             <StatChip
               icon="check-circle"
@@ -657,6 +702,14 @@ export default function DeckDetailScreen() {
               />
             )}
           </View>
+
+          {isOwner && deck ? (
+            <DeckSrsOverridesPanel
+              deckId={deck.deck_id}
+              overrides={deck.srs_overrides ?? null}
+              onSaved={() => void loadData()}
+            />
+          ) : null}
 
           {/* ════════════ COLLABORATORS SECTION (owner only) ════════════ */}
           {isOwner && (
@@ -866,6 +919,17 @@ export default function DeckDetailScreen() {
       />
 
       <ConfirmModal
+        visible={dueTodayInfoOpen}
+        title={t("dueTodayInfoTitle")}
+        message={t("dueTodayInfoBody")}
+        confirmText={t("ok")}
+        cancelText={null}
+        icon="info"
+        onConfirm={() => setDueTodayInfoOpen(false)}
+        onCancel={() => setDueTodayInfoOpen(false)}
+      />
+
+      <ConfirmModal
         visible={Boolean(collaboratorToRemove)}
         title={t("removeCollaborator")}
         message={t("removeCollaboratorConfirm")}
@@ -1008,8 +1072,8 @@ function CardTile({ card, index, isOwner, canReport, numCols, createdByName, onE
   const accent = accentColors[index % accentColors.length];
   const extra = parseCardExtra(card.card_extra);
   const ctype = normalizeCardType(card.card_type);
-  const frontKind = effectiveMediaKind(card.front_media_url, extra.mediaFront, "front", extra);
-  const backKind = effectiveMediaKind(card.back_media_url, extra.mediaBack, "back", extra);
+  const frontMedia = getCardMediaForSide(card, "front");
+  const backMedia = getCardMediaForSide(card, "back");
   const paired = isReversiblePairCard(extra);
   const clozeParts = getClozePartsFromCard(card);
   const clozePreview =
@@ -1046,16 +1110,9 @@ function CardTile({ card, index, isOwner, canReport, numCols, createdByName, onE
         ) : null}
       </View>
 
-      {/* Front */}
-      {card.front_media_url ? (
-        frontKind === "image" ? (
-          <Image source={{ uri: card.front_media_url }} style={[styles.cardMedia, { backgroundColor: C.surfaceAlt }]} resizeMode="contain" />
-        ) : (
-          <View style={[styles.cardMedia, styles.cardMediaAudio]}>
-            <Feather name="volume-2" size={22} color="#4255ff" />
-          </View>
-        )
-      ) : null}
+      {frontMedia.map((item) => (
+        <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
+      ))}
       <Text style={[styles.cardFront, { color: C.text }]} numberOfLines={4}>
         {clozePreview ?? card.front_text}
       </Text>
@@ -1069,16 +1126,9 @@ function CardTile({ card, index, isOwner, canReport, numCols, createdByName, onE
         <View style={[styles.cardDividerLine, { backgroundColor: `${accent}30` }]} />
       </View>
 
-      {/* Back */}
-      {card.back_media_url ? (
-        backKind === "image" ? (
-          <Image source={{ uri: card.back_media_url }} style={[styles.cardMedia, { backgroundColor: C.surfaceAlt }]} resizeMode="contain" />
-        ) : (
-          <View style={[styles.cardMedia, styles.cardMediaAudio]}>
-            <Feather name="volume-2" size={22} color="#4255ff" />
-          </View>
-        )
-      ) : null}
+      {backMedia.map((item) => (
+        <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
+      ))}
       <Text style={[styles.cardBack, { color: C.textSub }]} numberOfLines={4}>
         {card.back_text}
       </Text>

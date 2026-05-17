@@ -7,6 +7,8 @@ export interface Deck {
   is_public: boolean;
   original_deck_id: string | null;
   config_id: string | null;
+  /** Optional per-deck daily study limits: `new_cards_per_day`, `cards_per_day`. */
+  srs_overrides?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }

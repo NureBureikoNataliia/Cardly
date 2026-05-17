@@ -90,6 +90,27 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  const { data: cardRow, error: cardErr } = await supabase
+    .from("cards")
+    .select("deck_id")
+    .eq("card_id", cardId)
+    .maybeSingle();
+
+  if (cardErr || !cardRow?.deck_id) {
+    return new Response(JSON.stringify({ error: "Card not found", details: cardErr?.message }), {
+      status: 404,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const cardDeckId = cardRow.deck_id as string;
+  if (deckId != null && typeof deckId === "string" && deckId !== cardDeckId) {
+    return new Response(JSON.stringify({ error: "deck_id does not match card" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const { data: settingsRow, error: settingsError } = await supabase
     .from("app_spaced_repetition_settings")
     .select("*")
@@ -170,12 +191,12 @@ Deno.serve(async (req: Request) => {
   }
 
   // Log the review for statistics (best-effort — don't fail the request if it errors)
-  if (deckId) {
+  {
     const ratingNumeric: Record<string, number> = { again: 0, hard: 1, good: 2, easy: 3 };
     await supabase.from("review_logs").insert({
       user_id: user.id,
       card_id: cardId,
-      deck_id: deckId,
+      deck_id: cardDeckId,
       rating: ratingNumeric[rating] ?? 2,
     });
   }

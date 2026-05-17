@@ -88,26 +88,15 @@ async function enrichHttpInvokeError(error: unknown): Promise<Error> {
 
   const hint =
     status === 503 || /failed to start/i.test(detail)
-      ? "\n(503: check Edge Function logs in the Dashboard; often deploy or import issues.)"
+      ? "\n(503: check Edge Function logs in the Supabase dashboard; often deploy or import issues.)"
       : status >= 500
-        ? "\n(5xx: DB migration / RLS — see docs/SUPABASE_MANUAL_STEPS.md.)"
+        ? "\n(5xx: often a missing DB migration, RLS policy, or server misconfiguration — check Supabase and Edge Function logs.)"
         : "";
 
   return new Error(`HTTP ${status} from Edge Function\n${detail || "(empty body)"}${hint}`);
 }
 
-const RATING_NUMERIC: Record<SubmitCardReviewRating, number> = {
-  again: 0,
-  hard: 1,
-  good: 2,
-  easy: 3,
-};
-
-/**
- * Invokes the `submit-card-review` Edge Function (server-side SRS).
- * Also logs the review directly to `review_logs` from the client side
- * (best-effort, does not fail the review if logging fails).
- */
+/** Invokes the `submit-card-review` Edge Function (server-side SRS and review_logs). */
 export async function submitCardReviewInvoke(
   cardId: string,
   rating: SubmitCardReviewRating,
@@ -120,21 +109,6 @@ export async function submitCardReviewInvoke(
     return { ...result, error: await enrichHttpInvokeError(result.error) };
   }
 
-  // Логуємо перегляд для статистики (клієнтська сторона — гарантоване логування)
-  if (deckId) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { error: logError } = await supabase.from('review_logs').insert({
-        user_id: user.id,
-        card_id: cardId,
-        deck_id: deckId,
-        rating: RATING_NUMERIC[rating],
-      });
-      if (__DEV__ && logError) {
-        console.warn('[review_logs] insert error:', logError.message, logError.details);
-      }
-    }
-  }
 
   return result;
 }
