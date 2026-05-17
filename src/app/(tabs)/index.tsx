@@ -259,6 +259,17 @@ export default function MainScreen() {
             <Feather name="plus" size={20} color="#fff" />
             <Text style={styles.emptyButtonText}>{t('createDeck')}</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.emptyButtonOutline, { borderColor: colorScheme === 'dark' ? '#6366f1' : '#4255ff' }]}
+            onPress={() => router.push('/deck-import')}
+            accessibilityRole="button"
+            accessibilityLabel={t('importDeckFab')}
+          >
+            <Feather name="upload" size={20} color={colorScheme === 'dark' ? '#a5b4fc' : '#4255ff'} />
+            <Text style={[styles.emptyButtonOutlineText, { color: colorScheme === 'dark' ? '#a5b4fc' : '#4255ff' }]}>
+              {t('importDeckFab')}
+            </Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <ListOfDecks
@@ -352,14 +363,24 @@ export default function MainScreen() {
       )}
 
       {decks.length > 0 && (
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => router.push('/add-deck')}
-          accessibilityRole="button"
-          accessibilityLabel={t('addDeck')}
-        >
-          <Feather name="plus" size={24} color="#fff" />
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            style={[styles.importFab, { backgroundColor: colorScheme === 'dark' ? '#1d2a3a' : '#fff', borderColor: colorScheme === 'dark' ? '#6366f1' : '#4255ff' }]}
+            onPress={() => router.push('/deck-import')}
+            accessibilityRole="button"
+            accessibilityLabel={t('importDeckFab')}
+          >
+            <Feather name="upload" size={22} color={colorScheme === 'dark' ? '#a5b4fc' : '#4255ff'} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={() => router.push('/add-deck')}
+            accessibilityRole="button"
+            accessibilityLabel={t('addDeck')}
+          >
+            <Feather name="plus" size={24} color="#fff" />
+          </TouchableOpacity>
+        </>
       )}
 
       <ConfirmModal
@@ -536,6 +557,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  emptyButtonOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    backgroundColor: 'transparent',
+  },
+  emptyButtonOutlineText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  importFab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 96,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#4255ff',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   fab: {
     position: 'absolute',

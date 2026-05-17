@@ -1,6 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
+import { useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -40,6 +41,7 @@ import {
   swapCardMediaFormSides,
 } from "@/src/lib/cardMedia";
 import { useAppColors } from "@/src/contexts/ThemeContext";
+import { generateCardBack, generateCardImageUrl } from "@/src/lib/gemini";
 
 /** Web: hide browser default focus outline on TextInput (RN typings omit outlineStyle "none"). */
 const webTextInputNoOutline: TextStyle | undefined =
@@ -99,6 +101,7 @@ function AddCardStudyClozeBack({ parts }: { parts: ClozeParts }) {
 
 export default function AddCardScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams();
   const deckId = Array.isArray(params.deckId)
     ? params.deckId[0]
@@ -113,6 +116,13 @@ export default function AddCardScreen() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const C = useAppColors();
+
+  const isEdit = Boolean(cardId);
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: isEdit ? t("editCard") : t("addCard"),
+    });
+  }, [navigation, isEdit, t]);
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -166,6 +176,62 @@ export default function AddCardScreen() {
       },
     }));
   };
+
+  const [aiBackBusy, setAiBackBusy] = useState(false);
+  const [aiFrontImgBusy, setAiFrontImgBusy] = useState(false);
+  const [aiBackImgBusy, setAiBackImgBusy] = useState(false);
+
+  const handleAiFillBack = useCallback(async () => {
+    if (!deck || cardType !== "basic" || !frontText.trim()) {
+      setErrorModal(t("aiFillBackNeedFront"));
+      return;
+    }
+    setAiBackBusy(true);
+    const back = await generateCardBack(
+      frontText.trim(),
+      deck.title ?? "",
+      deck.description,
+    );
+    setAiBackBusy(false);
+    if (back) setBackText(back);
+    else setErrorModal(t("aiError"));
+  }, [cardType, deck, frontText, t]);
+
+  const handleAiFrontImage = useCallback(async () => {
+    if (!deck || cardType !== "basic" || !frontText.trim()) {
+      setErrorModal(t("aiFillImageNeedText"));
+      return;
+    }
+    setAiFrontImgBusy(true);
+    const url = await generateCardImageUrl(
+      frontText.trim(),
+      deck.title ?? "",
+      deck.description,
+      "front",
+    );
+    setAiFrontImgBusy(false);
+    if (url) setMediaUrl("front", "image", url);
+    else setErrorModal(t("aiError"));
+  }, [cardType, deck, frontText, t]);
+
+  const handleAiBackImage = useCallback(async () => {
+    if (!deck || cardType !== "basic") return;
+    const cue = backText.trim() || frontText.trim();
+    if (!cue) {
+      setErrorModal(t("aiFillImageNeedText"));
+      return;
+    }
+    setAiBackImgBusy(true);
+    const url = await generateCardImageUrl(
+      cue,
+      deck.title ?? "",
+      deck.description,
+      "back",
+    );
+    setAiBackImgBusy(false);
+    if (url) setMediaUrl("back", "image", url);
+    else setErrorModal(t("aiError"));
+  }, [backText, cardType, deck, frontText, t]);
 
   useEffect(() => {
     if (!deckId) {
@@ -426,7 +492,6 @@ export default function AddCardScreen() {
     frontText !== initialFront ||
     backText !== initialBack ||
     notes !== initialNotes;
-  const isEdit = Boolean(cardId);
   const showPairStudySwitcher =
     cardType === "basic" && createReversedPair && !isEdit;
   const clozePartsPreview: ClozeParts = {
@@ -450,7 +515,7 @@ export default function AddCardScreen() {
   if (isLoading) {
     return (
       <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
-        <ActivityIndicator size="large" color="#4255ff" />
+        <ActivityIndicator size="large" color={C.tint} />
       </View>
     );
   }
@@ -486,11 +551,11 @@ export default function AddCardScreen() {
           <View style={styles.formContainer}>
             {/* ── HERO HEADER ── */}
             <View style={styles.hero}>
-              <View style={styles.heroBadge}>
+              <View style={[styles.heroBadge, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.18)' : '#eff1ff' }]}>
                 <Feather
                   name={isEdit ? "edit-3" : "credit-card"}
                   size={20}
-                  color="#4255ff"
+                  color={C.tint}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -516,12 +581,20 @@ export default function AddCardScreen() {
                     <Pressable
                       key={id}
                       onPress={() => setCardType(id)}
-                      style={[styles.typeChip, cardType === id && styles.typeChipOn]}
+                      style={[
+                        styles.typeChip,
+                        { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                        cardType === id && {
+                          borderColor: C.tint,
+                          backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                        },
+                      ]}
                     >
                       <Text
                         style={[
                           styles.typeChipTxt,
-                          cardType === id && styles.typeChipTxtOn,
+                          { color: C.textSub },
+                          cardType === id && { color: C.tint, fontWeight: '700' as const },
                         ]}
                       >
                         {t(lk)}
@@ -533,7 +606,7 @@ export default function AddCardScreen() {
 
               {cardType === "cloze" ? (
                 <>
-                  <Text style={styles.clozeIntro}>{t("clozeIntro")}</Text>
+                  <Text style={[styles.clozeIntro, { color: C.textSub }]}>{t("clozeIntro")}</Text>
                   <Field label={t("clozeFieldBefore")}>
                     <InputRow
                       icon="align-left"
@@ -545,7 +618,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
                         placeholder={t("clozePlaceholderBefore")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={clozeBefore}
                         onChangeText={setClozeBefore}
                         onFocus={() => setFocusedField("cBefore")}
@@ -566,7 +639,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, styles.inputClozeGapHint, webTextInputNoOutline]}
                         placeholder={t("clozePlaceholderGapFront")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={clozeGapFront}
                         onChangeText={setClozeGapFront}
                         onFocus={() => setFocusedField("cGap")}
@@ -580,7 +653,7 @@ export default function AddCardScreen() {
                           hitSlop={8}
                           style={{ marginTop: 2 }}
                         >
-                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                          <Feather name="x-circle" size={16} color={C.textMuted} />
                         </Pressable>
                       )}
                     </InputRow>
@@ -596,7 +669,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, styles.inputClozeHidden, webTextInputNoOutline]}
                         placeholder={t("clozePlaceholderHidden")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={clozeHidden}
                         onChangeText={setClozeHidden}
                         onFocus={() => setFocusedField("cHidden")}
@@ -610,7 +683,7 @@ export default function AddCardScreen() {
                           hitSlop={8}
                           style={{ marginTop: 2 }}
                         >
-                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                          <Feather name="x-circle" size={16} color={C.textMuted} />
                         </Pressable>
                       )}
                     </InputRow>
@@ -626,7 +699,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
                         placeholder={t("clozePlaceholderAfter")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={clozeAfter}
                         onChangeText={setClozeAfter}
                         onFocus={() => setFocusedField("cAfter")}
@@ -650,7 +723,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
                         placeholder={t("frontPlaceholder")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={frontText}
                         onChangeText={setFrontText}
                         onFocus={() => setFocusedField("front")}
@@ -664,12 +737,43 @@ export default function AddCardScreen() {
                           hitSlop={8}
                           style={{ marginTop: 2 }}
                         >
-                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                          <Feather name="x-circle" size={16} color={C.textMuted} />
                         </Pressable>
                       )}
                     </InputRow>
                   </Field>
-                  <Field label={t("back")} required>
+                  <Field
+                    label={t("back")}
+                    required
+                    labelRight={
+                      cardType === "basic" ? (
+                        <TouchableOpacity
+                          style={[
+                            styles.aiLabelBtn,
+                            {
+                              borderColor: C.tint,
+                              backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                              opacity: !frontText.trim() || aiBackBusy ? 0.5 : 1,
+                            },
+                          ]}
+                          onPress={handleAiFillBack}
+                          disabled={aiBackBusy || !frontText.trim()}
+                          activeOpacity={0.75}
+                          accessibilityRole="button"
+                          accessibilityLabel={t("aiGenerateBack")}
+                        >
+                          {aiBackBusy ? (
+                            <ActivityIndicator size="small" color={C.tint} />
+                          ) : (
+                            <Feather name="zap" size={14} color={C.tint} />
+                          )}
+                          <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+                            {aiBackBusy ? t("aiGenerateBackLoading") : t("aiGenerateBack")}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : undefined
+                    }
+                  >
                     <InputRow
                       icon="align-right"
                       focused={focusedField === "back"}
@@ -680,7 +784,7 @@ export default function AddCardScreen() {
                       <TextInput
                         style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
                         placeholder={t("backPlaceholder")}
-                        placeholderTextColor="#c4cbd8"
+                        placeholderTextColor={C.placeholder}
                         value={backText}
                         onChangeText={setBackText}
                         onFocus={() => setFocusedField("back")}
@@ -694,7 +798,7 @@ export default function AddCardScreen() {
                           hitSlop={8}
                           style={{ marginTop: 2 }}
                         >
-                          <Feather name="x-circle" size={16} color="#d1d5db" />
+                          <Feather name="x-circle" size={16} color={C.textMuted} />
                         </Pressable>
                       )}
                     </InputRow>
@@ -707,67 +811,130 @@ export default function AddCardScreen() {
                       <Feather
                         name={createReversedPair ? "check-square" : "square"}
                         size={20}
-                        color={createReversedPair ? "#4255ff" : "#b0b8c8"}
+                        color={createReversedPair ? C.tint : C.textMuted}
                       />
                       <View style={{ flex: 1, gap: 4 }}>
-                        <Text style={styles.revToggleTitle}>
+                        <Text style={[styles.revToggleTitle, { color: C.text }]}>
                           {t("cardCreateReversedPair")}
                         </Text>
-                        <Text style={styles.revToggleHint}>
+                        <Text style={[styles.revToggleHint, { color: C.textSub }]}>
                           {t("cardCreateReversedHint")}
                         </Text>
                       </View>
                     </Pressable>
                   ) : null}
                   {isEdit && pairMeta.pairId ? (
-                    <Text style={styles.revEditHint}>
+                    <Text style={[styles.revEditHint, { color: C.textSub }]}>
                       {t("cardReversiblePairEditNote")}
                     </Text>
                   ) : null}
                 </>
               )}
 
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
 
-              <Field label={t("frontImageUrl")}>
+              <Field
+                label={t("frontImageUrl")}
+                labelRight={
+                  cardType === "basic" ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.aiLabelBtn,
+                        {
+                          borderColor: C.tint,
+                          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                          opacity: !frontText.trim() || aiFrontImgBusy ? 0.5 : 1,
+                        },
+                      ]}
+                      onPress={handleAiFrontImage}
+                      disabled={aiFrontImgBusy || !frontText.trim()}
+                      activeOpacity={0.75}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("aiGenerateImage")}
+                    >
+                      {aiFrontImgBusy ? (
+                        <ActivityIndicator size="small" color={C.tint} />
+                      ) : (
+                        <Feather name="image" size={14} color={C.tint} />
+                      )}
+                      <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+                        {aiFrontImgBusy ? t("aiGenerateImageLoading") : t("aiGenerateImage")}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : undefined
+                }
+              >
                 <InputRow icon="image" focused={focusedField === "frontImage"} onFocus={() => setFocusedField("frontImage")} onBlur={() => setFocusedField(null)}>
                   <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.front.image} onChangeText={(value) => setMediaUrl("front", "image", value)} onFocus={() => setFocusedField("frontImage")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.front.image.length > 0 && <Pressable onPress={() => setMediaUrl("front", "image", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
+                  {mediaForm.front.image.length > 0 && <Pressable onPress={() => setMediaUrl("front", "image", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
                 </InputRow>
               </Field>
               <Field label={t("frontAudioUrl")}>
                 <InputRow icon="volume-2" focused={focusedField === "frontAudio"} onFocus={() => setFocusedField("frontAudio")} onBlur={() => setFocusedField(null)}>
                   <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.front.audio} onChangeText={(value) => setMediaUrl("front", "audio", value)} onFocus={() => setFocusedField("frontAudio")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.front.audio.length > 0 && <Pressable onPress={() => setMediaUrl("front", "audio", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
+                  {mediaForm.front.audio.length > 0 && <Pressable onPress={() => setMediaUrl("front", "audio", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
                 </InputRow>
               </Field>
               <Field label={t("frontVideoUrl")}>
                 <InputRow icon="video" focused={focusedField === "frontVideo"} onFocus={() => setFocusedField("frontVideo")} onBlur={() => setFocusedField(null)}>
                   <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.front.video} onChangeText={(value) => setMediaUrl("front", "video", value)} onFocus={() => setFocusedField("frontVideo")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.front.video.length > 0 && <Pressable onPress={() => setMediaUrl("front", "video", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
+                  {mediaForm.front.video.length > 0 && <Pressable onPress={() => setMediaUrl("front", "video", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
                 </InputRow>
               </Field>
 
-              <Field label={t("backImageUrl")}>
+              <Field
+                label={t("backImageUrl")}
+                labelRight={
+                  cardType === "basic" ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.aiLabelBtn,
+                        {
+                          borderColor: C.tint,
+                          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                          opacity:
+                            (!frontText.trim() && !backText.trim()) || aiBackImgBusy ? 0.5 : 1,
+                        },
+                      ]}
+                      onPress={handleAiBackImage}
+                      disabled={
+                        aiBackImgBusy || (!frontText.trim() && !backText.trim())
+                      }
+                      activeOpacity={0.75}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("aiGenerateImage")}
+                    >
+                      {aiBackImgBusy ? (
+                        <ActivityIndicator size="small" color={C.tint} />
+                      ) : (
+                        <Feather name="image" size={14} color={C.tint} />
+                      )}
+                      <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+                        {aiBackImgBusy ? t("aiGenerateImageLoading") : t("aiGenerateImage")}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : undefined
+                }
+              >
                 <InputRow icon="image" focused={focusedField === "backImage"} onFocus={() => setFocusedField("backImage")} onBlur={() => setFocusedField(null)}>
                   <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.back.image} onChangeText={(value) => setMediaUrl("back", "image", value)} onFocus={() => setFocusedField("backImage")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.back.image.length > 0 && <Pressable onPress={() => setMediaUrl("back", "image", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
+                  {mediaForm.back.image.length > 0 && <Pressable onPress={() => setMediaUrl("back", "image", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
                 </InputRow>
               </Field>
               <Field label={t("backAudioUrl")}>
                 <InputRow icon="volume-2" focused={focusedField === "backAudio"} onFocus={() => setFocusedField("backAudio")} onBlur={() => setFocusedField(null)}>
                   <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.back.audio} onChangeText={(value) => setMediaUrl("back", "audio", value)} onFocus={() => setFocusedField("backAudio")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.back.audio.length > 0 && <Pressable onPress={() => setMediaUrl("back", "audio", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
+                  {mediaForm.back.audio.length > 0 && <Pressable onPress={() => setMediaUrl("back", "audio", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
                 </InputRow>
               </Field>
               <Field label={t("backVideoUrl")}>
                 <InputRow icon="video" focused={focusedField === "backVideo"} onFocus={() => setFocusedField("backVideo")} onBlur={() => setFocusedField(null)}>
                   <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.back.video} onChangeText={(value) => setMediaUrl("back", "video", value)} onFocus={() => setFocusedField("backVideo")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.back.video.length > 0 && <Pressable onPress={() => setMediaUrl("back", "video", "")} hitSlop={8}><Feather name="x-circle" size={16} color="#d1d5db" /></Pressable>}
+                  {mediaForm.back.video.length > 0 && <Pressable onPress={() => setMediaUrl("back", "video", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
                 </InputRow>
               </Field>
 
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
 
               {/* NOTES */}
               <Field label={t("notes")}>
@@ -794,7 +961,15 @@ export default function AddCardScreen() {
 
               {/* ERROR */}
               {error ? (
-                <View style={styles.errorBox}>
+                <View
+                  style={[
+                    styles.errorBox,
+                    {
+                      backgroundColor: C.isDark ? 'rgba(220,38,38,0.12)' : '#fef2f2',
+                      borderColor: C.isDark ? 'rgba(248,113,113,0.35)' : '#fecaca',
+                    },
+                  ]}
+                >
                   <Feather name="alert-circle" size={15} color="#dc2626" />
                   <Text style={styles.errorTxt}>{error}</Text>
                 </View>
@@ -806,6 +981,10 @@ export default function AddCardScreen() {
               <TouchableOpacity
                 style={[
                   styles.btnPreviewStudy,
+                  {
+                    backgroundColor: C.surface,
+                    borderColor: isValid ? C.tint : C.border,
+                  },
                   !isValid && styles.btnPreviewStudyOff,
                 ]}
                 onPress={() => {
@@ -819,12 +998,12 @@ export default function AddCardScreen() {
                 <Feather
                   name="eye"
                   size={18}
-                  color={isValid ? "#4255ff" : "#c4cbd8"}
+                  color={isValid ? C.tint : C.placeholder}
                 />
                 <Text
                   style={[
                     styles.btnPreviewStudyTxt,
-                    !isValid && styles.btnPreviewStudyTxtOff,
+                    { color: isValid ? C.tint : C.placeholder },
                   ]}
                 >
                   {t("addCardPreviewStudy")}
@@ -879,16 +1058,16 @@ export default function AddCardScreen() {
             onPress={() => setStudyPreviewOpen(false)}
           />
           <View style={styles.studyPreviewCenter}>
-            <View style={styles.studyPreviewSheet}>
-            <View style={styles.studyPreviewHeader}>
-              <Text style={styles.studyPreviewTitle}>{t("addCardPreviewTitle")}</Text>
+            <View style={[styles.studyPreviewSheet, { backgroundColor: C.surface }]}>
+            <View style={[styles.studyPreviewHeader, { borderBottomColor: C.borderLight }]}>
+              <Text style={[styles.studyPreviewTitle, { color: C.text }]}>{t("addCardPreviewTitle")}</Text>
               <Pressable
                 hitSlop={12}
                 onPress={() => setStudyPreviewOpen(false)}
                 accessibilityRole="button"
                 accessibilityLabel={t("addCardPreviewClose")}
               >
-                <Feather name="x" size={22} color="#6b7280" />
+                <Feather name="x" size={22} color={C.textSub} />
               </Pressable>
             </View>
             {showPairStudySwitcher ? (
@@ -900,14 +1079,18 @@ export default function AddCardScreen() {
                   }}
                   style={[
                     styles.studyPreviewPairChip,
-                    studyPreviewPairSlot === 1 && styles.studyPreviewPairChipOn,
+                    { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                    studyPreviewPairSlot === 1 && {
+                      borderColor: C.tint,
+                      backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                    },
                   ]}
                 >
                   <Text
                     style={[
                       styles.studyPreviewPairChipTxt,
-                      studyPreviewPairSlot === 1 &&
-                        styles.studyPreviewPairChipTxtOn,
+                      { color: C.textSub },
+                      studyPreviewPairSlot === 1 && { color: C.tint, fontWeight: '700' as const },
                     ]}
                   >
                     {t("addCardPreviewPair1")}
@@ -920,14 +1103,18 @@ export default function AddCardScreen() {
                   }}
                   style={[
                     styles.studyPreviewPairChip,
-                    studyPreviewPairSlot === 2 && styles.studyPreviewPairChipOn,
+                    { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                    studyPreviewPairSlot === 2 && {
+                      borderColor: C.tint,
+                      backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                    },
                   ]}
                 >
                   <Text
                     style={[
                       styles.studyPreviewPairChipTxt,
-                      studyPreviewPairSlot === 2 &&
-                        styles.studyPreviewPairChipTxtOn,
+                      { color: C.textSub },
+                      studyPreviewPairSlot === 2 && { color: C.tint, fontWeight: '700' as const },
                     ]}
                   >
                     {t("addCardPreviewPair2")}
@@ -942,7 +1129,14 @@ export default function AddCardScreen() {
             >
               <TouchableOpacity
                 activeOpacity={1}
-                style={styles.studyPreviewCard}
+                style={[
+                  styles.studyPreviewCard,
+                  {
+                    backgroundColor: C.isDark ? C.surfaceAlt : '#fff',
+                    borderWidth: C.isDark ? 1 : 0,
+                    borderColor: C.border,
+                  },
+                ]}
                 onPress={() => setStudyPreviewShowBack((v) => !v)}
               >
                 <View style={styles.studyPreviewCardInner}>
@@ -1019,10 +1213,11 @@ function Field({
   labelRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const C = useAppColors();
   return (
     <View style={{ gap: 7 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={styles.fieldLabel}>
+        <Text style={[styles.fieldLabel, { color: C.textSub }]}>
           {label}
           {required && <Text style={{ color: "#ef4444" }}> *</Text>}
         </Text>
@@ -1061,7 +1256,7 @@ function InputRow({
       <Feather
         name={icon}
         size={16}
-        color={focused ? C.tint : "#b0b8c8"}
+        color={focused ? C.tint : C.textMuted}
         style={multiline ? { marginTop: 3 } : undefined}
       />
       {children}
@@ -1150,18 +1345,21 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
 
-  aiBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
+  aiLabelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
     borderWidth: 1,
+    maxWidth: "58%",
+    flexShrink: 1,
   },
-  aiBtnTxt: {
+  aiLabelBtnTxt: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "700",
+    flexShrink: 1,
   },
 
   /* INPUT ROW */

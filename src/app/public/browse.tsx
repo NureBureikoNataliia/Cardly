@@ -7,21 +7,21 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 
 /**
- * Публічні дошки для авторизованого користувача:
- * без власних колод у списку, можливість скарги.
+ * Публічні дошки для гостя: лише перегляд.
+ * Авторизований користувач перенаправляється на /publicdecks.
  */
-export default function PublicDecksScreen() {
+export default function PublicBrowseScreen() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const C = useAppColors();
 
   useEffect(() => {
-    if (!loading && !user?.id) {
-      router.replace("/public/browse");
+    if (!loading && user?.id) {
+      router.replace("/publicdecks");
     }
   }, [loading, user?.id, router]);
 
-  if (loading || !user?.id) {
+  if (loading || user?.id) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: C.bg }}>
         <ActivityIndicator size="large" color={C.tint} />
@@ -29,5 +29,5 @@ export default function PublicDecksScreen() {
     );
   }
 
-  return <PublicDecksView forGuest={false} />;
+  return <PublicDecksView forGuest />;
 }

@@ -1,5 +1,6 @@
 import Feather from '@expo/vector-icons/Feather';
-import React, { useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import React, { useLayoutEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -32,6 +33,11 @@ export default function HelpScreen() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const C = useAppColors();
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: t('help') });
+  }, [navigation, t]);
 
   const [msgType, setMsgType] = useState<MessageType>('bug');
   const [message, setMessage] = useState('');

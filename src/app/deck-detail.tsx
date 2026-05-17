@@ -122,13 +122,23 @@ export default function DeckDetailScreen() {
     if (deckError || cardsError) {
       setError(t("failedToLoadDeck"));
     } else {
-      setDeck(deckData as Deck);
-      const list = (cardsData as Card[]) ?? [];
-      setCards(list);
-      setTotalCards(list.length);
-      if (user?.id) {
-        const progress = await fetchUserProgressForDeck(user.id, list.map((c) => c.card_id));
-        setProgressMap(progress);
+      const d = deckData as Deck;
+      if (!user?.id && !d.is_public) {
+        setError(t("deckNotFound"));
+        setDeck(null);
+        setCards([]);
+        setTotalCards(0);
+      } else {
+        setDeck(d);
+        const list = (cardsData as Card[]) ?? [];
+        setCards(list);
+        setTotalCards(list.length);
+        if (user?.id) {
+          const progress = await fetchUserProgressForDeck(user.id, list.map((c) => c.card_id));
+          setProgressMap(progress);
+        } else {
+          setProgressMap(new Map());
+        }
       }
     }
     setLoading(false);
@@ -307,7 +317,9 @@ export default function DeckDetailScreen() {
     setHasCopy((data?.length ?? 0) > 0);
   }, [deck, user, isOwner]);
 
-  useEffect(() => { if (isPublicFromOther) checkHasCopy(); }, [isPublicFromOther, checkHasCopy]);
+  useEffect(() => {
+    if (isPublicFromOther && user) checkHasCopy();
+  }, [isPublicFromOther, user, checkHasCopy]);
 
   const handleAddToMyAccount = async () => {
     if (!deck || !user || isCopying || hasCopy) return;
@@ -430,14 +442,25 @@ export default function DeckDetailScreen() {
   };
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: t("appName") });
-    return () => { navigation.setOptions({ headerShown: undefined, tabBarStyle: undefined }); };
-  }, [navigation, t]);
+    // Avoid "Cardly" twice: left header already shows app name + menu.
+    navigation.setOptions({ title: deck?.title?.trim() ? deck.title : '' });
+    return () => {
+      navigation.setOptions({ headerShown: undefined, tabBarStyle: undefined });
+    };
+  }, [navigation, deck?.title]);
 
   const isCopiedDeck = Boolean(deck?.original_deck_id);
 
   /* ── responsive grid: 2 cols on wide, 1 on narrow ── */
   const numCols = Platform.OS === "web" && windowWidth >= 860 ? 2 : 1;
+
+  /** Secondary deck actions (export / add / AI / rate): wrap 2-per-row below ~520dp to avoid horizontal clip. */
+  const compactSecondaryActions = windowWidth < 520;
+  const secondaryActionsInnerW = Math.max(0, windowWidth - 32);
+  const secondaryCellWidth =
+    compactSecondaryActions
+      ? Math.max(138, Math.floor((secondaryActionsInnerW - 10) / 2))
+      : undefined;
 
   /* ── loading ── */
   if (loading) {
@@ -532,28 +555,32 @@ export default function DeckDetailScreen() {
           {/* ════════════ STATS ROW ════════════ */}
           <View style={[styles.statsRow, { backgroundColor: C.surface }]}>
             <StatChip icon="layers" value={totalCards} label={t("totalCards")} color="#6366f1" />
-            <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
-            <StatChip
-              icon="clock"
-              value={dueToday}
-              label={t("dueToday")}
-              color="#d97706"
-              onInfoPress={hasDeckStudyLimits ? () => setDueTodayInfoOpen(true) : undefined}
-              infoAccessibilityLabel={t("dueTodayInfoTitle")}
-            />
-            <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
-            <StatChip
-              icon="check-circle"
-              value={`${progressPct}%`}
-              label={t("learned")}
-              color="#059669"
-              onInfoPress={() => setLearnedInfoOpen(true)}
-              infoAccessibilityLabel={t("learnedPercentInfoTitle")}
-            />
+            {user ? (
+              <>
+                <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
+                <StatChip
+                  icon="clock"
+                  value={dueToday}
+                  label={t("dueToday")}
+                  color="#d97706"
+                  onInfoPress={hasDeckStudyLimits ? () => setDueTodayInfoOpen(true) : undefined}
+                  infoAccessibilityLabel={t("dueTodayInfoTitle")}
+                />
+                <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
+                <StatChip
+                  icon="check-circle"
+                  value={`${progressPct}%`}
+                  label={t("learned")}
+                  color="#059669"
+                  onInfoPress={() => setLearnedInfoOpen(true)}
+                  infoAccessibilityLabel={t("learnedPercentInfoTitle")}
+                />
+              </>
+            ) : null}
           </View>
 
           {/* ────── Progress bar ────── */}
-          {totalCards > 0 && (
+          {!!user && totalCards > 0 && (
             <View style={styles.progressWrap}>
               <View style={[styles.progressTrack, { backgroundColor: C.border }]}>
                 <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
@@ -623,19 +650,29 @@ export default function DeckDetailScreen() {
               </View>
             )}
 
-            {/* Secondary row */}
-            <View style={styles.actionRowSecondary}>
-              <ActionBtn
-                icon="download"
-                label={isExportingPdf ? t("exportingPdf") : t("exportPdf")}
-                bg={C.surface}
-                textColor="#2563eb"
-                border
-                borderColor="rgba(37,99,235,0.25)"
-                onPress={handleExportPdf}
-                disabled={isExportingPdf}
-                flex
-              />
+            {/* Secondary row — wraps to 2×2 on narrow viewports */}
+            {(user || canEdit) ? (
+            <View
+              style={[
+                styles.actionRowSecondary,
+                compactSecondaryActions && styles.actionRowSecondaryWrap,
+              ]}
+            >
+              {user ? (
+                <ActionBtn
+                  icon="download"
+                  label={isExportingPdf ? t("exportingPdf") : t("exportPdf")}
+                  bg={C.surface}
+                  textColor="#2563eb"
+                  border
+                  borderColor="rgba(37,99,235,0.25)"
+                  onPress={handleExportPdf}
+                  disabled={isExportingPdf}
+                  flex={!compactSecondaryActions}
+                  compactLayout={compactSecondaryActions}
+                  fixedWidth={secondaryCellWidth}
+                />
+              ) : null}
               {canEdit && (
                 <ActionBtn
                   icon="plus-circle"
@@ -645,7 +682,9 @@ export default function DeckDetailScreen() {
                   border
                   borderColor="rgba(99,102,241,0.25)"
                   onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
-                  flex
+                  flex={!compactSecondaryActions}
+                  compactLayout={compactSecondaryActions}
+                  fixedWidth={secondaryCellWidth}
                 />
               )}
               {canEdit && (
@@ -657,10 +696,12 @@ export default function DeckDetailScreen() {
                   border
                   borderColor="rgba(99,102,241,0.25)"
                   onPress={() => setShowGenerateModal(true)}
-                  flex
+                  flex={!compactSecondaryActions}
+                  compactLayout={compactSecondaryActions}
+                  fixedWidth={secondaryCellWidth}
                 />
               )}
-              {user && (
+              {user ? (
                 <ActionBtn
                   icon="star"
                   label={t("rateComment")}
@@ -669,10 +710,28 @@ export default function DeckDetailScreen() {
                   border
                   borderColor="rgba(217,119,6,0.25)"
                   onPress={() => router.push(`/deck-rate?id=${deck.deck_id}`)}
-                  flex
+                  flex={!compactSecondaryActions}
+                  compactLayout={compactSecondaryActions}
+                  fixedWidth={secondaryCellWidth}
                 />
-              )}
+              ) : null}
             </View>
+            ) : null}
+
+            {isOwner && (
+              <View style={{ width: "100%", marginTop: 10 }}>
+                <ActionBtn
+                  icon="upload"
+                  label={t("importCards")}
+                  bg={C.surface}
+                  textColor="#0f766e"
+                  border
+                  borderColor="rgba(15,118,110,0.28)"
+                  onPress={() => router.push(`/deck-import?deckId=${deck.deck_id}`)}
+                  fullWidth
+                />
+              </View>
+            )}
 
             {/* Copy/update row */}
             {isOwner && isCopiedDeck && (
@@ -688,7 +747,7 @@ export default function DeckDetailScreen() {
                 fullWidth
               />
             )}
-            {isPublicFromOther && (
+            {isPublicFromOther && user && (
               <ActionBtn
                 icon={hasCopy ? "check" : "download"}
                 label={hasCopy ? t("alreadyInCollection") : (isCopying ? `${t("saving")}...` : t("addToMyAccount"))}
@@ -700,6 +759,34 @@ export default function DeckDetailScreen() {
                 disabled={hasCopy === true || isCopying}
                 fullWidth
               />
+            )}
+            {isPublicFromOther && !user && (
+              <View
+                style={{
+                  marginTop: 4,
+                  padding: 16,
+                  borderRadius: 14,
+                  backgroundColor: C.isDark ? 'rgba(99,102,241,0.12)' : '#eef0ff',
+                  borderWidth: 1,
+                  borderColor: C.isDark ? 'rgba(165,180,252,0.25)' : 'rgba(99,102,241,0.25)',
+                }}
+              >
+                <Text style={{ color: C.textSub, fontSize: 15, lineHeight: 22 }}>{t('guestDeckCta')}</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
+                  <TouchableOpacity
+                    onPress={() => router.push('/auth/login')}
+                    style={{ backgroundColor: C.tint, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10 }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 15 }}>{t('signIn')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => router.push('/auth/signup')}
+                    style={{ borderWidth: 1.5, borderColor: C.tint, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10 }}
+                  >
+                    <Text style={{ color: C.tint, fontWeight: '600', fontSize: 15 }}>{t('signUp')}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
           </View>
 
@@ -726,8 +813,13 @@ export default function DeckDetailScreen() {
                 activeOpacity={0.8}
               >
                 <View style={styles.collabToggleLeft}>
-                  <View style={styles.collabToggleIcon}>
-                    <Feather name="users" size={16} color="#6366f1" />
+                  <View
+                    style={[
+                      styles.collabToggleIcon,
+                      { backgroundColor: C.isDark ? 'rgba(99,102,241,0.18)' : '#EEF2FF' },
+                    ]}
+                  >
+                    <Feather name="users" size={16} color={C.tint} />
                   </View>
                   <Text style={[styles.collabToggleTitle, { color: C.text }]}>{t("collaborators")}</Text>
                   {collaborators.filter(c => c.status !== 'pending' && c.status !== 'declined').length > 0 && (
@@ -738,7 +830,7 @@ export default function DeckDetailScreen() {
                     </View>
                   )}
                 </View>
-                <Feather name={collabOpen ? "chevron-up" : "chevron-down"} size={18} color="#6b7280" />
+                <Feather name={collabOpen ? "chevron-up" : "chevron-down"} size={18} color={C.textSub} />
               </TouchableOpacity>
 
               {/* Expandable content */}
@@ -1021,7 +1113,18 @@ function StatChip({ icon, value, label, color, onInfoPress, infoAccessibilityLab
 
 /* ─── ActionBtn ─── */
 function ActionBtn({
-  icon, label, bg, textColor = "#fff", border, borderColor, onPress, disabled, flex, fullWidth,
+  icon,
+  label,
+  bg,
+  textColor = "#fff",
+  border,
+  borderColor,
+  onPress,
+  disabled,
+  flex,
+  fullWidth,
+  compactLayout,
+  fixedWidth,
 }: {
   icon: keyof typeof Feather.glyphMap;
   label: string;
@@ -1033,6 +1136,9 @@ function ActionBtn({
   disabled?: boolean;
   flex?: boolean;
   fullWidth?: boolean;
+  /** Icon above label, smaller type — fits 2×2 action grid on phones */
+  compactLayout?: boolean;
+  fixedWidth?: number;
 }) {
   return (
     <TouchableOpacity
@@ -1040,16 +1146,27 @@ function ActionBtn({
         styles.actionBtn,
         { backgroundColor: bg },
         border && { borderWidth: 1.5, borderColor: borderColor ?? textColor },
-        flex && { flex: 1 },
+        flex && { flex: 1, minWidth: 0 },
         fullWidth && { width: "100%" },
+        fixedWidth != null && { width: fixedWidth, flexGrow: 0, flexShrink: 0 },
+        compactLayout && styles.actionBtnCompact,
         disabled && styles.actionBtnDisabled,
       ]}
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.8}
     >
-      <Feather name={icon} size={18} color={textColor} />
-      <Text style={[styles.actionBtnTxt, { color: textColor }]}>{label}</Text>
+      <Feather name={icon} size={compactLayout ? 20 : 18} color={textColor} />
+      <Text
+        style={[
+          styles.actionBtnTxt,
+          { color: textColor },
+          compactLayout && styles.actionBtnTxtCompact,
+        ]}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -1266,6 +1383,7 @@ const styles = StyleSheet.create({
   actions: { marginHorizontal: 16, marginTop: 16, gap: 10 },
   actionRowPrimary: { flexDirection: "row", gap: 10 },
   actionRowSecondary: { flexDirection: "row", gap: 10 },
+  actionRowSecondaryWrap: { flexWrap: "wrap" },
   actionBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 8, paddingVertical: 14, paddingHorizontal: 16,
@@ -1273,8 +1391,17 @@ const styles = StyleSheet.create({
     shadowColor: "#6366f1", shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08, shadowRadius: 8, elevation: 2,
   },
+  actionBtnCompact: {
+    flexDirection: "column",
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    minHeight: 76,
+    justifyContent: "center",
+  },
   actionBtnDisabled: { opacity: 0.5, shadowOpacity: 0 },
-  actionBtnTxt: { fontSize: 13, fontWeight: "700", textAlign: 'center' },
+  actionBtnTxt: { fontSize: 13, fontWeight: "700", textAlign: 'center', flexShrink: 1 },
+  actionBtnTxtCompact: { fontSize: 11, lineHeight: 14 },
 
   /* ── CARDS SECTION ── */
   cardsSection: { marginHorizontal: 16, marginTop: 24 },

@@ -15,6 +15,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { BookOpen } from 'lucide-react-native';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
+import ThemeToggle from '@/src/components/ThemeToggle';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 
 export default function SignUpScreen() {
@@ -63,7 +64,8 @@ export default function SignUpScreen() {
       style={[styles.container, { backgroundColor: C.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.langBtn}>
+      <View style={styles.topActions}>
+        <ThemeToggle />
         <LanguageDropdown />
       </View>
       <ScrollView
@@ -73,7 +75,7 @@ export default function SignUpScreen() {
       >
         <View style={styles.content}>
           <View style={styles.header}>
-            <BookOpen size={48} color="#3b82f6" />
+            <BookOpen size={48} color={C.tint} />
             <Text style={[styles.title, { color: C.text }]}>{t('createAccount')}</Text>
             <Text style={[styles.subtitle, { color: C.textSub }]}>{t('startJourney')}</Text>
           </View>
@@ -140,6 +142,14 @@ export default function SignUpScreen() {
                 <Text style={styles.linkText}>{t('signIn')}</Text>
               </TouchableOpacity>
             </View>
+
+            <TouchableOpacity
+              style={styles.publicDecksLink}
+              onPress={() => router.push('/public/browse' as never)}
+              disabled={loading}
+            >
+              <Text style={[styles.publicDecksLinkText, { color: C.tint }]}>{t('browsePublicDecks')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -152,11 +162,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-  langBtn: {
+  topActions: {
     position: 'absolute',
     top: 48,
     right: 24,
     zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   scrollContent: {
     flexGrow: 1,
@@ -226,6 +239,14 @@ const styles = StyleSheet.create({
   },
   linkText: {
     color: '#3b82f6',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  publicDecksLink: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  publicDecksLinkText: {
     fontSize: 14,
     fontWeight: '600',
   },

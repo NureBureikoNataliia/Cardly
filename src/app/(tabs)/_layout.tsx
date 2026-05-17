@@ -1,10 +1,9 @@
 import Feather from '@expo/vector-icons/Feather';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Link, Tabs } from 'expo-router';
-import React, { useState } from 'react';
+import React from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import DrawerMenu from '@/src/components/DrawerMenu';
 import { LanguageDropdown } from '@/src/components/LanguageDropdown';
 import NotificationBell from '@/src/components/NotificationBell';
 import ThemeToggle from '@/src/components/ThemeToggle';
@@ -12,26 +11,38 @@ import { useClientOnlyValue } from '@/src/components/useClientOnlyValue';
 import { useColorScheme } from '@/src/components/useColorScheme';
 import Colors from '@/src/constants/Colors';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useMobileDrawerOptional } from '@/src/contexts/MobileDrawerContext';
 import { useSidebarDrawerOptional } from '@/src/contexts/SidebarDrawerContext';
 
 const isWeb = Platform.OS === 'web';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const { t } = useLanguage();
   const sidebarDrawer = useSidebarDrawerOptional();
+  const mobileDrawer = useMobileDrawerOptional();
 
   const cs = colorScheme ?? 'light';
   const headerBg = Colors[cs].header;
   const headerTint = Colors[cs].tint;
   const headerText = Colors[cs].text;
 
+  const openMenu = () => {
+    if (isWeb) {
+      sidebarDrawer?.toggleDrawer();
+    } else {
+      mobileDrawer?.openMenu();
+    }
+  };
+
   const headerLeft = isWeb
     ? sidebarDrawer?.isCompact
       ? () => (
           <Pressable
-            onPress={sidebarDrawer.toggleDrawer}
+            onPress={openMenu}
+            accessibilityRole="button"
+            accessibilityLabel="Open menu"
+            hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}
             style={[styles.menuBtn, { marginLeft: 8 }]}
           >
             <Feather name="menu" size={24} color={headerTint} />
@@ -39,17 +50,19 @@ export default function TabLayout() {
         )
       : undefined
     : () => (
-        <Pressable onPress={() => setDrawerOpen(true)} style={styles.menuBtn}>
+        <Pressable
+          onPress={openMenu}
+          accessibilityRole="button"
+          accessibilityLabel="Open menu"
+          hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}
+          style={styles.menuBtn}
+        >
           <Feather name="menu" size={24} color={headerTint} />
         </Pressable>
       );
 
   return (
     <>
-      {!isWeb && (
-        <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
-      )}
-
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: Colors[cs].tint,
@@ -99,6 +112,11 @@ const styles = StyleSheet.create({
     marginRight:   8,
   },
   menuBtn: {
-    padding: 4,
+    minWidth: 56,
+    minHeight: 56,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
