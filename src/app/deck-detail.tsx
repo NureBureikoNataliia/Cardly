@@ -288,19 +288,6 @@ export default function DeckDetailScreen() {
     return isLimit(r.new_cards_per_day) || isLimit(r.cards_per_day);
   }, [deck?.srs_overrides]);
 
-  const dueNowCount = useMemo(() => {
-    if (!user) return 0;
-    const now = Date.now();
-    return cards.filter((c) => {
-      const p = progressMap.get(c.card_id);
-      if (!p) return true;
-      if (p.due_date == null) return true;
-      const t = new Date(p.due_date).getTime();
-      if (Number.isNaN(t)) return true;
-      return t <= now;
-    }).length;
-  }, [user, cards, progressMap]);
-
   const isOwner = deck && user && deck.creator_id === user.id;
   // treat missing status (old DB without status column) as 'accepted' for backward compat
   const isCollaborator = !isOwner && collaborators.some(
@@ -612,36 +599,12 @@ export default function DeckDetailScreen() {
               </View>
             )}
 
-            {/* Primary: Study */}
-            {canEdit && (
-              <View style={styles.actionRowPrimary}>
-                <ActionBtn
-                  icon="trending-up"
-                  label={t("studying")}
-                  bg="#059669"
-                  onPress={() => {
-                    const onlyLaterToday = Boolean(user && dueNowCount === 0 && dueToday > 0);
-                    router.push({
-                      pathname: "/deck-study",
-                      params: onlyLaterToday
-                        ? { id: deck.deck_id, today: "1" }
-                        : { id: deck.deck_id },
-                    });
-                  }}
-                  flex
-                />
-              </View>
-            )}
-
-            {canEdit && user && dueToday > 0 && dueToday > dueNowCount && dueNowCount > 0 && (
+            {canEdit && user && (
               <View style={styles.actionRowPrimary}>
                 <ActionBtn
                   icon="zap"
                   label={t("studyAllToday")}
-                  bg="#ecfdf5"
-                  textColor="#047857"
-                  border
-                  borderColor="rgba(4,120,87,0.35)"
+                  bg="#059669"
                   onPress={() =>
                     router.push({ pathname: "/deck-study", params: { id: deck.deck_id, today: "1" } })
                   }
