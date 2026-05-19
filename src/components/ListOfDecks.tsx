@@ -32,6 +32,8 @@ export interface ListOfDecksProps {
   /** When set with readOnly (e.g. public decks), shows ⋮ → report flow. */
   onReportDeck?: (deck: Deck) => void;
   listHeaderComponent?: React.ReactElement | null;
+  /** Shown in the deck grid area when `decks` is empty (e.g. no search matches). */
+  listEmptyComponent?: React.ReactElement | null;
   /** Set of deck_ids where user is a collaborator (not owner) */
   collaboratedDeckIds?: Set<string>;
 }
@@ -225,6 +227,7 @@ export function ListOfDecks({
   readOnly = false,
   onReportDeck,
   listHeaderComponent = null,
+  listEmptyComponent = null,
   collaboratedDeckIds,
 }: ListOfDecksProps) {
   const { t } = useLanguage();
@@ -274,8 +277,12 @@ export function ListOfDecks({
         key={numColumns}
         columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
         ListHeaderComponent={listHeaderComponent}
+        ListEmptyComponent={listEmptyComponent ?? undefined}
         style={styles.list}
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container,
+          data.length === 0 && listEmptyComponent ? styles.containerWithEmpty : null,
+        ]}
         showsVerticalScrollIndicator={Platform.OS === 'web'}
       />
     </View>
@@ -293,6 +300,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 100,
+  },
+  containerWithEmpty: {
+    flexGrow: 1,
+  },
+  emptyList: {
+    paddingVertical: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyListText: {
+    fontSize: 16,
+    textAlign: 'center',
   },
   list: {
     flex: 1,

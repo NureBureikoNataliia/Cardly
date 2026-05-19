@@ -14,9 +14,9 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { BookOpen } from 'lucide-react-native';
-import { LanguageDropdown } from '@/src/components/LanguageDropdown';
-import ThemeToggle from '@/src/components/ThemeToggle';
+import { AuthTopActions } from '@/src/components/AuthTopActions';
 import { useAppColors } from '@/src/contexts/ThemeContext';
+import { mapAuthErrorMessage } from '@/src/lib/mapAuthError';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -40,7 +40,7 @@ export default function LoginScreen() {
     const { error, isAdmin: adminFlag } = await signIn(email, password);
 
     if (error) {
-      setError(error.message);
+      setError(mapAuthErrorMessage(error, t));
       setLoading(false);
     } else {
       router.replace((adminFlag ? '/admin' : '/(tabs)') as never);
@@ -53,7 +53,7 @@ export default function LoginScreen() {
     const { error: oauthError, isAdmin: adminFlag } = await signInWithGoogle();
     setLoading(false);
     if (oauthError) {
-      setError(oauthError.message ?? String(oauthError));
+      setError(mapAuthErrorMessage(oauthError, t));
       return;
     }
     if (Platform.OS !== 'web') {
@@ -66,10 +66,7 @@ export default function LoginScreen() {
       style={[styles.container, { backgroundColor: C.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.topActions}>
-        <ThemeToggle />
-        <LanguageDropdown />
-      </View>
+      <AuthTopActions />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -151,15 +148,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
-  },
-  topActions: {
-    position: 'absolute',
-    top: 48,
-    right: 24,
-    zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
   },
   scrollContent: {
     flexGrow: 1,

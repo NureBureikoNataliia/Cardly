@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
@@ -568,7 +568,14 @@ export default function StatisticsScreen() {
     setRefreshing(false);
   }, [user, t, activityRange]);
 
-  useEffect(() => { setLoading(true); load(); }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      setLoading(true);
+      void load();
+    }, [user, load]),
+  );
+
   const onRefresh = () => { setRefreshing(true); load(); };
 
   if (loading && !refreshing) {

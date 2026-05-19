@@ -23,6 +23,8 @@ import { syncStudyDailyReminder } from '@/src/lib/studyReminderNotifications';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
 
+type SettingsField = 'avatar' | 'username' | 'email' | 'delete';
+
 function authProviderLabel(user: User | null, t: (key: string) => string): string {
   if (!user) return '—';
   const ids = user.identities ?? [];
@@ -32,6 +34,17 @@ function authProviderLabel(user: User | null, t: (key: string) => string): strin
   const meta = user.app_metadata?.provider;
   if (meta === 'email') return t('authProviderEmail');
   return typeof meta === 'string' ? meta : '—';
+}
+
+function getSavedProfileValues(user: User | null) {
+  const metaUsername = (user?.user_metadata?.username as string) ?? '';
+  const emailValue = user?.email ?? '';
+  const usernameFallback = emailValue.includes('@') ? emailValue.split('@')[0] : '';
+  return {
+    username: metaUsername || usernameFallback,
+    email: emailValue,
+    avatarUrl: (user?.user_metadata?.avatar_url as string) ?? '',
+  };
 }
 
 export default function SettingsScreen() {
@@ -48,8 +61,26 @@ export default function SettingsScreen() {
   const [username, setUsername] = useState((user?.user_metadata?.username as string) ?? '');
   const [avatarUrl, setAvatarUrl] = useState((user?.user_metadata?.avatar_url as string) ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<SettingsField, string>>>({});
+  const [fieldMessages, setFieldMessages] = useState<Partial<Record<SettingsField, string>>>({});
+
+  const setFieldError = (field: SettingsField, msg: string | null) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (msg) next[field] = msg;
+      else delete next[field];
+      return next;
+    });
+  };
+
+  const setFieldMessage = (field: SettingsField, msg: string | null) => {
+    setFieldMessages((prev) => {
+      const next = { ...prev };
+      if (msg) next[field] = msg;
+      else delete next[field];
+      return next;
+    });
+  };
 
   const [savingUsername, setSavingUsername] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
@@ -129,15 +160,25 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (!user) return;
-
-    const metaUsername = (user.user_metadata?.username as string) ?? '';
-    const emailValue = user.email ?? '';
-    const usernameFallback = emailValue.includes('@') ? emailValue.split('@')[0] : '';
-
-    setUsername(metaUsername || usernameFallback);
-    setEmail(emailValue);
-    setAvatarUrl((user.user_metadata?.avatar_url as string) ?? '');
+    const saved = getSavedProfileValues(user);
+    setUsername(saved.username);
+    setEmail(saved.email);
+    setAvatarUrl(saved.avatarUrl);
   }, [user]);
+
+  const resetFieldFromUser = (field: 'avatar' | 'username' | 'email') => {
+    const saved = getSavedProfileValues(user);
+    if (field === 'username') setUsername(saved.username);
+    if (field === 'email') setEmail(saved.email);
+    if (field === 'avatar') setAvatarUrl(saved.avatarUrl);
+  };
+
+  const handleCancelEdit = (field: 'avatar' | 'username' | 'email') => {
+    resetFieldFromUser(field);
+    setEditingField(null);
+    setFieldError(field, null);
+    setFieldMessage(field, null);
+  };
 
   const avatarInitial = useMemo(() => {
     const value = (username || user?.email || 'U').trim();
@@ -150,65 +191,73 @@ export default function SettingsScreen() {
 
   const handleSaveUsername = async () => {
     if (!username.trim()) {
-      setError(t('usernameRequired'));
-      setMessage(null);
+      setFieldError('username', t('usernameRequired'));
+      setFieldMessage('username', null);
       return;
     }
 
     setSavingUsername(true);
-    setError(null);
-    setMessage(null);
+    setFieldError('username', null);
+    setFieldMessage('username', null);
     const { error: updateError } = await updateMetadata({ username: username.trim() });
     setSavingUsername(false);
 
     if (updateError) {
-      setError(updateError.message);
+      setFieldError('username', updateError.message);
       return;
     }
-    setMessage(t('profileUpdated'));
+    setFieldMessage('username', t('profileUpdated'));
     setEditingField(null);
   };
 
   const handleSaveAvatar = async () => {
     setSavingAvatar(true);
-    setError(null);
-    setMessage(null);
+    setFieldError('avatar', null);
+    setFieldMessage('avatar', null);
     const { error: updateError } = await updateMetadata({ avatar_url: avatarUrl.trim() || null });
     setSavingAvatar(false);
 
     if (updateError) {
-      setError(updateError.message);
+      setFieldError('avatar', updateError.message);
       return;
     }
-    setMessage(t('avatarUpdated'));
+    setFieldMessage('avatar', t('avatarUpdated'));
     setEditingField(null);
   };
 
   const handleSaveEmail = async () => {
     if (!email.trim()) {
-      setError(t('emailRequired'));
-      setMessage(null);
+      setFieldError('email', t('emailRequired'));
+      setFieldMessage('email', null);
       return;
     }
 
     setSavingEmail(true);
-    setError(null);
-    setMessage(null);
+    setFieldError('email', null);
+    setFieldMessage('email', null);
     const { error: updateError } = await supabase.auth.updateUser({ email: email.trim() });
     setSavingEmail(false);
 
     if (updateError) {
-      setError(updateError.message);
+      setFieldError('email', updateError.message);
       return;
     }
-    setMessage(t('emailUpdateHint'));
+    setFieldMessage('email', t('emailUpdateHint'));
     setEditingField(null);
+  };
+
+  const renderFieldFeedback = (field: SettingsField) => {
+    const err = fieldErrors[field];
+    const msg = fieldMessages[field];
+    if (err) return <Text style={styles.fieldFeedbackError}>{err}</Text>;
+    if (msg) return <Text style={styles.fieldFeedbackSuccess}>{msg}</Text>;
+    return null;
   };
 
   const handleDeleteAccount = async () => {
     setDeletingAccount(true);
-    setError(null);
-    setMessage(null);
+    setFieldError('delete', null);
+    setFieldMessage('delete', null);
     let deleteError: { message?: string } | null = null;
     const firstTry = await supabase.rpc('delete_current_user');
     deleteError = firstTry.error;
@@ -225,9 +274,9 @@ export default function SettingsScreen() {
 
     if (deleteError) {
       if (deleteError.message?.includes('schema cache')) {
-        setError(t('deleteAccountFunctionMissing'));
+        setFieldError('delete', t('deleteAccountFunctionMissing'));
       } else {
-        setError(deleteError.message || t('failedToDeleteAccount'));
+        setFieldError('delete', deleteError.message || t('failedToDeleteAccount'));
       }
       return;
     }
@@ -278,7 +327,15 @@ export default function SettingsScreen() {
                 <Text style={styles.avatarFallbackText}>{avatarInitial}</Text>
               </RNView>
             )}
-            <TouchableOpacity style={[styles.avatarEditButton, { backgroundColor: C.surface, borderColor: C.border }]} onPress={() => setEditingField('avatar')}>
+            <TouchableOpacity
+              style={[styles.avatarEditButton, { backgroundColor: C.surface, borderColor: C.border }]}
+              onPress={() => {
+                resetFieldFromUser('avatar');
+                setEditingField('avatar');
+                setFieldError('avatar', null);
+                setFieldMessage('avatar', null);
+              }}
+            >
               <Feather name="edit-2" size={16} color={C.text} />
             </TouchableOpacity>
           </RNView>
@@ -290,12 +347,17 @@ export default function SettingsScreen() {
             <TextInput
               style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
               value={avatarUrl}
-              onChangeText={setAvatarUrl}
+              onChangeText={(text) => {
+                setAvatarUrl(text);
+                setFieldError('avatar', null);
+                setFieldMessage('avatar', null);
+              }}
               placeholder="https://..."
               placeholderTextColor={C.placeholder}
               autoCapitalize="none"
               editable={!savingAvatar && !deletingAccount}
             />
+            {renderFieldFeedback('avatar')}
             <RNView style={styles.inlineActions}>
               <TouchableOpacity
                 style={[styles.buttonSecondary, (savingAvatar || deletingAccount) && styles.buttonDisabled]}
@@ -306,7 +368,7 @@ export default function SettingsScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.buttonGhost}
-                onPress={() => setEditingField(null)}
+                onPress={() => handleCancelEdit('avatar')}
                 disabled={savingAvatar || deletingAccount}
               >
                 <Text style={styles.buttonGhostText}>{t('cancel')}</Text>
@@ -314,6 +376,7 @@ export default function SettingsScreen() {
             </RNView>
           </RNView>
         )}
+        {!editingField && renderFieldFeedback('avatar')}
 
           <RNView style={[styles.securitySection, { borderTopColor: C.border }]}>
           <Text style={styles.securityTitle}>{t('accountSecurity')}</Text>
@@ -325,7 +388,11 @@ export default function SettingsScreen() {
                 <TextInput
                   style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
                   value={username}
-                  onChangeText={setUsername}
+                  onChangeText={(text) => {
+                    setUsername(text);
+                    setFieldError('username', null);
+                    setFieldMessage('username', null);
+                  }}
                   placeholder={t('username')}
                   placeholderTextColor={C.placeholder}
                   autoCapitalize="none"
@@ -334,6 +401,7 @@ export default function SettingsScreen() {
               ) : (
                 <Text style={styles.infoValue}>{username || t('notSpecified')}</Text>
               )}
+              {renderFieldFeedback('username')}
             </RNView>
             {editingField === 'username' ? (
               <RNView style={styles.inlineActions}>
@@ -350,7 +418,7 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.buttonGhost}
-                  onPress={() => setEditingField(null)}
+                  onPress={() => handleCancelEdit('username')}
                   disabled={savingUsername || deletingAccount}
                 >
                   <Text style={styles.buttonGhostText}>{t('cancel')}</Text>
@@ -359,7 +427,12 @@ export default function SettingsScreen() {
             ) : (
               <TouchableOpacity
                 style={[styles.buttonOutline, { backgroundColor: C.surface, borderColor: C.border }]}
-                onPress={() => setEditingField('username')}
+                onPress={() => {
+                  resetFieldFromUser('username');
+                  setEditingField('username');
+                  setFieldError('username', null);
+                  setFieldMessage('username', null);
+                }}
                 disabled={deletingAccount}
               >
                 <Text style={[styles.buttonOutlineText, { color: C.text }]}>{t('change')}</Text>
@@ -374,7 +447,11 @@ export default function SettingsScreen() {
                 <TextInput
                   style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    setFieldError('email', null);
+                    setFieldMessage('email', null);
+                  }}
                   placeholder={t('email')}
                   placeholderTextColor={C.placeholder}
                   autoCapitalize="none"
@@ -384,6 +461,7 @@ export default function SettingsScreen() {
               ) : (
                 <Text style={styles.infoValue}>{email || t('notSpecified')}</Text>
               )}
+              {renderFieldFeedback('email')}
             </RNView>
             {editingField === 'email' ? (
               <RNView style={styles.inlineActions}>
@@ -400,7 +478,7 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.buttonGhost}
-                  onPress={() => setEditingField(null)}
+                  onPress={() => handleCancelEdit('email')}
                   disabled={savingEmail || deletingAccount}
                 >
                   <Text style={styles.buttonGhostText}>{t('cancel')}</Text>
@@ -409,7 +487,12 @@ export default function SettingsScreen() {
             ) : (
               <TouchableOpacity
                 style={[styles.buttonOutline, { backgroundColor: C.surface, borderColor: C.border }]}
-                onPress={() => setEditingField('email')}
+                onPress={() => {
+                  resetFieldFromUser('email');
+                  setEditingField('email');
+                  setFieldError('email', null);
+                  setFieldMessage('email', null);
+                }}
                 disabled={deletingAccount}
               >
                 <Text style={[styles.buttonOutlineText, { color: C.text }]}>{t('change')}</Text>
@@ -440,11 +523,9 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </RNView>
             <Text style={styles.deleteWarningText}>{t('deleteAccountWarning')}</Text>
+            {renderFieldFeedback('delete')}
           </RNView>
         </RNView>
-
-        {message ? <Text style={styles.successText}>{message}</Text> : null}
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
       ) : activeSection === 'notifications' ? (
         <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
@@ -854,6 +935,18 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#dc2626',
     fontSize: 14,
+  },
+  fieldFeedbackError: {
+    color: '#dc2626',
+    fontSize: 13,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  fieldFeedbackSuccess: {
+    color: '#166534',
+    fontSize: 13,
+    marginTop: 4,
+    lineHeight: 18,
   },
   notifNote: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,

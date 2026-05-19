@@ -190,15 +190,19 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Log the review for statistics (best-effort — don't fail the request if it errors)
+  // Log the review for statistics (ensure public.users row exists for legacy accounts).
   {
+    await supabase.rpc("ensure_public_user_profile");
     const ratingNumeric: Record<string, number> = { again: 0, hard: 1, good: 2, easy: 3 };
-    await supabase.from("review_logs").insert({
+    const { error: logError } = await supabase.from("review_logs").insert({
       user_id: user.id,
       card_id: cardId,
       deck_id: cardDeckId,
       rating: ratingNumeric[rating] ?? 2,
     });
+    if (logError) {
+      console.error("review_logs insert failed:", logError.message);
+    }
   }
 
   return new Response(

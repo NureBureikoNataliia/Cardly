@@ -240,6 +240,11 @@ export default function PublicDecksView({ forGuest }: PublicDecksViewProps) {
           onPressDeck={handlePressDeck}
           readOnly
           onReportDeck={showReport ? (d) => setComplaintDeck(d) : undefined}
+          listEmptyComponent={
+            <View style={styles.searchEmpty}>
+              <Text style={[styles.searchEmptyText, { color: C.textSub }]}>{t("noDecksFound")}</Text>
+            </View>
+          }
           listHeaderComponent={listHeader}
         />
       )}
@@ -339,6 +344,16 @@ const styles = StyleSheet.create({
     // @ts-ignore — web-only
     outlineWidth: 0,
     outlineStyle: "none",
+  },
+  searchEmpty: {
+    paddingVertical: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 120,
+  },
+  searchEmptyText: {
+    fontSize: 16,
+    textAlign: "center",
   },
   controlBlock: {
     gap: 6,

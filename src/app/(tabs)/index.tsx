@@ -281,6 +281,13 @@ export default function MainScreen() {
           onPressDeck={handlePressDeck}
           onEditDeck={handleEditDeck}
           onDeleteDeck={handleDeleteDeck}
+          listEmptyComponent={
+            <RNView style={styles.searchEmpty}>
+              <Text style={[styles.searchEmptyText, { color: colorScheme === 'dark' ? '#9ca3af' : '#6b7280' }]}>
+                {t('noDecksFound')}
+              </Text>
+            </RNView>
+          }
           listHeaderComponent={
             <>
               <RNView style={styles.sectionHeader}>
@@ -517,6 +524,16 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: '#4255ff',
     fontWeight: '600',
+  },
+  searchEmpty: {
+    paddingVertical: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 120,
+  },
+  searchEmptyText: {
+    fontSize: 16,
+    textAlign: 'center',
   },
   emptyState: {
     flex: 1,

@@ -96,6 +96,33 @@ async function enrichHttpInvokeError(error: unknown): Promise<Error> {
   return new Error(`HTTP ${status} from Edge Function\n${detail || "(empty body)"}${hint}`);
 }
 
+const RATING_NUMERIC: Record<SubmitCardReviewRating, number> = {
+  again: 0,
+  hard: 1,
+  good: 2,
+  easy: 3,
+};
+
+/** Client-side review log when Edge Function logging fails (same RLS as user session). */
+async function logReviewFromClient(
+  cardId: string,
+  deckId: string,
+  rating: SubmitCardReviewRating,
+): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase.rpc("ensure_public_user_profile");
+  await supabase.from("review_logs").insert({
+    user_id: user.id,
+    card_id: cardId,
+    deck_id: deckId,
+    rating: RATING_NUMERIC[rating],
+  });
+}
+
 /** Invokes the `submit-card-review` Edge Function (server-side SRS and review_logs). */
 export async function submitCardReviewInvoke(
   cardId: string,
@@ -109,6 +136,32 @@ export async function submitCardReviewInvoke(
     return { ...result, error: await enrichHttpInvokeError(result.error) };
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    let resolvedDeckId = deckId;
+    if (!resolvedDeckId) {
+      const { data: cardRow } = await supabase
+        .from("cards")
+        .select("deck_id")
+        .eq("card_id", cardId)
+        .maybeSingle();
+      resolvedDeckId = cardRow?.deck_id as string | undefined;
+    }
+    if (resolvedDeckId) {
+      const { data: existing } = await supabase
+        .from("review_logs")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("card_id", cardId)
+        .gte("reviewed_at", new Date(Date.now() - 60_000).toISOString())
+        .limit(1);
+      if (!existing?.length) {
+        await logReviewFromClient(cardId, resolvedDeckId, rating);
+      }
+    }
+  }
 
   return result;
 }

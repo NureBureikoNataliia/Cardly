@@ -9,9 +9,16 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TextStyle,
   TouchableOpacity,
   View,
 } from 'react-native';
+
+/** Web: hide browser default focus outline on TextInput. */
+const webTextInputNoOutline: TextStyle | undefined =
+  Platform.OS === 'web'
+    ? ({ outlineWidth: 0, outlineStyle: 'none' } as unknown as TextStyle)
+    : undefined;
 
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
@@ -146,7 +153,7 @@ export default function HelpScreen() {
             { backgroundColor: C.inputBg, borderColor: C.inputBorder },
           ]}>
             <TextInput
-              style={[styles.input, { color: C.text }]}
+              style={[styles.input, webTextInputNoOutline, { color: C.text }]}
               placeholder={t('helpContactMessagePlaceholder')}
               placeholderTextColor={C.placeholder}
               value={message}
