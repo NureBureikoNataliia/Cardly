@@ -6,18 +6,29 @@ import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import type { MediaKind } from "@/src/lib/cardModel";
 
+type Layout = "default" | "list";
+
 type Props = {
   url: string;
   kind: MediaKind;
+  /** `list` — height follows media/content (deck card list). */
+  layout?: Layout;
 };
 
-export function CardSideMedia({ url, kind }: Props) {
+const LIST_IMAGE_MAX_HEIGHT = 280;
+const LIST_IMAGE_MIN_HEIGHT = 56;
+const LIST_VIDEO_HEIGHT = 160;
+
+export function CardSideMedia({ url, kind, layout = "default" }: Props) {
   if (kind === "image") {
+    if (layout === "list") {
+      return <ListAdaptiveImage url={url} />;
+    }
     return <Image source={{ uri: url }} style={styles.media} resizeMode="contain" />;
   }
   if (kind === "video") {
     return (
-      <View style={styles.videoBox}>
+      <View style={[styles.videoBox, layout === "list" && styles.videoBoxList]}>
         <Video
           source={{ uri: url }}
           style={styles.video}
@@ -27,10 +38,49 @@ export function CardSideMedia({ url, kind }: Props) {
       </View>
     );
   }
-  return <CardAudioButton uri={url} />;
+  return <CardAudioButton uri={url} compact={layout === "list"} />;
 }
 
-function CardAudioButton({ uri }: { uri: string }) {
+function ListAdaptiveImage({ url }: { url: string }) {
+  const [ratio, setRatio] = useState<number | null>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    Image.getSize(
+      url,
+      (w, h) => {
+        if (!cancelled && w > 0) setRatio(h / w);
+      },
+      () => {
+        if (!cancelled) setRatio(3 / 4);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  const height =
+    width > 0 && ratio != null
+      ? Math.min(LIST_IMAGE_MAX_HEIGHT, Math.max(LIST_IMAGE_MIN_HEIGHT, width * ratio))
+      : LIST_IMAGE_MIN_HEIGHT;
+
+  return (
+    <View
+      style={styles.listImageWrap}
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+    >
+      <Image
+        source={{ uri: url }}
+        style={[styles.listImage, { height }]}
+        resizeMode="contain"
+      />
+    </View>
+  );
+}
+
+function CardAudioButton({ uri, compact }: { uri: string; compact?: boolean }) {
   const { t } = useLanguage();
   const soundRef = useRef<Audio.Sound | null>(null);
   const [label, setLabel] = useState<"idle" | "playing" | "error">("idle");
@@ -76,7 +126,11 @@ function CardAudioButton({ uri }: { uri: string }) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.audioBox, pressed && styles.audioBoxPressed]}
+      style={({ pressed }) => [
+        styles.audioBox,
+        compact && styles.audioBoxCompact,
+        pressed && styles.audioBoxPressed,
+      ]}
     >
       <Feather name="volume-2" size={28} color="#4255ff" />
       <Text style={styles.audioHint}>
@@ -130,5 +184,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#4255ff",
+  },
+  listImageWrap: {
+    width: "100%",
+    marginBottom: 8,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#f3f4f6",
+  },
+  listImage: {
+    width: "100%",
+    backgroundColor: "#f3f4f6",
+  },
+  videoBoxList: {
+    height: LIST_VIDEO_HEIGHT,
+    marginBottom: 8,
+  },
+  audioBoxCompact: {
+    minHeight: 72,
+    marginBottom: 8,
+    paddingVertical: 12,
   },
 });

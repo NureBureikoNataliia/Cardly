@@ -4,19 +4,24 @@ import { supabase } from "@/src/lib/supabase";
 export type { CardMedia, CardMediaSide, CardMediaType };
 
 export const CARD_MEDIA_TYPES: CardMediaType[] = ["image", "audio", "video"];
-export const CARD_MEDIA_POSITIONS: Record<CardMediaType, number> = {
-  image: 1,
-  audio: 2,
-  video: 3,
+
+const DEFAULT_MEDIA_ORDER: CardMediaType[] = ["image", "audio", "video"];
+
+export type CardMediaSideForm = {
+  /** Display order on this side (study, list, PDF). */
+  order: CardMediaType[];
+  urls: Record<CardMediaType, string>;
 };
 
-export type CardMediaForm = Record<CardMediaSide, Record<CardMediaType, string>>;
+export type CardMediaForm = Record<CardMediaSide, CardMediaSideForm>;
 
 export function emptyCardMediaForm(): CardMediaForm {
-  return {
-    front: { image: "", audio: "", video: "" },
-    back: { image: "", audio: "", video: "" },
-  };
+  const emptyUrls: Record<CardMediaType, string> = { image: "", audio: "", video: "" };
+  const side = (): CardMediaSideForm => ({
+    order: [...DEFAULT_MEDIA_ORDER],
+    urls: { ...emptyUrls },
+  });
+  return { front: side(), back: side() };
 }
 
 export function normalizeCardMediaRows(rows: unknown): CardMedia[] {
@@ -44,44 +49,92 @@ export function getCardMediaForSide(
   return normalizeCardMediaRows(card.card_media).filter((item) => item.side === side);
 }
 
-export function cardMediaRowsToForm(rows: unknown): CardMediaForm {
-  const form = emptyCardMediaForm();
-  for (const item of normalizeCardMediaRows(rows)) {
-    form[item.side][item.media_type] = item.url;
+function sideFormFromRows(rows: CardMedia[], side: CardMediaSide): CardMediaSideForm {
+  const items = rows.filter((r) => r.side === side).sort((a, b) => a.position - b.position);
+  const urls: Record<CardMediaType, string> = { image: "", audio: "", video: "" };
+  const orderFromDb = items.map((i) => i.media_type);
+  for (const item of items) {
+    urls[item.media_type] = item.url;
   }
-  return form;
+  const order = [...orderFromDb];
+  for (const type of CARD_MEDIA_TYPES) {
+    if (!order.includes(type)) order.push(type);
+  }
+  return { order, urls };
+}
+
+export function cardMediaRowsToForm(rows: unknown): CardMediaForm {
+  const list = normalizeCardMediaRows(rows);
+  return {
+    front: sideFormFromRows(list, "front"),
+    back: sideFormFromRows(list, "back"),
+  };
+}
+
+function sideFormsEqual(a: CardMediaSideForm, b: CardMediaSideForm): boolean {
+  if (a.order.join() !== b.order.join()) return false;
+  return CARD_MEDIA_TYPES.every((type) => a.urls[type] === b.urls[type]);
 }
 
 export function hasMediaFormChanges(a: CardMediaForm, b: CardMediaForm): boolean {
-  return CARD_MEDIA_TYPES.some(
-    (type) => a.front[type] !== b.front[type] || a.back[type] !== b.back[type],
-  );
+  return !sideFormsEqual(a.front, b.front) || !sideFormsEqual(a.back, b.back);
 }
 
 export function mediaFormToInsertRows(
   cardId: string,
   form: CardMediaForm,
 ): Array<Pick<CardMedia, "card_id" | "side" | "media_type" | "url" | "position">> {
-  return (["front", "back"] as CardMediaSide[]).flatMap((side) =>
-    CARD_MEDIA_TYPES.flatMap((mediaType) => {
-      const url = form[side][mediaType].trim();
+  return (["front", "back"] as CardMediaSide[]).flatMap((side) => {
+    const { order, urls } = form[side];
+    let position = 1;
+    return order.flatMap((mediaType) => {
+      const url = urls[mediaType].trim();
       if (!url) return [];
-      return [{
+      const row = {
         card_id: cardId,
         side,
         media_type: mediaType,
         url,
-        position: CARD_MEDIA_POSITIONS[mediaType],
-      }];
-    }),
-  );
+        position,
+      };
+      position += 1;
+      return [row];
+    });
+  });
 }
 
 export function swapCardMediaFormSides(form: CardMediaForm): CardMediaForm {
   return {
-    front: { ...form.back },
-    back: { ...form.front },
+    front: { order: [...form.back.order], urls: { ...form.back.urls } },
+    back: { order: [...form.front.order], urls: { ...form.front.urls } },
   };
+}
+
+export function moveMediaInForm(
+  form: CardMediaForm,
+  side: CardMediaSide,
+  mediaType: CardMediaType,
+  direction: -1 | 1,
+): CardMediaForm {
+  const order = [...form[side].order];
+  const idx = order.indexOf(mediaType);
+  const swapIdx = idx + direction;
+  if (idx < 0 || swapIdx < 0 || swapIdx >= order.length) return form;
+  [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
+  return {
+    ...form,
+    [side]: { ...form[side], order },
+  };
+}
+
+/** Preview / study: filled media in display order. */
+export function orderedMediaFromForm(
+  form: CardMediaForm,
+  side: CardMediaSide,
+): { kind: CardMediaType; url: string }[] {
+  return form[side].order
+    .map((kind) => ({ kind, url: form[side].urls[kind].trim() }))
+    .filter((item) => item.url.length > 0);
 }
 
 export async function replaceCardMedia(cardId: string, form: CardMediaForm): Promise<void> {
@@ -94,4 +147,3 @@ export async function replaceCardMedia(cardId: string, form: CardMediaForm): Pro
   const { error: insertError } = await supabase.from("card_media").insert(rows);
   if (insertError) throw insertError;
 }
-

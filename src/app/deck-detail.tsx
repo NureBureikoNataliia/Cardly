@@ -38,6 +38,12 @@ import {
   parseCardExtra,
 } from "@/src/lib/cardModel";
 import { getCardMediaForSide, normalizeCardMediaRows } from "@/src/lib/cardMedia";
+import {
+  type CardListFilter,
+  type CardListSort,
+  queryDeckCards,
+} from "@/src/lib/deckCardListQuery";
+import { estimateCardTileHeight, splitIntoBalancedColumns } from "@/src/lib/balancedColumns";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 
 const scrollPositions: Record<string, number> = {};
@@ -105,6 +111,11 @@ export default function DeckDetailScreen() {
   const [isInviting, setIsInviting] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [collaboratorToRemove, setCollaboratorToRemove] = useState<Collaborator | null>(null);
+
+  const [cardSearch, setCardSearch] = useState("");
+  const [cardSearchFocused, setCardSearchFocused] = useState(false);
+  const [cardFilter, setCardFilter] = useState<CardListFilter>("all");
+  const [cardSort, setCardSort] = useState<CardListSort>("newest");
 
   // ── Members map: userId → displayName (for card author labels) ──
   const [membersMap, setMembersMap] = useState<Record<string, string>>({});
@@ -438,8 +449,34 @@ export default function DeckDetailScreen() {
 
   const isCopiedDeck = Boolean(deck?.original_deck_id);
 
-  /* ── responsive grid: 2 cols on wide, 1 on narrow ── */
+  /* ── responsive columns: 2 on wide, 1 on narrow ── */
   const numCols = Platform.OS === "web" && windowWidth >= 860 ? 2 : 1;
+
+  const displayedCards = useMemo(
+    () =>
+      queryDeckCards(cards, {
+        search: cardSearch,
+        filter: cardFilter,
+        sort: cardSort,
+        progressMap,
+        srsDayStartHour: studySettings.srsDayStartHour,
+      }),
+    [cards, cardSearch, cardFilter, cardSort, progressMap, studySettings.srsDayStartHour],
+  );
+
+  const cardColumns = useMemo(
+    () => splitIntoBalancedColumns(displayedCards, numCols, estimateCardTileHeight),
+    [displayedCards, numCols],
+  );
+
+  const hasActiveCardQuery =
+    cardSearch.trim().length > 0 || cardFilter !== "all" || cardSort !== "newest";
+
+  const clearCardQuery = useCallback(() => {
+    setCardSearch("");
+    setCardFilter("all");
+    setCardSort("newest");
+  }, []);
 
   /** Secondary deck actions (export / add / AI / rate): wrap 2-per-row below ~520dp to avoid horizontal clip. */
   const compactSecondaryActions = windowWidth < 520;
@@ -915,8 +952,29 @@ export default function DeckDetailScreen() {
           <View style={styles.cardsSection}>
             <View style={styles.cardsSectionHeader}>
               <Text style={[styles.cardsSectionTitle, { color: C.text }]}>{t("cardsSectionTitle")}</Text>
-              <Text style={styles.cardsSectionCount}>{totalCards}</Text>
+              <Text style={[styles.cardsSectionCount, { color: C.tint, backgroundColor: C.isDark ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.1)" }]}>
+                {hasActiveCardQuery || displayedCards.length !== totalCards
+                  ? t("cardsShownOf")
+                      .replace("{shown}", String(displayedCards.length))
+                      .replace("{total}", String(totalCards))
+                  : String(totalCards)}
+              </Text>
             </View>
+
+            {cards.length > 0 ? (
+              <CardListToolbar
+                search={cardSearch}
+                onSearchChange={setCardSearch}
+                searchFocused={cardSearchFocused}
+                onSearchFocusChange={setCardSearchFocused}
+                filter={cardFilter}
+                onFilterChange={setCardFilter}
+                sort={cardSort}
+                onSortChange={setCardSort}
+                showStudyFilters={Boolean(user)}
+                t={t}
+              />
+            ) : null}
 
             {cards.length === 0 ? (
               <View style={styles.emptyCards}>
@@ -934,26 +992,47 @@ export default function DeckDetailScreen() {
                   </TouchableOpacity>
                 )}
               </View>
+            ) : displayedCards.length === 0 ? (
+              <View style={styles.cardsNoResults}>
+                <Feather name="search" size={28} color={C.textMuted} />
+                <Text style={[styles.cardsNoResultsTxt, { color: C.textSub }]}>
+                  {t("cardsNoResults")}
+                </Text>
+                <Pressable
+                  style={[styles.cardsClearBtn, { borderColor: C.tint, backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff" }]}
+                  onPress={clearCardQuery}
+                >
+                  <Text style={[styles.cardsClearBtnTxt, { color: C.tint }]}>{t("cardsClearFilters")}</Text>
+                </Pressable>
+              </View>
             ) : (
-              <View style={[styles.cardsGrid, numCols === 2 && styles.cardsGridTwo]}>
-                {cards.map((card, index) => (
-                  <CardTile
-                    key={card.card_id}
-                    card={card}
-                    index={index}
-                    isOwner={!!canEdit}
-                    canReport={isPublicFromOther && !!user}
-                    numCols={numCols}
-                    createdByName={
-                      card.created_by
-                        ? (membersMap[card.created_by] ?? null)
-                        : (deck ? (membersMap[deck.creator_id] ?? null) : null)
-                    }
-                    onEdit={() => router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`)}
-                    onDelete={() => handleDeleteCard(card)}
-                    onReport={() => setReportCard(card)}
-                    t={t}
-                  />
+              <View style={numCols === 2 ? styles.cardsTwoColumns : styles.cardsGrid}>
+                {cardColumns.map((column, colIdx) => (
+                  <View
+                    key={colIdx}
+                    style={numCols === 2 ? styles.cardsColumn : styles.cardsGridSingleCol}
+                  >
+                    {column.map(({ item: card, index }) => (
+                      <CardTile
+                        key={card.card_id}
+                        card={card}
+                        index={index}
+                        isOwner={!!canEdit}
+                        canReport={isPublicFromOther && !!user}
+                        createdByName={
+                          card.created_by
+                            ? (membersMap[card.created_by] ?? null)
+                            : (deck ? (membersMap[deck.creator_id] ?? null) : null)
+                        }
+                        onEdit={() =>
+                          router.push(`/add-card?deckId=${deckId}&cardId=${card.card_id}`)
+                        }
+                        onDelete={() => handleDeleteCard(card)}
+                        onReport={() => setReportCard(card)}
+                        t={t}
+                      />
+                    ))}
+                  </View>
                 ))}
               </View>
             )}
@@ -1134,13 +1213,154 @@ function ActionBtn({
   );
 }
 
+/* ─── Card list search / filter / sort ─── */
+function CardListToolbar({
+  search,
+  onSearchChange,
+  searchFocused,
+  onSearchFocusChange,
+  filter,
+  onFilterChange,
+  sort,
+  onSortChange,
+  showStudyFilters,
+  t,
+}: {
+  search: string;
+  onSearchChange: (v: string) => void;
+  searchFocused: boolean;
+  onSearchFocusChange: (v: boolean) => void;
+  filter: CardListFilter;
+  onFilterChange: (v: CardListFilter) => void;
+  sort: CardListSort;
+  onSortChange: (v: CardListSort) => void;
+  showStudyFilters: boolean;
+  t: (k: string) => string;
+}) {
+  const C = useAppColors();
+
+  const filterOptions: { key: CardListFilter; label: string }[] = [
+    { key: "all", label: t("cardsFilterAll") },
+    { key: "basic", label: t("cardTypeBasic") },
+    { key: "cloze", label: t("cardTypeCloze") },
+    { key: "reversible", label: t("cardsFilterReversible") },
+    { key: "withMedia", label: t("cardsFilterWithMedia") },
+    { key: "withNotes", label: t("cardsFilterWithNotes") },
+    ...(showStudyFilters
+      ? ([
+          { key: "dueToday" as const, label: t("cardsFilterDueToday") },
+          { key: "new" as const, label: t("cardsFilterNew") },
+          { key: "learned" as const, label: t("cardsFilterLearned") },
+        ] as const)
+      : []),
+  ];
+
+  const sortOptions: { key: CardListSort; label: string }[] = [
+    { key: "newest", label: t("newest") },
+    { key: "oldest", label: t("oldest") },
+    { key: "frontAsc", label: t("cardsSortFrontAZ") },
+    { key: "frontDesc", label: t("cardsSortFrontZA") },
+    { key: "updatedDesc", label: t("cardsSortUpdated") },
+  ];
+
+  return (
+    <View style={styles.cardListControls}>
+      <View
+        style={[
+          styles.cardListSearch,
+          { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+          searchFocused &&
+            (C.isDark
+              ? { borderColor: "#6366f1", backgroundColor: C.surface }
+              : styles.cardListSearchFocused),
+        ]}
+      >
+        <Feather name="search" size={16} color={searchFocused ? C.tint : C.textMuted} />
+        <TextInput
+          style={[styles.cardListSearchInput, webTextInputNoOutline, { color: C.text }]}
+          value={search}
+          onChangeText={onSearchChange}
+          placeholder={t("searchCards")}
+          placeholderTextColor={C.placeholder}
+          onFocus={() => onSearchFocusChange(true)}
+          onBlur={() => onSearchFocusChange(false)}
+        />
+        {search.length > 0 ? (
+          <Pressable onPress={() => onSearchChange("")} hitSlop={8}>
+            <Feather name="x-circle" size={16} color={C.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
+
+      <View style={styles.cardListControlBlock}>
+        <Text style={[styles.cardListChipsLabel, { color: C.textSub }]}>{t("filterBy")}</Text>
+        <View style={styles.cardListChipsRow}>
+          {filterOptions.map(({ key, label }) => (
+            <Pressable
+              key={key}
+              style={[
+                styles.cardListChip,
+                { backgroundColor: C.surface, borderColor: C.border },
+                filter === key && {
+                  borderColor: C.tint,
+                  backgroundColor: C.isDark ? "rgba(165,180,252,0.15)" : "rgba(66,85,255,0.12)",
+                },
+              ]}
+              onPress={() => onFilterChange(key)}
+            >
+              <Text
+                style={[
+                  styles.cardListChipTxt,
+                  { color: C.textSub },
+                  filter === key && { color: C.tint, fontWeight: "600" },
+                ]}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.cardListControlBlock}>
+        <Text style={[styles.cardListChipsLabel, { color: C.textSub }]}>{t("sortBy")}</Text>
+        <View style={styles.cardListChipsRow}>
+          {sortOptions.map(({ key, label }) => (
+            <Pressable
+              key={key}
+              style={[
+                styles.cardListChip,
+                { backgroundColor: C.surface, borderColor: C.border },
+                sort === key && {
+                  borderColor: C.tint,
+                  backgroundColor: C.isDark ? "rgba(165,180,252,0.15)" : "rgba(66,85,255,0.12)",
+                },
+              ]}
+              onPress={() => onSortChange(key)}
+            >
+              <Text
+                style={[
+                  styles.cardListChipTxt,
+                  { color: C.textSub },
+                  sort === key && { color: C.tint, fontWeight: "600" },
+                ]}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 /* ─── CardTile ─── */
-function CardTile({ card, index, isOwner, canReport, numCols, createdByName, onEdit, onDelete, onReport, t }: {
+function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDelete, onReport, t }: {
   card: Card;
   index: number;
   isOwner: boolean;
   canReport?: boolean;
-  numCols: number;
   createdByName: string | null;
   onEdit: () => void;
   onDelete: () => void;
@@ -1160,9 +1380,14 @@ function CardTile({ card, index, isOwner, canReport, numCols, createdByName, onE
     ctype === "cloze" && clozeParts && isClozeGapComplete(clozeParts)
       ? `${clozeParts.before.trimEnd()} ${clozeParts.gapFront.trim()} ${clozeParts.after.trimStart()}`.trim()
       : null;
+  const backDisplay =
+    ctype === "cloze" && clozeParts?.hidden?.trim()
+      ? clozeParts.hidden.trim()
+      : card.back_text?.trim() ?? "";
+  const showBack = backDisplay.length > 0 || backMedia.length > 0;
 
   return (
-    <View style={[styles.cardTile, numCols === 2 && styles.cardTileHalf, { backgroundColor: C.surface }]}>
+    <View style={[styles.cardTile, { backgroundColor: C.surface }]}>
       {/* Number badge + author */}
       <View style={styles.cardTileHeader}>
         <View style={[styles.cardNumBadge, { backgroundColor: `${accent}18` }]}>
@@ -1191,33 +1416,46 @@ function CardTile({ card, index, isOwner, canReport, numCols, createdByName, onE
       </View>
 
       {frontMedia.map((item) => (
-        <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
+        <CardSideMedia
+          key={item.media_id}
+          url={item.url}
+          kind={item.media_type}
+          layout="list"
+        />
       ))}
-      <Text style={[styles.cardFront, { color: C.text }]} numberOfLines={4}>
+      <Text style={[styles.cardFront, { color: C.text }]}>
         {clozePreview ?? card.front_text}
       </Text>
 
-      {/* Divider with arrow */}
-      <View style={styles.cardDividerRow}>
-        <View style={[styles.cardDividerLine, { backgroundColor: `${accent}30` }]} />
-        <View style={[styles.cardDividerArrow, { backgroundColor: `${accent}18` }]}>
-          <Feather name="arrow-down" size={11} color={accent} />
-        </View>
-        <View style={[styles.cardDividerLine, { backgroundColor: `${accent}30` }]} />
-      </View>
+      {showBack ? (
+        <>
+          <View style={styles.cardDividerRow}>
+            <View style={[styles.cardDividerLine, { backgroundColor: `${accent}30` }]} />
+            <View style={[styles.cardDividerArrow, { backgroundColor: `${accent}18` }]}>
+              <Feather name="arrow-down" size={11} color={accent} />
+            </View>
+            <View style={[styles.cardDividerLine, { backgroundColor: `${accent}30` }]} />
+          </View>
 
-      {backMedia.map((item) => (
-        <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
-      ))}
-      <Text style={[styles.cardBack, { color: C.textSub }]} numberOfLines={4}>
-        {card.back_text}
-      </Text>
+          {backMedia.map((item) => (
+            <CardSideMedia
+              key={item.media_id}
+              url={item.url}
+              kind={item.media_type}
+              layout="list"
+            />
+          ))}
+          {backDisplay.length > 0 ? (
+            <Text style={[styles.cardBack, { color: C.textSub }]}>{backDisplay}</Text>
+          ) : null}
+        </>
+      ) : null}
 
       {/* Notes */}
       {card.notes ? (
         <View style={styles.cardNotesRow}>
           <Feather name="file-text" size={12} color={C.textMuted} />
-          <Text style={[styles.cardNotes, { color: C.textMuted }]} numberOfLines={2}>{card.notes}</Text>
+          <Text style={[styles.cardNotes, { color: C.textMuted }]}>{card.notes}</Text>
         </View>
       ) : null}
 
@@ -1374,9 +1612,54 @@ const styles = StyleSheet.create({
   },
   cardsSectionTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
   cardsSectionCount: {
-    fontSize: 13, color: "#6366f1", fontWeight: "600",
-    backgroundColor: "rgba(99,102,241,0.1)", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999,
+    fontSize: 13,
+    fontWeight: "600",
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
   },
+
+  cardListControls: { gap: 10, marginBottom: 14 },
+  cardListSearch: {
+    height: 46,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  cardListSearchFocused: {
+    borderColor: "#1a1a1a",
+    backgroundColor: "#fff",
+    shadowColor: "#1a1a1a",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardListSearchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
+  cardListControlBlock: { gap: 6 },
+  cardListChipsLabel: { fontSize: 12, fontWeight: "600" },
+  cardListChipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  cardListChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1.5,
+  },
+  cardListChipTxt: { fontSize: 13, fontWeight: "500" },
+
+  cardsNoResults: { alignItems: "center", paddingVertical: 36, gap: 12 },
+  cardsNoResultsTxt: { fontSize: 15, textAlign: "center", paddingHorizontal: 24 },
+  cardsClearBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    marginTop: 4,
+  },
+  cardsClearBtnTxt: { fontSize: 14, fontWeight: "600" },
 
   /* ── Empty state ── */
   emptyCards: { alignItems: "center", paddingVertical: 40, gap: 12 },
@@ -1391,18 +1674,31 @@ const styles = StyleSheet.create({
   },
   emptyCardsBtnTxt: { color: "#fff", fontWeight: "600" },
 
-  /* ── Cards Grid ── */
+  /* ── Cards list (single column or balanced two columns) ── */
   cardsGrid: { gap: 10 },
-  cardsGridTwo: { flexDirection: "row", flexWrap: "wrap" },
+  cardsGridSingleCol: { gap: 10 },
+  cardsTwoColumns: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  cardsColumn: {
+    flex: 1,
+    minWidth: 0,
+    gap: 10,
+  },
 
   /* ── Card Tile ── */
   cardTile: {
     backgroundColor: "#fff",
-    borderRadius: 16, padding: 16, marginBottom: 10,
-    shadowColor: "#4255ff", shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 10, elevation: 2,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: "#4255ff",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  cardTileHalf: { flex: 1, minWidth: "47%", marginHorizontal: 4 },
 
   cardTileHeader: {
     flexDirection: "row", alignItems: "center",

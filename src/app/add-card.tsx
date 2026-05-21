@@ -13,12 +13,14 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from "react-native";
 import type { TextStyle } from "react-native";
 
 import { Deck } from "@/assets/data/decks";
 import ConfirmModal from "@/src/components/ConfirmModal";
+import { CardMediaFormFields } from "@/src/components/CardMediaFormFields";
 import { CardSideMedia } from "@/src/components/CardSideMedia";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
@@ -37,6 +39,8 @@ import {
   cardMediaRowsToForm,
   emptyCardMediaForm,
   hasMediaFormChanges,
+  moveMediaInForm,
+  orderedMediaFromForm,
   replaceCardMedia,
   swapCardMediaFormSides,
 } from "@/src/lib/cardMedia";
@@ -99,6 +103,111 @@ function AddCardStudyClozeBack({ parts }: { parts: ClozeParts }) {
   );
 }
 
+const clozeLivePreviewStyles = StyleSheet.create({
+  wrap: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    gap: 10,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 0,
+  },
+  col: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  colLeft: { paddingRight: 12 },
+  colRight: { paddingLeft: 12 },
+  divider: { width: 1, alignSelf: "stretch", flexShrink: 0 },
+  sideLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  sentence: { fontSize: 15, lineHeight: 22 },
+  gap: {
+    color: "#9ca3af",
+    letterSpacing: 2,
+    textDecorationLine: "underline",
+  },
+  gapHint: { color: "#4b5563", fontStyle: "italic", fontWeight: "500" },
+  answer: { fontWeight: "800", color: "#059669" },
+  placeholder: { fontSize: 14, lineHeight: 20, fontStyle: "italic" },
+});
+
+function ClozeLivePreview({
+  parts,
+  sideBySide,
+  textColor,
+  subColor,
+  borderColor,
+  bgColor,
+  t,
+}: {
+  parts: ClozeParts;
+  sideBySide: boolean;
+  textColor: string;
+  subColor: string;
+  borderColor: string;
+  bgColor: string;
+  t: (key: string) => string;
+}) {
+  const ready = isClozeGapComplete(parts);
+  const gap =
+    parts.gapFront.trim().length > 0 ? (
+      <Text style={clozeLivePreviewStyles.gapHint}> {parts.gapFront.trim()} </Text>
+    ) : (
+      <Text style={clozeLivePreviewStyles.gap}> ▯▯▯ </Text>
+    );
+
+  const frontSentence = ready ? (
+    <Text style={[clozeLivePreviewStyles.sentence, { color: textColor }]}>
+      {parts.before}
+      {gap}
+      {parts.after}
+    </Text>
+  ) : (
+    <Text style={[clozeLivePreviewStyles.placeholder, { color: subColor }]}>
+      {t("addCardPreviewIncomplete")}
+    </Text>
+  );
+
+  const backSentence = ready ? (
+    <Text style={[clozeLivePreviewStyles.sentence, { color: textColor }]}>
+      {parts.before}
+      <Text style={clozeLivePreviewStyles.answer}>{parts.hidden}</Text>
+      {parts.after}
+    </Text>
+  ) : (
+    <Text style={[clozeLivePreviewStyles.placeholder, { color: subColor }]}>
+      {t("addCardPreviewIncomplete")}
+    </Text>
+  );
+
+  return (
+    <View style={[clozeLivePreviewStyles.wrap, { backgroundColor: bgColor, borderColor }]}>
+      <View style={sideBySide ? clozeLivePreviewStyles.row : { gap: 12 }}>
+        <View style={[clozeLivePreviewStyles.col, sideBySide && clozeLivePreviewStyles.colLeft]}>
+          <Text style={[clozeLivePreviewStyles.sideLabel, { color: subColor }]}>{t("front")}</Text>
+          {frontSentence}
+        </View>
+        {sideBySide ? (
+          <View style={[clozeLivePreviewStyles.divider, { backgroundColor: borderColor }]} />
+        ) : null}
+        <View style={[clozeLivePreviewStyles.col, sideBySide && clozeLivePreviewStyles.colRight]}>
+          <Text style={[clozeLivePreviewStyles.sideLabel, { color: subColor }]}>{t("back")}</Text>
+          {backSentence}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function AddCardScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -116,6 +225,8 @@ export default function AddCardScreen() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const C = useAppColors();
+  const { width: windowWidth } = useWindowDimensions();
+  const formSideBySide = windowWidth >= 640;
 
   const isEdit = Boolean(cardId);
   useLayoutEffect(() => {
@@ -172,9 +283,17 @@ export default function AddCardScreen() {
       ...current,
       [side]: {
         ...current[side],
-        [mediaType]: value,
+        urls: { ...current[side].urls, [mediaType]: value },
       },
     }));
+  };
+
+  const moveMediaOrder = (
+    side: "front" | "back",
+    mediaType: "image" | "audio" | "video",
+    direction: -1 | 1,
+  ) => {
+    setMediaForm((current) => moveMediaInForm(current, side, mediaType, direction));
   };
 
   const [aiBackBusy, setAiBackBusy] = useState(false);
@@ -500,12 +619,8 @@ export default function AddCardScreen() {
     hidden: clozeHidden.trim(),
     after: clozeAfter,
   };
-  const frontPreviewMedia = (["image", "audio", "video"] as const)
-    .map((kind) => ({ kind, url: mediaForm.front[kind].trim() }))
-    .filter((item) => item.url.length > 0);
-  const backPreviewMedia = (["image", "audio", "video"] as const)
-    .map((kind) => ({ kind, url: mediaForm.back[kind].trim() }))
-    .filter((item) => item.url.length > 0);
+  const frontPreviewMedia = orderedMediaFromForm(mediaForm, "front");
+  const backPreviewMedia = orderedMediaFromForm(mediaForm, "back");
   const renderPreviewMedia = (items: typeof frontPreviewMedia) =>
     items.map((item) => (
       <CardSideMedia key={`${item.kind}-${item.url}`} url={item.url} kind={item.kind} />
@@ -607,146 +722,317 @@ export default function AddCardScreen() {
               {cardType === "cloze" ? (
                 <>
                   <Text style={[styles.clozeIntro, { color: C.textSub }]}>{t("clozeIntro")}</Text>
-                  <Field label={t("clozeFieldBefore")}>
-                    <InputRow
-                      icon="align-left"
-                      focused={focusedField === "cBefore"}
-                      onFocus={() => setFocusedField("cBefore")}
-                      onBlur={() => setFocusedField(null)}
-                      multiline
+                  <ClozeLivePreview
+                    parts={clozePartsPreview}
+                    sideBySide={formSideBySide}
+                    textColor={C.text}
+                    subColor={C.textSub}
+                    borderColor={C.borderLight}
+                    bgColor={C.inputBg}
+                    t={t}
+                  />
+                  <View
+                    style={[
+                      styles.basicSidesRow,
+                      formSideBySide
+                        ? styles.basicSidesRowHorizontal
+                        : styles.basicSidesRowStacked,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.basicSideCol,
+                        formSideBySide && styles.basicSideColLeft,
+                      ]}
                     >
-                      <TextInput
-                        style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
-                        placeholder={t("clozePlaceholderBefore")}
-                        placeholderTextColor={C.placeholder}
-                        value={clozeBefore}
-                        onChangeText={setClozeBefore}
-                        onFocus={() => setFocusedField("cBefore")}
-                        onBlur={() => setFocusedField(null)}
-                        multiline
-                        textAlignVertical="top"
-                      />
-                    </InputRow>
-                  </Field>
-                  <Field label={t("clozeFieldGapFront")} required>
-                    <InputRow
-                      icon="book-open"
-                      focused={focusedField === "cGap"}
-                      onFocus={() => setFocusedField("cGap")}
-                      onBlur={() => setFocusedField(null)}
-                      multiline
-                    >
-                      <TextInput
-                        style={[styles.input, styles.inputMulti, styles.inputClozeGapHint, webTextInputNoOutline]}
-                        placeholder={t("clozePlaceholderGapFront")}
-                        placeholderTextColor={C.placeholder}
-                        value={clozeGapFront}
-                        onChangeText={setClozeGapFront}
-                        onFocus={() => setFocusedField("cGap")}
-                        onBlur={() => setFocusedField(null)}
-                        multiline
-                        textAlignVertical="top"
-                      />
-                      {clozeGapFront.length > 0 && (
-                        <Pressable
-                          onPress={() => setClozeGapFront("")}
-                          hitSlop={8}
-                          style={{ marginTop: 2 }}
+                      <Text style={[styles.basicSideHeading, { color: C.text }]}>
+                        {t("front")}
+                      </Text>
+                      <Field label={t("clozeFieldBefore")}>
+                        <InputRow
+                          icon="align-left"
+                          focused={focusedField === "cBefore"}
+                          onFocus={() => setFocusedField("cBefore")}
+                          onBlur={() => setFocusedField(null)}
+                          multiline
                         >
-                          <Feather name="x-circle" size={16} color={C.textMuted} />
-                        </Pressable>
-                      )}
-                    </InputRow>
-                  </Field>
-                  <Field label={t("clozeFieldHidden")} required>
-                    <InputRow
-                      icon="target"
-                      focused={focusedField === "cHidden"}
-                      onFocus={() => setFocusedField("cHidden")}
-                      onBlur={() => setFocusedField(null)}
-                      multiline
-                    >
-                      <TextInput
-                        style={[styles.input, styles.inputMulti, styles.inputClozeHidden, webTextInputNoOutline]}
-                        placeholder={t("clozePlaceholderHidden")}
-                        placeholderTextColor={C.placeholder}
-                        value={clozeHidden}
-                        onChangeText={setClozeHidden}
-                        onFocus={() => setFocusedField("cHidden")}
-                        onBlur={() => setFocusedField(null)}
-                        multiline
-                        textAlignVertical="top"
-                      />
-                      {clozeHidden.length > 0 && (
-                        <Pressable
-                          onPress={() => setClozeHidden("")}
-                          hitSlop={8}
-                          style={{ marginTop: 2 }}
+                          <TextInput
+                            style={[styles.input, styles.inputClozeCompact, webTextInputNoOutline]}
+                            placeholder={t("clozePlaceholderBefore")}
+                            placeholderTextColor={C.placeholder}
+                            value={clozeBefore}
+                            onChangeText={setClozeBefore}
+                            onFocus={() => setFocusedField("cBefore")}
+                            onBlur={() => setFocusedField(null)}
+                            multiline
+                            textAlignVertical="top"
+                          />
+                        </InputRow>
+                      </Field>
+                      <Field label={t("clozeFieldGapFront")} required>
+                        <InputRow
+                          icon="book-open"
+                          focused={focusedField === "cGap"}
+                          onFocus={() => setFocusedField("cGap")}
+                          onBlur={() => setFocusedField(null)}
+                          multiline
                         >
-                          <Feather name="x-circle" size={16} color={C.textMuted} />
-                        </Pressable>
-                      )}
-                    </InputRow>
-                  </Field>
-                  <Field label={t("clozeFieldAfter")}>
-                    <InputRow
-                      icon="align-right"
-                      focused={focusedField === "cAfter"}
-                      onFocus={() => setFocusedField("cAfter")}
-                      onBlur={() => setFocusedField(null)}
-                      multiline
-                    >
-                      <TextInput
-                        style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
-                        placeholder={t("clozePlaceholderAfter")}
-                        placeholderTextColor={C.placeholder}
-                        value={clozeAfter}
-                        onChangeText={setClozeAfter}
-                        onFocus={() => setFocusedField("cAfter")}
-                        onBlur={() => setFocusedField(null)}
-                        multiline
-                        textAlignVertical="top"
+                          <TextInput
+                            style={[
+                              styles.input,
+                              styles.inputClozeGapHint,
+                              styles.inputClozeGap,
+                              webTextInputNoOutline,
+                            ]}
+                            placeholder={t("clozePlaceholderGapFront")}
+                            placeholderTextColor={C.placeholder}
+                            value={clozeGapFront}
+                            onChangeText={setClozeGapFront}
+                            onFocus={() => setFocusedField("cGap")}
+                            onBlur={() => setFocusedField(null)}
+                            multiline
+                            textAlignVertical="top"
+                          />
+                          {clozeGapFront.length > 0 && (
+                            <Pressable
+                              onPress={() => setClozeGapFront("")}
+                              hitSlop={8}
+                              style={{ marginTop: 2 }}
+                            >
+                              <Feather name="x-circle" size={16} color={C.textMuted} />
+                            </Pressable>
+                          )}
+                        </InputRow>
+                      </Field>
+                      <Field label={t("clozeFieldAfter")}>
+                        <InputRow
+                          icon="align-right"
+                          focused={focusedField === "cAfter"}
+                          onFocus={() => setFocusedField("cAfter")}
+                          onBlur={() => setFocusedField(null)}
+                          multiline
+                        >
+                          <TextInput
+                            style={[styles.input, styles.inputClozeCompact, webTextInputNoOutline]}
+                            placeholder={t("clozePlaceholderAfter")}
+                            placeholderTextColor={C.placeholder}
+                            value={clozeAfter}
+                            onChangeText={setClozeAfter}
+                            onFocus={() => setFocusedField("cAfter")}
+                            onBlur={() => setFocusedField(null)}
+                            multiline
+                            textAlignVertical="top"
+                          />
+                        </InputRow>
+                      </Field>
+                      <CardMediaFormFields
+                        side="front"
+                        mediaForm={mediaForm}
+                        onUrlChange={setMediaUrl}
+                        onMove={moveMediaOrder}
+                        focusedField={focusedField}
+                        onFocusField={setFocusedField}
+                        t={t}
                       />
-                    </InputRow>
-                  </Field>
+                    </View>
+
+                    {formSideBySide ? (
+                      <View
+                        style={[styles.basicSidesDivider, { backgroundColor: C.borderLight }]}
+                      />
+                    ) : null}
+
+                    <View
+                      style={[
+                        styles.basicSideCol,
+                        formSideBySide && styles.basicSideColRight,
+                      ]}
+                    >
+                      <Text style={[styles.basicSideHeading, { color: C.text }]}>
+                        {t("back")}
+                        <Text style={{ color: "#ef4444" }}> *</Text>
+                      </Text>
+                      <Field
+                        label={t("clozeFieldHidden")}
+                        required
+                        style={formSideBySide ? styles.basicSideTextField : undefined}
+                      >
+                        <InputRow
+                          icon="target"
+                          focused={focusedField === "cHidden"}
+                          onFocus={() => setFocusedField("cHidden")}
+                          onBlur={() => setFocusedField(null)}
+                          multiline
+                          fill={formSideBySide}
+                        >
+                          <TextInput
+                            style={[
+                              styles.input,
+                              styles.inputClozeHidden,
+                              formSideBySide && styles.inputMultiFill,
+                              webTextInputNoOutline,
+                            ]}
+                            placeholder={t("clozePlaceholderHidden")}
+                            placeholderTextColor={C.placeholder}
+                            value={clozeHidden}
+                            onChangeText={setClozeHidden}
+                            onFocus={() => setFocusedField("cHidden")}
+                            onBlur={() => setFocusedField(null)}
+                            multiline
+                            textAlignVertical="top"
+                          />
+                          {clozeHidden.length > 0 && (
+                            <Pressable
+                              onPress={() => setClozeHidden("")}
+                              hitSlop={8}
+                              style={{ marginTop: 2 }}
+                            >
+                              <Feather name="x-circle" size={16} color={C.textMuted} />
+                            </Pressable>
+                          )}
+                        </InputRow>
+                      </Field>
+                      <CardMediaFormFields
+                        side="back"
+                        mediaForm={mediaForm}
+                        onUrlChange={setMediaUrl}
+                        onMove={moveMediaOrder}
+                        focusedField={focusedField}
+                        onFocusField={setFocusedField}
+                        t={t}
+                      />
+                    </View>
+                  </View>
                 </>
               ) : (
                 <>
-                  <Field label={t("front")} required>
-                    <InputRow
-                      icon="align-left"
-                      focused={focusedField === "front"}
-                      onFocus={() => setFocusedField("front")}
-                      onBlur={() => setFocusedField(null)}
-                      multiline
+                  <View
+                    style={[
+                      styles.basicSidesRow,
+                      formSideBySide
+                        ? styles.basicSidesRowHorizontal
+                        : styles.basicSidesRowStacked,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.basicSideCol,
+                        formSideBySide && styles.basicSideColLeft,
+                      ]}
                     >
-                      <TextInput
-                        style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
-                        placeholder={t("frontPlaceholder")}
-                        placeholderTextColor={C.placeholder}
-                        value={frontText}
-                        onChangeText={setFrontText}
-                        onFocus={() => setFocusedField("front")}
-                        onBlur={() => setFocusedField(null)}
-                        multiline
-                        textAlignVertical="top"
-                      />
-                      {frontText.length > 0 && (
-                        <Pressable
-                          onPress={() => setFrontText("")}
-                          hitSlop={8}
-                          style={{ marginTop: 2 }}
+                      <View
+                        style={[
+                          styles.basicSideHeaderRow,
+                          formSideBySide && styles.basicSideHeaderRowBalanced,
+                        ]}
+                      >
+                        <Text style={[styles.basicSideHeading, { color: C.text }]}>
+                          {t("front")}
+                          <Text style={{ color: "#ef4444" }}> *</Text>
+                        </Text>
+                        {formSideBySide ? (
+                          <View style={styles.basicSideHeaderSpacer} />
+                        ) : null}
+                      </View>
+                      <Field
+                        label={t("front")}
+                        hideLabel
+                        style={formSideBySide ? styles.basicSideTextField : undefined}
+                      >
+                        <InputRow
+                          icon="align-left"
+                          focused={focusedField === "front"}
+                          onFocus={() => setFocusedField("front")}
+                          onBlur={() => setFocusedField(null)}
+                          multiline
+                          fill={formSideBySide}
                         >
-                          <Feather name="x-circle" size={16} color={C.textMuted} />
-                        </Pressable>
-                      )}
-                    </InputRow>
-                  </Field>
-                  <Field
-                    label={t("back")}
-                    required
-                    labelRight={
-                      cardType === "basic" ? (
+                          <TextInput
+                            style={[
+                              styles.input,
+                              styles.inputMulti,
+                              formSideBySide && styles.inputMultiFill,
+                              webTextInputNoOutline,
+                            ]}
+                            placeholder={t("frontPlaceholder")}
+                            placeholderTextColor={C.placeholder}
+                            value={frontText}
+                            onChangeText={setFrontText}
+                            onFocus={() => setFocusedField("front")}
+                            onBlur={() => setFocusedField(null)}
+                            multiline
+                            textAlignVertical="top"
+                          />
+                          {frontText.length > 0 && (
+                            <Pressable
+                              onPress={() => setFrontText("")}
+                              hitSlop={8}
+                              style={{ marginTop: 2 }}
+                            >
+                              <Feather name="x-circle" size={16} color={C.textMuted} />
+                            </Pressable>
+                          )}
+                        </InputRow>
+                      </Field>
+                      <CardMediaFormFields
+                        side="front"
+                        mediaForm={mediaForm}
+                        onUrlChange={setMediaUrl}
+                        onMove={moveMediaOrder}
+                        focusedField={focusedField}
+                        onFocusField={setFocusedField}
+                        t={t}
+                        imageLabelRight={
+                          <TouchableOpacity
+                            style={[
+                              styles.aiLabelBtn,
+                              {
+                                borderColor: C.tint,
+                                backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                                opacity: !frontText.trim() || aiFrontImgBusy ? 0.5 : 1,
+                              },
+                            ]}
+                            onPress={handleAiFrontImage}
+                            disabled={aiFrontImgBusy || !frontText.trim()}
+                            activeOpacity={0.75}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("aiGenerateImage")}
+                          >
+                            {aiFrontImgBusy ? (
+                              <ActivityIndicator size="small" color={C.tint} />
+                            ) : (
+                              <Feather name="image" size={14} color={C.tint} />
+                            )}
+                            <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+                              {aiFrontImgBusy ? t("aiGenerateImageLoading") : t("aiGenerateImage")}
+                            </Text>
+                          </TouchableOpacity>
+                        }
+                      />
+                    </View>
+
+                    {formSideBySide ? (
+                      <View
+                        style={[styles.basicSidesDivider, { backgroundColor: C.borderLight }]}
+                      />
+                    ) : null}
+
+                    <View
+                      style={[
+                        styles.basicSideCol,
+                        formSideBySide && styles.basicSideColRight,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.basicSideHeaderRow,
+                          formSideBySide && styles.basicSideHeaderRowBalanced,
+                        ]}
+                      >
+                        <Text style={[styles.basicSideHeading, { color: C.text }]}>
+                          {t("back")}
+                          <Text style={{ color: "#ef4444" }}> *</Text>
+                        </Text>
                         <TouchableOpacity
                           style={[
                             styles.aiLabelBtn,
@@ -771,38 +1057,87 @@ export default function AddCardScreen() {
                             {aiBackBusy ? t("aiGenerateBackLoading") : t("aiGenerateBack")}
                           </Text>
                         </TouchableOpacity>
-                      ) : undefined
-                    }
-                  >
-                    <InputRow
-                      icon="align-right"
-                      focused={focusedField === "back"}
-                      onFocus={() => setFocusedField("back")}
-                      onBlur={() => setFocusedField(null)}
-                      multiline
-                    >
-                      <TextInput
-                        style={[styles.input, styles.inputMulti, webTextInputNoOutline]}
-                        placeholder={t("backPlaceholder")}
-                        placeholderTextColor={C.placeholder}
-                        value={backText}
-                        onChangeText={setBackText}
-                        onFocus={() => setFocusedField("back")}
-                        onBlur={() => setFocusedField(null)}
-                        multiline
-                        textAlignVertical="top"
-                      />
-                      {backText.length > 0 && (
-                        <Pressable
-                          onPress={() => setBackText("")}
-                          hitSlop={8}
-                          style={{ marginTop: 2 }}
+                      </View>
+                      <Field
+                        label={t("back")}
+                        hideLabel
+                        style={formSideBySide ? styles.basicSideTextField : undefined}
+                      >
+                        <InputRow
+                          icon="align-right"
+                          focused={focusedField === "back"}
+                          onFocus={() => setFocusedField("back")}
+                          onBlur={() => setFocusedField(null)}
+                          multiline
+                          fill={formSideBySide}
                         >
-                          <Feather name="x-circle" size={16} color={C.textMuted} />
-                        </Pressable>
-                      )}
-                    </InputRow>
-                  </Field>
+                          <TextInput
+                            style={[
+                              styles.input,
+                              styles.inputMulti,
+                              formSideBySide && styles.inputMultiFill,
+                              webTextInputNoOutline,
+                            ]}
+                            placeholder={t("backPlaceholder")}
+                            placeholderTextColor={C.placeholder}
+                            value={backText}
+                            onChangeText={setBackText}
+                            onFocus={() => setFocusedField("back")}
+                            onBlur={() => setFocusedField(null)}
+                            multiline
+                            textAlignVertical="top"
+                          />
+                          {backText.length > 0 && (
+                            <Pressable
+                              onPress={() => setBackText("")}
+                              hitSlop={8}
+                              style={{ marginTop: 2 }}
+                            >
+                              <Feather name="x-circle" size={16} color={C.textMuted} />
+                            </Pressable>
+                          )}
+                        </InputRow>
+                      </Field>
+                      <CardMediaFormFields
+                        side="back"
+                        mediaForm={mediaForm}
+                        onUrlChange={setMediaUrl}
+                        onMove={moveMediaOrder}
+                        focusedField={focusedField}
+                        onFocusField={setFocusedField}
+                        t={t}
+                        imageLabelRight={
+                          <TouchableOpacity
+                            style={[
+                              styles.aiLabelBtn,
+                              {
+                                borderColor: C.tint,
+                                backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                                opacity:
+                                  (!frontText.trim() && !backText.trim()) || aiBackImgBusy ? 0.5 : 1,
+                              },
+                            ]}
+                            onPress={handleAiBackImage}
+                            disabled={
+                              aiBackImgBusy || (!frontText.trim() && !backText.trim())
+                            }
+                            activeOpacity={0.75}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("aiGenerateImage")}
+                          >
+                            {aiBackImgBusy ? (
+                              <ActivityIndicator size="small" color={C.tint} />
+                            ) : (
+                              <Feather name="image" size={14} color={C.tint} />
+                            )}
+                            <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+                              {aiBackImgBusy ? t("aiGenerateImageLoading") : t("aiGenerateImage")}
+                            </Text>
+                          </TouchableOpacity>
+                        }
+                      />
+                    </View>
+                  </View>
                   {!isEdit ? (
                     <Pressable
                       style={styles.revToggle}
@@ -830,109 +1165,6 @@ export default function AddCardScreen() {
                   ) : null}
                 </>
               )}
-
-              <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
-
-              <Field
-                label={t("frontImageUrl")}
-                labelRight={
-                  cardType === "basic" ? (
-                    <TouchableOpacity
-                      style={[
-                        styles.aiLabelBtn,
-                        {
-                          borderColor: C.tint,
-                          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
-                          opacity: !frontText.trim() || aiFrontImgBusy ? 0.5 : 1,
-                        },
-                      ]}
-                      onPress={handleAiFrontImage}
-                      disabled={aiFrontImgBusy || !frontText.trim()}
-                      activeOpacity={0.75}
-                      accessibilityRole="button"
-                      accessibilityLabel={t("aiGenerateImage")}
-                    >
-                      {aiFrontImgBusy ? (
-                        <ActivityIndicator size="small" color={C.tint} />
-                      ) : (
-                        <Feather name="image" size={14} color={C.tint} />
-                      )}
-                      <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
-                        {aiFrontImgBusy ? t("aiGenerateImageLoading") : t("aiGenerateImage")}
-                      </Text>
-                    </TouchableOpacity>
-                  ) : undefined
-                }
-              >
-                <InputRow icon="image" focused={focusedField === "frontImage"} onFocus={() => setFocusedField("frontImage")} onBlur={() => setFocusedField(null)}>
-                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.front.image} onChangeText={(value) => setMediaUrl("front", "image", value)} onFocus={() => setFocusedField("frontImage")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.front.image.length > 0 && <Pressable onPress={() => setMediaUrl("front", "image", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
-                </InputRow>
-              </Field>
-              <Field label={t("frontAudioUrl")}>
-                <InputRow icon="volume-2" focused={focusedField === "frontAudio"} onFocus={() => setFocusedField("frontAudio")} onBlur={() => setFocusedField(null)}>
-                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.front.audio} onChangeText={(value) => setMediaUrl("front", "audio", value)} onFocus={() => setFocusedField("frontAudio")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.front.audio.length > 0 && <Pressable onPress={() => setMediaUrl("front", "audio", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
-                </InputRow>
-              </Field>
-              <Field label={t("frontVideoUrl")}>
-                <InputRow icon="video" focused={focusedField === "frontVideo"} onFocus={() => setFocusedField("frontVideo")} onBlur={() => setFocusedField(null)}>
-                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.front.video} onChangeText={(value) => setMediaUrl("front", "video", value)} onFocus={() => setFocusedField("frontVideo")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.front.video.length > 0 && <Pressable onPress={() => setMediaUrl("front", "video", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
-                </InputRow>
-              </Field>
-
-              <Field
-                label={t("backImageUrl")}
-                labelRight={
-                  cardType === "basic" ? (
-                    <TouchableOpacity
-                      style={[
-                        styles.aiLabelBtn,
-                        {
-                          borderColor: C.tint,
-                          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
-                          opacity:
-                            (!frontText.trim() && !backText.trim()) || aiBackImgBusy ? 0.5 : 1,
-                        },
-                      ]}
-                      onPress={handleAiBackImage}
-                      disabled={
-                        aiBackImgBusy || (!frontText.trim() && !backText.trim())
-                      }
-                      activeOpacity={0.75}
-                      accessibilityRole="button"
-                      accessibilityLabel={t("aiGenerateImage")}
-                    >
-                      {aiBackImgBusy ? (
-                        <ActivityIndicator size="small" color={C.tint} />
-                      ) : (
-                        <Feather name="image" size={14} color={C.tint} />
-                      )}
-                      <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
-                        {aiBackImgBusy ? t("aiGenerateImageLoading") : t("aiGenerateImage")}
-                      </Text>
-                    </TouchableOpacity>
-                  ) : undefined
-                }
-              >
-                <InputRow icon="image" focused={focusedField === "backImage"} onFocus={() => setFocusedField("backImage")} onBlur={() => setFocusedField(null)}>
-                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.back.image} onChangeText={(value) => setMediaUrl("back", "image", value)} onFocus={() => setFocusedField("backImage")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.back.image.length > 0 && <Pressable onPress={() => setMediaUrl("back", "image", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
-                </InputRow>
-              </Field>
-              <Field label={t("backAudioUrl")}>
-                <InputRow icon="volume-2" focused={focusedField === "backAudio"} onFocus={() => setFocusedField("backAudio")} onBlur={() => setFocusedField(null)}>
-                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.back.audio} onChangeText={(value) => setMediaUrl("back", "audio", value)} onFocus={() => setFocusedField("backAudio")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.back.audio.length > 0 && <Pressable onPress={() => setMediaUrl("back", "audio", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
-                </InputRow>
-              </Field>
-              <Field label={t("backVideoUrl")}>
-                <InputRow icon="video" focused={focusedField === "backVideo"} onFocus={() => setFocusedField("backVideo")} onBlur={() => setFocusedField(null)}>
-                  <TextInput style={[styles.input, webTextInputNoOutline, { color: C.text }]} placeholder="https://..." placeholderTextColor={C.placeholder} value={mediaForm.back.video} onChangeText={(value) => setMediaUrl("back", "video", value)} onFocus={() => setFocusedField("backVideo")} onBlur={() => setFocusedField(null)} autoCapitalize="none" keyboardType="url" />
-                  {mediaForm.back.video.length > 0 && <Pressable onPress={() => setMediaUrl("back", "video", "")} hitSlop={8}><Feather name="x-circle" size={16} color={C.textMuted} /></Pressable>}
-                </InputRow>
-              </Field>
 
               <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
 
@@ -1205,24 +1437,30 @@ export default function AddCardScreen() {
 function Field({
   label,
   required,
+  hideLabel,
   labelRight,
+  style,
   children,
 }: {
   label: string;
   required?: boolean;
+  hideLabel?: boolean;
   labelRight?: React.ReactNode;
+  style?: object;
   children: React.ReactNode;
 }) {
   const C = useAppColors();
   return (
-    <View style={{ gap: 7 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={[styles.fieldLabel, { color: C.textSub }]}>
-          {label}
-          {required && <Text style={{ color: "#ef4444" }}> *</Text>}
-        </Text>
-        {labelRight}
-      </View>
+    <View style={[{ gap: 7 }, style]}>
+      {!hideLabel ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={[styles.fieldLabel, { color: C.textSub }]}>
+            {label}
+            {required && <Text style={{ color: "#ef4444" }}> *</Text>}
+          </Text>
+          {labelRight}
+        </View>
+      ) : null}
       {children}
     </View>
   );
@@ -1234,6 +1472,7 @@ function InputRow({
   onFocus,
   onBlur,
   multiline,
+  fill,
   children,
 }: {
   icon: keyof typeof Feather.glyphMap;
@@ -1241,6 +1480,7 @@ function InputRow({
   onFocus: () => void;
   onBlur: () => void;
   multiline?: boolean;
+  fill?: boolean;
   children: React.ReactNode;
 }) {
   const C = useAppColors();
@@ -1250,6 +1490,7 @@ function InputRow({
         styles.inputRow,
         { backgroundColor: C.inputBg, borderColor: C.inputBorder },
         multiline && styles.inputRowMulti,
+        fill && styles.inputRowFill,
         focused && [styles.inputRowFocused, C.isDark && { backgroundColor: C.surface, borderColor: '#6366f1' }],
       ]}
     >
@@ -1644,12 +1885,18 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 8,
   },
+  inputClozeCompact: {
+    minHeight: 44,
+    textAlignVertical: "top",
+  },
+  inputClozeGap: {
+    minHeight: 52,
+    textAlignVertical: "top",
+  },
   inputClozeGapHint: {
-    minHeight: 56,
     fontStyle: "italic",
     fontWeight: "500",
     color: "#4b5563",
-    textAlignVertical: "top",
   },
   inputClozeHidden: {
     minHeight: 56,
@@ -1679,5 +1926,67 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     lineHeight: 17,
     marginTop: 4,
+  },
+  basicSidesRow: {
+    width: "100%",
+  },
+  basicSidesRowHorizontal: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 0,
+  },
+  basicSidesRowStacked: {
+    flexDirection: "column",
+    gap: 16,
+  },
+  basicSidesDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    flexShrink: 0,
+  },
+  basicSideCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 14,
+    alignSelf: "stretch",
+  },
+  basicSideColLeft: {
+    paddingRight: 14,
+  },
+  basicSideColRight: {
+    paddingLeft: 14,
+  },
+  basicSideTextField: {
+    flex: 1,
+    minHeight: 80,
+  },
+  basicSideHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 2,
+  },
+  basicSideHeaderRowBalanced: {
+    minHeight: 34,
+  },
+  basicSideHeaderSpacer: {
+    width: 108,
+    flexShrink: 0,
+  },
+  inputRowFill: {
+    flex: 1,
+    alignSelf: "stretch",
+    minHeight: 80,
+  },
+  inputMultiFill: {
+    flex: 1,
+    minHeight: 80,
+  },
+  basicSideHeading: {
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+    flexShrink: 1,
   },
 });
