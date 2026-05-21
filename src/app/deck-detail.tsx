@@ -691,10 +691,10 @@ export default function DeckDetailScreen() {
                 <ActionBtn
                   icon="zap"
                   label={t("aiGenerateCards")}
-                  bg={C.isDark ? 'rgba(99,102,241,0.12)' : '#eef0ff'}
+                  bg={C.isDark ? C.surface : C.aiAccentBg}
                   textColor={C.tint}
                   border
-                  borderColor="rgba(99,102,241,0.25)"
+                  borderColor={C.aiAccentBorder}
                   onPress={() => setShowGenerateModal(true)}
                   flex={!compactSecondaryActions}
                   compactLayout={compactSecondaryActions}

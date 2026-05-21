@@ -19,7 +19,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useStudySettings } from '@/src/contexts/StudySettingsContext';
 import { supabase } from '@/src/lib/supabase';
-import { syncStudyDailyReminder } from '@/src/lib/studyReminderNotifications';
+import { sendTestPushNotification, syncStudyDailyReminder } from '@/src/lib/studyReminderNotifications';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
 
@@ -111,6 +111,8 @@ export default function SettingsScreen() {
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(defaultNotifPrefs);
   const [savingNotif, setSavingNotif] = useState(false);
   const [notifMsg, setNotifMsg] = useState<string | null>(null);
+  const [testPushLoading, setTestPushLoading] = useState(false);
+  const [testPushMsg, setTestPushMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -152,10 +154,39 @@ export default function SettingsScreen() {
         setTimeout(() => setNotifMsg(null), 5000);
         return;
       }
+      if (next.studyReminder && r.ok === false && r.reason === 'expo_go') {
+        setNotifMsg(t('notifExpoGoReminderNote'));
+        setTimeout(() => setNotifMsg(null), 8000);
+        return;
+      }
     }
 
     setNotifMsg(t('notifSaved'));
     setTimeout(() => setNotifMsg(null), 3000);
+  };
+
+  const handleSendTestPush = async () => {
+    setTestPushLoading(true);
+    setTestPushMsg(null);
+    const result = await sendTestPushNotification({
+      title: t('adminTestPushTitle'),
+      body: t('adminTestPushBody'),
+    });
+    setTestPushLoading(false);
+    if (result.ok) {
+      setTestPushMsg(t('adminTestPushSent'));
+    } else {
+      const reasonMsg =
+        result.reason === 'permission_denied'
+          ? t('notifPermissionDenied')
+          : result.reason === 'web'
+            ? t('notifWebReminderNote')
+            : result.reason === 'expo_go'
+              ? t('notifExpoGoReminderNote')
+              : t('adminTestPushFailed');
+      setTestPushMsg(reasonMsg);
+    }
+    setTimeout(() => setTestPushMsg(null), 6000);
   };
 
   useEffect(() => {
@@ -643,6 +674,47 @@ export default function SettingsScreen() {
             />
           </RNView>
 
+          <RNView style={[styles.notifDivider, { backgroundColor: C.borderLight }]} />
+
+          {/* Test notification */}
+          <RNView style={styles.notifTestSection}>
+            <RNView style={styles.notifRowLeft}>
+              <RNView style={[styles.notifIconWrap, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF' }]}>
+                <Feather name="send" size={18} color={C.tint} />
+              </RNView>
+              <RNView style={styles.notifRowText}>
+                <Text style={[styles.infoLabel, { color: C.text }]}>{t('adminSendTestPush')}</Text>
+                <Text style={[styles.infoSubText, { color: C.textSub }]}>{t('adminSendTestPushDesc')}</Text>
+              </RNView>
+            </RNView>
+            <TouchableOpacity
+              style={[
+                styles.notifTestBtn,
+                { backgroundColor: C.aiButtonFill },
+                testPushLoading && styles.buttonDisabled,
+              ]}
+              onPress={handleSendTestPush}
+              disabled={testPushLoading}
+              activeOpacity={0.85}
+            >
+              {testPushLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.notifTestBtnTxt}>{t('adminSendTestPush')}</Text>
+              )}
+            </TouchableOpacity>
+            {testPushMsg ? (
+              <Text
+                style={[
+                  styles.notifTestMsg,
+                  { color: testPushMsg === t('adminTestPushSent') ? '#10b981' : '#ef4444' },
+                ]}
+              >
+                {testPushMsg}
+              </Text>
+            ) : null}
+          </RNView>
+
           {/* Status message */}
           {savingNotif && <ActivityIndicator color="#6366f1" style={{ alignSelf: 'flex-start' }} />}
           {notifMsg && (
@@ -967,6 +1039,15 @@ const styles = StyleSheet.create({
   },
   notifRowText: { flex: 1, gap: 5 },
   notifDivider: { height: 1, backgroundColor: '#f3f4f6' },
+  notifTestSection: { gap: 12, paddingVertical: 4 },
+  notifTestBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+  },
+  notifTestBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  notifTestMsg: { fontSize: 13, lineHeight: 18 },
   notifTimeRow: { paddingLeft: 60, gap: 8 },
   srsHourRow: {
     flexDirection: 'row',

@@ -131,7 +131,6 @@ export default function AdminPanelScreen() {
   const [userSearch, setUserSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
   // Confirm modals
   const [commentToDelete, setCommentToDelete] = useState<Comment | null>(null);
   const [complaintToDismiss, setComplaintToDismiss] = useState<Complaint | null>(null);
