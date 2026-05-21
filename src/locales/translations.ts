@@ -127,6 +127,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     adminDeleteUserConfirm: 'Delete this user and all their data? This cannot be undone.',
     adminSearchUsers: 'Search users…',
     adminAdminBadge: 'Admin',
+    adminSendTestPush: 'Send test notification',
+    adminSendTestPushDesc: 'Delivers a local test notification to this device in about one second.',
+    adminTestPushTitle: 'Cardly test',
+    adminTestPushBody: 'Push notifications are working on this device.',
+    adminTestPushSent: 'Test notification scheduled. Check your device shortly.',
+    adminTestPushFailed: 'Could not send test notification.',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
     aiGenerateBack: 'AI fill',
     aiGenerateBackLoading: 'Generating…',
     aiGenerateImage: 'AI image',
@@ -357,6 +365,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     authEmailRateLimit: 'Too many attempts. Please try again later.',
     authSignupDisabled: 'Registration is currently unavailable',
     authErrorGeneric: 'Something went wrong. Please try again.',
+    authOAuthCancelled: 'Google sign-in was cancelled.',
+    authOAuthFailed:
+      'Google sign-in did not finish. In Supabase → Auth → URL Configuration, add redirect URLs: cardly://** and exp://** (for Expo Go).',
+    authOAuthRedirectHint:
+      'Redirect URL mismatch. In Supabase → Auth → URL Configuration, add cardly://** and exp://** (Expo Go). Restart Expo after changes.',
     // Language names
     langEnglish: 'English',
     langUkrainian: 'Українська',
@@ -460,6 +473,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     pushRepeatWordsBody: 'Open Cardly and run a study session.',
     notifPermissionDenied: 'Notifications are off for Cardly. Enable them in system settings to get reminders.',
     notifWebReminderNote: 'Daily reminders work in the iOS or Android app. The web version does not schedule them yet.',
+    notifExpoGoReminderNote:
+      'Daily reminders are not available in Expo Go on Android. Install a development build or test on iOS Expo Go to use reminders.',
     help: 'Help',
     // Misc
     failedToLoadDeck: 'Failed to load deck',
@@ -670,6 +685,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     adminDeleteUserConfirm: 'Видалити цього користувача разом з усіма його даними? Цю дію не можна скасувати.',
     adminSearchUsers: 'Пошук користувачів…',
     adminAdminBadge: 'Адмін',
+    adminSendTestPush: 'Надіслати тестове сповіщення',
+    adminSendTestPushDesc: 'Локальне тестове сповіщення на цей пристрій через ~1 с.',
+    adminTestPushTitle: 'Тест Cardly',
+    adminTestPushBody: 'Сповіщення на цьому пристрої працюють.',
+    adminTestPushSent: 'Тестове сповіщення заплановано. Перевірте пристрій незабаром.',
+    adminTestPushFailed: 'Не вдалося надіслати тестове сповіщення.',
+    showPassword: 'Показати пароль',
+    hidePassword: 'Приховати пароль',
     aiGenerateBack: 'AI заповнення',
     aiGenerateBackLoading: 'Генерую…',
     aiGenerateImage: 'AI фото',
@@ -900,6 +923,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     authEmailRateLimit: 'Забагато спроб. Спробуйте пізніше.',
     authSignupDisabled: 'Реєстрація наразі недоступна',
     authErrorGeneric: 'Щось пішло не так. Спробуйте ще раз.',
+    authOAuthCancelled: 'Вхід через Google скасовано.',
+    authOAuthFailed:
+      'Вхід через Google не завершено. У Supabase → Auth → URL Configuration додайте: cardly://** та exp://** (для Expo Go).',
+    authOAuthRedirectHint:
+      'Невідповідність redirect URL. У Supabase → Auth → URL Configuration додайте cardly://** та exp://** (Expo Go). Перезапустіть Expo.',
     // Language names
     langEnglish: 'English',
     langUkrainian: 'Українська',
@@ -1005,6 +1033,8 @@ export const translations: Record<Locale, Record<string, string>> = {
       'Сповіщення для Cardly вимкнено. Увімкніть їх у системних налаштуваннях, щоб отримувати нагадування.',
     notifWebReminderNote:
       'Щоденні нагадування працюють у застосунку на iOS або Android. У вебверсії їх поки не планується.',
+    notifExpoGoReminderNote:
+      'Щоденні нагадування недоступні в Expo Go на Android. Встановіть development build або тестуйте в Expo Go на iOS.',
     help: 'Допомога',
     // Misc
     failedToLoadDeck: 'Не вдалося завантажити дошку',

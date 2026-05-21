@@ -751,8 +751,8 @@ export default function AddCardScreen() {
                           style={[
                             styles.aiLabelBtn,
                             {
-                              borderColor: C.tint,
-                              backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                              borderColor: C.aiAccentBorder,
+                              backgroundColor: C.aiAccentBg,
                               opacity: !frontText.trim() || aiBackBusy ? 0.5 : 1,
                             },
                           ]}
@@ -841,8 +841,8 @@ export default function AddCardScreen() {
                       style={[
                         styles.aiLabelBtn,
                         {
-                          borderColor: C.tint,
-                          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                          borderColor: C.aiAccentBorder,
+                          backgroundColor: C.aiAccentBg,
                           opacity: !frontText.trim() || aiFrontImgBusy ? 0.5 : 1,
                         },
                       ]}
@@ -890,8 +890,8 @@ export default function AddCardScreen() {
                       style={[
                         styles.aiLabelBtn,
                         {
-                          borderColor: C.tint,
-                          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                          borderColor: C.aiAccentBorder,
+                          backgroundColor: C.aiAccentBg,
                           opacity:
                             (!frontText.trim() && !backText.trim()) || aiBackImgBusy ? 0.5 : 1,
                         },

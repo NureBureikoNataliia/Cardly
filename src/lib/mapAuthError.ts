@@ -40,6 +40,16 @@ export function mapAuthErrorMessage(
     return t('authInvalidEmail');
   }
   if (msg.includes('rate limit') || msg.includes('too many')) return t('authEmailRateLimit');
+  if (msg.includes('oauth cancelled') || msg.includes('user cancelled')) return t('authOAuthCancelled');
+  if (
+    msg.includes('oauth session missing') ||
+    msg.includes('oauth failed') ||
+    msg.includes('redirect uri invalid') ||
+    msg.includes('redirect uri could not')
+  ) {
+    return t('authOAuthFailed');
+  }
+  if (msg.includes('redirect') || msg.includes('invalid_request')) return t('authOAuthRedirectHint');
 
   return error.message?.trim() || t('authErrorGeneric');
 }

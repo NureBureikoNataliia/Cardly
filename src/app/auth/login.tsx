@@ -15,7 +15,9 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { BookOpen } from 'lucide-react-native';
 import { AuthTopActions } from '@/src/components/AuthTopActions';
+import { PasswordField } from '@/src/components/PasswordField';
 import { useAppColors } from '@/src/contexts/ThemeContext';
+import { authFormStyles, authInputStyle } from '@/src/components/authFormStyles';
 import { mapAuthErrorMessage } from '@/src/lib/mapAuthError';
 
 export default function LoginScreen() {
@@ -73,15 +75,15 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={Platform.OS === 'web'}
       >
         <View style={styles.content}>
-          <View style={styles.header}>
-            <BookOpen size={48} color={C.tint} />
-            <Text style={[styles.title, { color: C.text }]}>{t('appName')}</Text>
-            <Text style={[styles.subtitle, { color: C.textSub }]}>{t('learnSmarter')}</Text>
+          <View style={authFormStyles.header}>
+            <BookOpen size={40} color={C.tint} />
+            <Text style={[authFormStyles.title, { color: C.text }]}>{t('appName')}</Text>
+            <Text style={[authFormStyles.subtitle, { color: C.textSub }]}>{t('learnSmarter')}</Text>
           </View>
 
           <View style={styles.form}>
             <TextInput
-              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.text }]}
+              style={authInputStyle(C)}
               placeholder={t('email')}
               placeholderTextColor={C.placeholder}
               value={email}
@@ -91,20 +93,17 @@ export default function LoginScreen() {
               editable={!loading}
             />
 
-            <TextInput
-              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.text }]}
+            <PasswordField
               placeholder={t('password')}
-              placeholderTextColor={C.placeholder}
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
               editable={!loading}
             />
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
+              style={[authFormStyles.button, styles.button, loading && styles.buttonDisabled]}
               onPress={handleLogin}
               disabled={loading}
             >
@@ -116,7 +115,11 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.googleButton, { backgroundColor: C.surface, borderColor: C.border }, loading && styles.buttonDisabled]}
+              style={[
+                authFormStyles.googleButton,
+                { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                loading && styles.buttonDisabled,
+              ]}
               onPress={handleGoogle}
               disabled={loading}
             >
@@ -156,41 +159,13 @@ const styles = StyleSheet.create({
   content: {
     justifyContent: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 32,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 48,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginTop: 16,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#64748b',
-    marginTop: 8,
+    paddingVertical: 20,
   },
   form: {
     width: '100%',
   },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    marginBottom: 16,
-  },
   button: {
     backgroundColor: '#3b82f6',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -199,15 +174,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  googleButton: {
-    marginTop: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
   },
   googleButtonText: {
     color: '#1e293b',

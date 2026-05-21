@@ -113,7 +113,7 @@ export default function GenerateCardsModal({ visible, deckId, deckTitle, deckDes
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: C.borderLight }]}>
             <View style={styles.headerLeft}>
-              <View style={[styles.headerIcon, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : 'rgba(66,85,255,0.08)' }]}>
+              <View style={[styles.headerIcon, { backgroundColor: C.aiAccentBg }]}>
                 <Feather name="zap" size={18} color={C.tint} />
               </View>
               <Text style={[styles.headerTitle, { color: C.text }]}>{t('aiGenerateCards')}</Text>
@@ -162,7 +162,7 @@ export default function GenerateCardsModal({ visible, deckId, deckTitle, deckDes
               {error && <Text style={[styles.errorTxt, { color: '#ef4444' }]}>{error}</Text>}
 
               <TouchableOpacity
-                style={[styles.generateBtn, { backgroundColor: !topic.trim() || isGenerating ? C.border : C.tint }]}
+                style={[styles.generateBtn, { backgroundColor: !topic.trim() || isGenerating ? C.border : C.aiButtonFill }]}
                 disabled={!topic.trim() || isGenerating}
                 activeOpacity={0.8}
                 onPress={handleGenerate}

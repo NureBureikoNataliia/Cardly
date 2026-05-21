@@ -224,7 +224,7 @@ export default function AddDeckScreen() {
                 label={t('description')}
                 labelRight={
                   <TouchableOpacity
-                    style={[styles.aiBtn, { backgroundColor: C.isDark ? 'rgba(165,180,252,0.12)' : 'rgba(66,85,255,0.08)', borderColor: C.isDark ? 'rgba(165,180,252,0.3)' : 'rgba(66,85,255,0.2)' }]}
+                    style={[styles.aiBtn, { backgroundColor: C.aiAccentBg, borderColor: C.aiAccentBorder }]}
                     disabled={!title.trim() || isAiDesc}
                     activeOpacity={0.7}
                     onPress={async () => {
@@ -273,7 +273,7 @@ export default function AddDeckScreen() {
                 label={t('coverImageUrl')}
                 labelRight={
                   <TouchableOpacity
-                    style={[styles.aiBtn, { backgroundColor: C.isDark ? 'rgba(165,180,252,0.12)' : 'rgba(66,85,255,0.08)', borderColor: C.isDark ? 'rgba(165,180,252,0.3)' : 'rgba(66,85,255,0.2)' }]}
+                    style={[styles.aiBtn, { backgroundColor: C.aiAccentBg, borderColor: C.aiAccentBorder }]}
                     disabled={!title.trim() || isAiCover}
                     activeOpacity={0.7}
                     onPress={async () => {

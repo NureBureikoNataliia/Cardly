@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { fetchIsAdmin } from '@/src/lib/fetchIsAdmin';
-import { signInWithGoogleOAuth } from '@/src/lib/signInWithGoogle';
+import { handleOAuthDeepLink, signInWithGoogleOAuth } from '@/src/lib/signInWithGoogle';
 import { supabase } from '@/src/lib/supabase';
 
 interface AuthContextType {
@@ -55,6 +56,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Complete OAuth when returning to the app via deep link (Expo Go / native).
+  const linkingUrl = Linking.useURL();
+  useEffect(() => {
+    if (linkingUrl) void handleOAuthDeepLink(linkingUrl);
+  }, [linkingUrl]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      void handleOAuthDeepLink(url);
+    });
+    return () => sub.remove();
+  }, []);
+
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -80,9 +95,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { session: s },
     } = await supabase.auth.getSession();
+    if (!s) {
+      return { error: new Error('OAuth session missing') };
+    }
     setSession(s);
-    setUser(s?.user ?? null);
-    const admin = await fetchIsAdmin(s?.user?.id, s?.user?.email);
+    setUser(s.user);
+    const admin = await fetchIsAdmin(s.user.id, s.user.email);
     setIsAdmin(admin);
     return { error: null, isAdmin: admin };
   };

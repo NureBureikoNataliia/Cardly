@@ -66,5 +66,10 @@ export function useAppColors() {
     inputBorder:  isDark ? '#2d3f55' : '#e8eaee',
     placeholder:  isDark ? '#6b7280' : '#c4cbd8',
     tint:         isDark ? '#a5b4fc' : '#4255ff',
+    /** Outlined AI chips (deck actions, add-card labels) */
+    aiAccentBg:     isDark ? 'rgba(99,102,241,0.22)' : '#eef0ff',
+    aiAccentBorder: isDark ? 'rgba(165,180,252,0.5)' : 'rgba(99,102,241,0.28)',
+    /** Filled primary AI CTA — keeps white label readable in dark mode */
+    aiButtonFill:   isDark ? '#6366f1' : '#4255ff',
   } as const;
 }
