@@ -80,6 +80,17 @@ export function hasMediaFormChanges(a: CardMediaForm, b: CardMediaForm): boolean
   return !sideFormsEqual(a.front, b.front) || !sideFormsEqual(a.back, b.back);
 }
 
+export function hasMediaFormContent(form: CardMediaForm): boolean {
+  return hasMediaFormSideContent(form, "front") || hasMediaFormSideContent(form, "back");
+}
+
+export function hasMediaFormSideContent(
+  form: CardMediaForm,
+  side: CardMediaSide,
+): boolean {
+  return CARD_MEDIA_TYPES.some((type) => form[side].urls[type].trim().length > 0);
+}
+
 export function mediaFormToInsertRows(
   cardId: string,
   form: CardMediaForm,

@@ -29,9 +29,25 @@ export type CardTypeName = "basic" | "cloze";
 
 const CLOZE_GAP = /\[\[([^\]]*)\]\]/g;
 
+/** Trims outer space for the editor input. */
+export function clozeHiddenForEdit(hidden: string): string {
+  return hidden.trim();
+}
+
+/** Visible empty-gap marker when no hint is set (ASCII-safe, all platforms). */
+export const CLOZE_GAP_MARKER = "[…]";
+
+/** Default cloze answer spacing: one space before and after the word(s). */
+export function normalizeClozeHidden(hidden: string): string {
+  const t = hidden.trim();
+  if (!t) return "";
+  return ` ${t} `;
+}
+
 /** Serializes to legacy single-gap `front_text` for search and old clients. */
 export function buildClozeFrontText(parts: ClozeParts): string {
-  return `${parts.before}[[${parts.hidden}]]${parts.after}`;
+  const hidden = normalizeClozeHidden(parts.hidden);
+  return `${parts.before}[[${hidden.trim()}]]${parts.after}`;
 }
 
 /** First `[[...]]` in text → structured parts (legacy cards). */
@@ -58,7 +74,7 @@ export function getClozePartsFromCard(card: Card): ClozeParts | null {
     return {
       before: c.before,
       gapFront: gf,
-      hidden: c.hidden.trim(),
+      hidden: normalizeClozeHidden(c.hidden),
       after: c.after,
     };
   }

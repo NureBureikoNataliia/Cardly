@@ -3,6 +3,7 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import {
+    CLOZE_GAP_MARKER,
     getClozePartsFromCard,
     isClozeGapComplete,
     normalizeCardType,
@@ -49,7 +50,13 @@ import { useAppColors } from "@/src/contexts/ThemeContext";
 
 const RATINGS: SubmitCardReviewRating[] = ["again", "hard", "good", "easy"];
 
-function ClozeFrontParts({ parts }: { parts: ClozeParts }) {
+function ClozeFrontParts({
+  parts,
+  gapLabel,
+}: {
+  parts: ClozeParts;
+  gapLabel: string;
+}) {
   const C = useAppColors();
   const gap =
     parts.gapFront.trim().length > 0 ? (
@@ -58,7 +65,7 @@ function ClozeFrontParts({ parts }: { parts: ClozeParts }) {
         {parts.gapFront.trim()}{" "}
       </Text>
     ) : (
-      <Text style={[clozeTextStyles.gap, { color: C.textMuted }]}> ▯▯▯ </Text>
+      <Text style={[clozeTextStyles.gap, { color: C.textMuted }]}> {gapLabel} </Text>
     );
   return (
     <Text style={[clozeTextStyles.title, { color: C.text }]}>
@@ -88,8 +95,8 @@ const clozeTextStyles = StyleSheet.create({
     marginBottom: 12,
   },
   gap: {
-    letterSpacing: 3,
-    textDecorationLine: "underline",
+    fontStyle: "italic",
+    fontWeight: "600",
   },
   gapHint: {
     fontStyle: "italic",
@@ -334,7 +341,12 @@ export default function DeckStudyScreen() {
           <View style={styles.cardInner}>
             {clozeOk ? (
               <>
-                {!showBack ? <ClozeFrontParts parts={clozeParts} /> : null}
+                {!showBack ? (
+                  <ClozeFrontParts
+                    parts={clozeParts}
+                    gapLabel={t("clozeGapMarker") || CLOZE_GAP_MARKER}
+                  />
+                ) : null}
                 {showBack ? <ClozeBackParts parts={clozeParts} /> : null}
                 {visibleMedia.map((item) => (
                   <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
@@ -350,7 +362,7 @@ export default function DeckStudyScreen() {
                 ))}
               </>
             )}
-            {showBack && currentCard.notes ? (
+            {!showBack && currentCard.notes ? (
               <Text style={[styles.cardNotes, { color: C.textSub }]}>{currentCard.notes}</Text>
             ) : null}
             {!showBack && <Text style={[styles.hint, { color: C.textMuted }]}>{t("showAnswer")}</Text>}

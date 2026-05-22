@@ -1427,6 +1427,13 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
         />
       ))}
 
+      {card.notes ? (
+        <View style={styles.cardNotesRow}>
+          <Feather name="file-text" size={12} color={C.textMuted} />
+          <Text style={[styles.cardNotes, { color: C.textMuted }]}>{card.notes}</Text>
+        </View>
+      ) : null}
+
       {showBack ? (
         <>
           <View style={styles.cardDividerRow}>
@@ -1449,14 +1456,6 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
             />
           ))}
         </>
-      ) : null}
-
-      {/* Notes */}
-      {card.notes ? (
-        <View style={styles.cardNotesRow}>
-          <Feather name="file-text" size={12} color={C.textMuted} />
-          <Text style={[styles.cardNotes, { color: C.textMuted }]}>{card.notes}</Text>
-        </View>
       ) : null}
 
       {/* Actions */}

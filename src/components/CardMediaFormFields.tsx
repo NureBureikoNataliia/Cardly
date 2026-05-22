@@ -15,22 +15,9 @@ const MEDIA_META: Record<
   CardMediaType,
   { icon: keyof typeof Feather.glyphMap; labelKey: string; focusSuffix: string }
 > = {
-  image: { icon: "image", labelKey: "frontImageUrl", focusSuffix: "Image" },
-  audio: { icon: "volume-2", labelKey: "frontAudioUrl", focusSuffix: "Audio" },
-  video: { icon: "video", labelKey: "frontVideoUrl", focusSuffix: "Video" },
-};
-
-const LABEL_KEYS: Record<CardMediaSide, Record<CardMediaType, string>> = {
-  front: {
-    image: "frontImageUrl",
-    audio: "frontAudioUrl",
-    video: "frontVideoUrl",
-  },
-  back: {
-    image: "backImageUrl",
-    audio: "backAudioUrl",
-    video: "backVideoUrl",
-  },
+  image: { icon: "image", labelKey: "mediaKindImage", focusSuffix: "Image" },
+  audio: { icon: "volume-2", labelKey: "mediaKindAudio", focusSuffix: "Audio" },
+  video: { icon: "video", labelKey: "mediaKindVideo", focusSuffix: "Video" },
 };
 
 type Props = {
@@ -60,7 +47,7 @@ export function CardMediaFormFields({
   const sideForm = mediaForm[side];
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { borderTopColor: C.borderLight }]}>
       <Text style={[styles.orderHint, { color: C.textSub }]}>{t("mediaOrderHint")}</Text>
       {sideForm.order.map((kind, index) => {
         const focusKey = `${side}${MEDIA_META[kind].focusSuffix}`;
@@ -93,7 +80,7 @@ export function CardMediaFormFields({
             <View style={styles.mediaFieldCol}>
               <View style={styles.labelRow}>
                 <Text style={[styles.fieldLabel, { color: C.textSub }]}>
-                  {t(LABEL_KEYS[side][kind])}
+                  {t(MEDIA_META[kind].labelKey)}
                 </Text>
                 {kind === "image" ? imageLabelRight : null}
                 {kind === "audio" ? audioLabelRight : null}
@@ -139,10 +126,20 @@ export function CardMediaFormFields({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 12 },
-  orderHint: { fontSize: 12, lineHeight: 17, marginBottom: 2 },
+  wrap: {
+    gap: 12,
+    marginTop: 20,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  orderHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 6,
+    flexShrink: 0,
+  },
   mediaBlock: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  orderBtns: { paddingTop: 26, gap: 2 },
+  orderBtns: { paddingTop: 22, gap: 2, flexShrink: 0 },
   orderBtn: {
     width: 32,
     height: 28,

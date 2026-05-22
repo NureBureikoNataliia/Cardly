@@ -10,6 +10,7 @@ import {
   useLayoutEffect,
   useState,
   type ReactElement,
+  type ReactNode,
 } from "react";
 import {
     ActivityIndicator,
@@ -39,8 +40,11 @@ import type { Card } from "@/assets/data/cards";
 import type { CardExtra, CardTypeName, ClozeParts } from "@/src/lib/cardModel";
 import {
   buildClozeFrontText,
+  clozeHiddenForEdit,
   getClozePartsFromCard,
+  CLOZE_GAP_MARKER,
   isClozeGapComplete,
+  normalizeClozeHidden,
   newPairId,
   normalizeCardType,
   parseCardExtra,
@@ -49,10 +53,13 @@ import {
   cardMediaRowsToForm,
   emptyCardMediaForm,
   hasMediaFormChanges,
+  hasMediaFormContent,
+  hasMediaFormSideContent,
   moveMediaInForm,
   orderedMediaFromForm,
   replaceCardMedia,
   swapCardMediaFormSides,
+  type CardMediaForm,
   type CardMediaSide,
 } from "@/src/lib/cardMedia";
 import { useAppColors } from "@/src/contexts/ThemeContext";
@@ -70,16 +77,79 @@ const webTextInputNoOutline: TextStyle | undefined =
     ? ({ outlineWidth: 0, outlineStyle: "none" } as unknown as TextStyle)
     : undefined;
 
+function basicSideHasContent(
+  text: string,
+  mediaForm: CardMediaForm,
+  side: CardMediaSide,
+  includeNotesOnFront: boolean,
+  notes: string,
+): boolean {
+  if (side === "front" && includeNotesOnFront && notes.trim().length > 0) return true;
+  return text.trim().length > 0 || hasMediaFormSideContent(mediaForm, side);
+}
+
+function clozeFrontSideHasContent(
+  cloze: ClozeParts,
+  mediaForm: CardMediaForm,
+  notes: string,
+): boolean {
+  return (
+    cloze.before.trim().length > 0 ||
+    cloze.gapFront.trim().length > 0 ||
+    cloze.after.trim().length > 0 ||
+    notes.trim().length > 0 ||
+    hasMediaFormSideContent(mediaForm, "front")
+  );
+}
+
+function clozeBackSideHasContent(cloze: ClozeParts, mediaForm: CardMediaForm): boolean {
+  return (
+    cloze.hidden.trim().length > 0 || hasMediaFormSideContent(mediaForm, "back")
+  );
+}
+
+function isCardFormValid(
+  cardType: CardTypeName,
+  fields: {
+    frontText: string;
+    backText: string;
+    notes: string;
+    cloze: ClozeParts;
+    mediaForm: CardMediaForm;
+  },
+): boolean {
+  if (cardType === "cloze") {
+    return (
+      clozeFrontSideHasContent(fields.cloze, fields.mediaForm, fields.notes) &&
+      clozeBackSideHasContent(fields.cloze, fields.mediaForm)
+    );
+  }
+  return (
+    basicSideHasContent(
+      fields.frontText,
+      fields.mediaForm,
+      "front",
+      true,
+      fields.notes,
+    ) && basicSideHasContent(fields.backText, fields.mediaForm, "back", false, fields.notes)
+  );
+}
+
 const addCardStudyClozeStyles = StyleSheet.create({
+  wrap: {
+    width: "100%",
+    marginBottom: 12,
+  },
   title: {
     fontSize: 22,
     fontWeight: "700",
+    lineHeight: 30,
     textAlign: "center",
-    marginBottom: 12,
+    width: "100%",
   },
   gap: {
-    letterSpacing: 3,
-    textDecorationLine: "underline",
+    fontStyle: "italic",
+    fontWeight: "600",
   },
   gapHint: {
     fontStyle: "italic",
@@ -93,6 +163,8 @@ const addCardStudyClozeStyles = StyleSheet.create({
 
 function AddCardStudyClozeFront({ parts }: { parts: ClozeParts }) {
   const C = useAppColors();
+  const { t } = useLanguage();
+  const gapLabel = t("clozeGapMarker") || CLOZE_GAP_MARKER;
   const gap =
     parts.gapFront.trim().length > 0 ? (
       <Text style={[addCardStudyClozeStyles.gapHint, { color: C.textSub }]}>
@@ -100,25 +172,29 @@ function AddCardStudyClozeFront({ parts }: { parts: ClozeParts }) {
         {parts.gapFront.trim()}{" "}
       </Text>
     ) : (
-      <Text style={[addCardStudyClozeStyles.gap, { color: C.textMuted }]}> ▯▯▯ </Text>
+      <Text style={[addCardStudyClozeStyles.gap, { color: C.textMuted }]}> {gapLabel} </Text>
     );
   return (
-    <Text style={[addCardStudyClozeStyles.title, { color: C.text }]}>
-      {parts.before}
-      {gap}
-      {parts.after}
-    </Text>
+    <View style={addCardStudyClozeStyles.wrap}>
+      <Text style={[addCardStudyClozeStyles.title, { color: C.text }]}>
+        {parts.before}
+        {gap}
+        {parts.after}
+      </Text>
+    </View>
   );
 }
 
 function AddCardStudyClozeBack({ parts }: { parts: ClozeParts }) {
   const C = useAppColors();
   return (
-    <Text style={[addCardStudyClozeStyles.title, { color: C.text }]}>
-      {parts.before}
-      <Text style={addCardStudyClozeStyles.answer}>{parts.hidden}</Text>
-      {parts.after}
-    </Text>
+    <View style={addCardStudyClozeStyles.wrap}>
+      <Text style={[addCardStudyClozeStyles.title, { color: C.text }]}>
+        {parts.before}
+        <Text style={addCardStudyClozeStyles.answer}>{parts.hidden}</Text>
+        {parts.after}
+      </Text>
+    </View>
   );
 }
 
@@ -127,36 +203,37 @@ const clozeLivePreviewStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     padding: 12,
-    gap: 10,
+    marginBottom: 16,
+    width: "100%",
   },
   row: {
     flexDirection: "row",
-    alignItems: "stretch",
-    gap: 0,
+    alignItems: "flex-start",
+    gap: 12,
+    width: "100%",
   },
+  stack: { gap: 10, width: "100%" },
   col: {
     flex: 1,
     minWidth: 0,
     gap: 6,
   },
-  colLeft: { paddingRight: 12 },
-  colRight: { paddingLeft: 12 },
-  divider: { width: 1, alignSelf: "stretch", flexShrink: 0 },
-  sideLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+  colLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
   },
-  sentence: { fontSize: 15, lineHeight: 22 },
+  sentence: {
+    fontSize: 15,
+    lineHeight: 22,
+    width: "100%",
+  },
   gap: {
-    color: "#9ca3af",
-    letterSpacing: 2,
-    textDecorationLine: "underline",
+    fontStyle: "italic",
+    fontWeight: "600",
   },
-  gapHint: { color: "#4b5563", fontStyle: "italic", fontWeight: "500" },
+  gapHint: { fontStyle: "italic", fontWeight: "500" },
   answer: { fontWeight: "800", color: "#059669" },
-  placeholder: { fontSize: 14, lineHeight: 20, fontStyle: "italic" },
 });
 
 function ClozeLivePreview({
@@ -166,7 +243,9 @@ function ClozeLivePreview({
   subColor,
   borderColor,
   bgColor,
-  t,
+  gapLabel,
+  frontLabel,
+  backLabel,
 }: {
   parts: ClozeParts;
   sideBySide: boolean;
@@ -174,52 +253,49 @@ function ClozeLivePreview({
   subColor: string;
   borderColor: string;
   bgColor: string;
-  t: (key: string) => string;
+  gapLabel: string;
+  frontLabel: string;
+  backLabel: string;
 }) {
-  const ready = isClozeGapComplete(parts);
   const gap =
     parts.gapFront.trim().length > 0 ? (
-      <Text style={clozeLivePreviewStyles.gapHint}> {parts.gapFront.trim()} </Text>
+      <Text style={[clozeLivePreviewStyles.gapHint, { color: subColor }]}>
+        {" "}
+        {parts.gapFront.trim()}{" "}
+      </Text>
     ) : (
-      <Text style={clozeLivePreviewStyles.gap}> ▯▯▯ </Text>
+      <Text style={[clozeLivePreviewStyles.gap, { color: subColor }]}> {gapLabel} </Text>
     );
 
-  const frontSentence = ready ? (
+  const frontSentence = (
     <Text style={[clozeLivePreviewStyles.sentence, { color: textColor }]}>
       {parts.before}
       {gap}
       {parts.after}
     </Text>
-  ) : (
-    <Text style={[clozeLivePreviewStyles.placeholder, { color: subColor }]}>
-      {t("addCardPreviewIncomplete")}
-    </Text>
   );
 
-  const backSentence = ready ? (
+  const backSentence = (
     <Text style={[clozeLivePreviewStyles.sentence, { color: textColor }]}>
       {parts.before}
-      <Text style={clozeLivePreviewStyles.answer}>{parts.hidden}</Text>
+      {parts.hidden.trim().length > 0 ? (
+        <Text style={clozeLivePreviewStyles.answer}>{parts.hidden}</Text>
+      ) : (
+        <Text style={[clozeLivePreviewStyles.gap, { color: subColor }]}> {gapLabel} </Text>
+      )}
       {parts.after}
-    </Text>
-  ) : (
-    <Text style={[clozeLivePreviewStyles.placeholder, { color: subColor }]}>
-      {t("addCardPreviewIncomplete")}
     </Text>
   );
 
   return (
     <View style={[clozeLivePreviewStyles.wrap, { backgroundColor: bgColor, borderColor }]}>
-      <View style={sideBySide ? clozeLivePreviewStyles.row : { gap: 12 }}>
-        <View style={[clozeLivePreviewStyles.col, sideBySide && clozeLivePreviewStyles.colLeft]}>
-          <Text style={[clozeLivePreviewStyles.sideLabel, { color: subColor }]}>{t("front")}</Text>
+      <View style={sideBySide ? clozeLivePreviewStyles.row : clozeLivePreviewStyles.stack}>
+        <View style={clozeLivePreviewStyles.col}>
+          <Text style={[clozeLivePreviewStyles.colLabel, { color: subColor }]}>{frontLabel}</Text>
           {frontSentence}
         </View>
-        {sideBySide ? (
-          <View style={[clozeLivePreviewStyles.divider, { backgroundColor: borderColor }]} />
-        ) : null}
-        <View style={[clozeLivePreviewStyles.col, sideBySide && clozeLivePreviewStyles.colRight]}>
-          <Text style={[clozeLivePreviewStyles.sideLabel, { color: subColor }]}>{t("back")}</Text>
+        <View style={clozeLivePreviewStyles.col}>
+          <Text style={[clozeLivePreviewStyles.colLabel, { color: subColor }]}>{backLabel}</Text>
           {backSentence}
         </View>
       </View>
@@ -513,11 +589,11 @@ export default function AddCardScreen() {
           if (cp) {
             setClozeBefore(cp.before);
             setClozeGapFront(cp.gapFront);
-            setClozeHidden(cp.hidden);
+            setClozeHidden(clozeHiddenForEdit(cp.hidden));
             setClozeAfter(cp.after);
             setInitialClozeBefore(cp.before);
             setInitialClozeGapFront(cp.gapFront);
-            setInitialClozeHidden(cp.hidden);
+            setInitialClozeHidden(clozeHiddenForEdit(cp.hidden));
             setInitialClozeAfter(cp.after);
           } else {
             setClozeBefore("");
@@ -552,10 +628,18 @@ export default function AddCardScreen() {
       return;
     }
 
-    const validBasic = frontText.trim().length > 0 && backText.trim().length > 0;
-    const validCloze =
-      clozeHidden.trim().length > 0 && clozeGapFront.trim().length > 0;
-    const ok = cardType === "cloze" ? validCloze : validBasic;
+    const ok = isCardFormValid(cardType, {
+      frontText,
+      backText,
+      notes,
+      cloze: {
+        before: clozeBefore,
+        gapFront: clozeGapFront,
+        hidden: clozeHidden,
+        after: clozeAfter,
+      },
+      mediaForm,
+    });
     if (!ok) return;
 
     setIsSaving(true);
@@ -567,7 +651,7 @@ export default function AddCardScreen() {
       const clozeParts: ClozeParts = {
         before: clozeBefore,
         gapFront: clozeGapFront.trim(),
-        hidden: clozeHidden.trim(),
+        hidden: normalizeClozeHidden(clozeHidden),
         after: clozeAfter,
       };
       const outFront =
@@ -697,15 +781,18 @@ export default function AddCardScreen() {
     }
   };
 
-  const isValid =
-    cardType === "cloze"
-      ? isClozeGapComplete({
-          before: clozeBefore,
-          gapFront: clozeGapFront,
-          hidden: clozeHidden,
-          after: clozeAfter,
-        })
-      : frontText.trim().length > 0 && backText.trim().length > 0;
+  const isValid = isCardFormValid(cardType, {
+    frontText,
+    backText,
+    notes,
+    cloze: {
+      before: clozeBefore,
+      gapFront: clozeGapFront,
+      hidden: clozeHidden,
+      after: clozeAfter,
+    },
+    mediaForm,
+  });
   const hasChanges =
     cardType !== initialCardType ||
     hasMediaFormChanges(mediaForm, initialMediaForm) ||
@@ -722,7 +809,7 @@ export default function AddCardScreen() {
   const clozePartsPreview: ClozeParts = {
     before: clozeBefore,
     gapFront: clozeGapFront.trim(),
-    hidden: clozeHidden.trim(),
+    hidden: normalizeClozeHidden(clozeHidden),
     after: clozeAfter,
   };
   const frontPreviewMedia = orderedMediaFromForm(mediaForm, "front");
@@ -828,7 +915,7 @@ export default function AddCardScreen() {
 
               {cardType === "cloze" ? (
                 <>
-                  <Text style={[styles.clozeIntro, { color: C.textSub }]}>{t("clozeIntro")}</Text>
+                  <Text style={[styles.formIntro, { color: C.textSub }]}>{t("clozeIntro")}</Text>
                   <ClozeLivePreview
                     parts={clozePartsPreview}
                     sideBySide={formSideBySide}
@@ -836,7 +923,9 @@ export default function AddCardScreen() {
                     subColor={C.textSub}
                     borderColor={C.borderLight}
                     bgColor={C.inputBg}
-                    t={t}
+                    gapLabel={t("clozeGapMarker") || CLOZE_GAP_MARKER}
+                    frontLabel={t("clozePreviewFrontLabel")}
+                    backLabel={t("clozePreviewBackLabel")}
                   />
                   <View
                     style={[
@@ -852,10 +941,11 @@ export default function AddCardScreen() {
                         formSideBySide && styles.basicSideColLeft,
                       ]}
                     >
-                      <Text style={[styles.basicSideHeading, { color: C.text }]}>
-                        {t("front")}
-                      </Text>
-                      <Field label={t("clozeFieldBefore")}>
+                      <CardSideColumnHeader
+                        title={t("front")}
+                        balanced={formSideBySide}
+                      />
+                      <Field label={t("clozeFieldBefore")} required>
                         <InputRow
                           icon="align-left"
                           focused={focusedField === "cBefore"}
@@ -876,7 +966,7 @@ export default function AddCardScreen() {
                           />
                         </InputRow>
                       </Field>
-                      <Field label={t("clozeFieldGapFront")} required>
+                      <Field label={t("clozeFieldGapFront")}>
                         <InputRow
                           icon="book-open"
                           focused={focusedField === "cGap"}
@@ -942,6 +1032,14 @@ export default function AddCardScreen() {
                         t={t}
                         audioLabelRight={renderAudioUploadBtn("front")}
                       />
+                      <CardNotesField
+                        notes={notes}
+                        onChangeNotes={setNotes}
+                        focusedField={focusedField}
+                        onFocusField={setFocusedField}
+                        formSideBySide={formSideBySide}
+                        t={t}
+                      />
                     </View>
 
                     {formSideBySide ? (
@@ -956,15 +1054,11 @@ export default function AddCardScreen() {
                         formSideBySide && styles.basicSideColRight,
                       ]}
                     >
-                      <Text style={[styles.basicSideHeading, { color: C.text }]}>
-                        {t("back")}
-                        <Text style={{ color: "#ef4444" }}> *</Text>
-                      </Text>
-                      <Field
-                        label={t("clozeFieldHidden")}
-                        required
-                        style={formSideBySide ? styles.basicSideTextField : undefined}
-                      >
+                      <CardSideColumnHeader
+                        title={t("back")}
+                        balanced={formSideBySide}
+                      />
+                      <Field label={t("clozeFieldHidden")} required>
                         <InputRow
                           icon="target"
                           focused={focusedField === "cHidden"}
@@ -976,8 +1070,9 @@ export default function AddCardScreen() {
                           <TextInput
                             style={[
                               styles.input,
-                              styles.inputClozeHidden,
+                              styles.inputMulti,
                               formSideBySide && styles.inputMultiFill,
+                              styles.inputClozeHidden,
                               webTextInputNoOutline,
                             ]}
                             placeholder={t("clozePlaceholderHidden")}
@@ -985,7 +1080,12 @@ export default function AddCardScreen() {
                             value={clozeHidden}
                             onChangeText={setClozeHidden}
                             onFocus={() => setFocusedField("cHidden")}
-                            onBlur={() => setFocusedField(null)}
+                            onBlur={() => {
+                              setFocusedField(null);
+                              if (clozeHidden.trim()) {
+                                setClozeHidden(normalizeClozeHidden(clozeHidden));
+                              }
+                            }}
                             multiline
                             textAlignVertical="top"
                           />
@@ -1015,6 +1115,9 @@ export default function AddCardScreen() {
                 </>
               ) : (
                 <>
+                  <Text style={[styles.formIntro, { color: C.textSub }]}>
+                    {t("cardFormIntroBasic")}
+                  </Text>
                   <View
                     style={[
                       styles.basicSidesRow,
@@ -1029,25 +1132,11 @@ export default function AddCardScreen() {
                         formSideBySide && styles.basicSideColLeft,
                       ]}
                     >
-                      <View
-                        style={[
-                          styles.basicSideHeaderRow,
-                          formSideBySide && styles.basicSideHeaderRowBalanced,
-                        ]}
-                      >
-                        <Text style={[styles.basicSideHeading, { color: C.text }]}>
-                          {t("front")}
-                          <Text style={{ color: "#ef4444" }}> *</Text>
-                        </Text>
-                        {formSideBySide ? (
-                          <View style={styles.basicSideHeaderSpacer} />
-                        ) : null}
-                      </View>
-                      <Field
-                        label={t("front")}
-                        hideLabel
-                        style={formSideBySide ? styles.basicSideTextField : undefined}
-                      >
+                      <CardSideColumnHeader
+                        title={t("front")}
+                        balanced={formSideBySide}
+                      />
+                      <Field hideLabel>
                         <InputRow
                           icon="align-left"
                           focused={focusedField === "front"}
@@ -1119,6 +1208,14 @@ export default function AddCardScreen() {
                         }
                         audioLabelRight={renderAudioUploadBtn("front")}
                       />
+                      <CardNotesField
+                        notes={notes}
+                        onChangeNotes={setNotes}
+                        focusedField={focusedField}
+                        onFocusField={setFocusedField}
+                        formSideBySide={formSideBySide}
+                        t={t}
+                      />
                     </View>
 
                     {formSideBySide ? (
@@ -1133,46 +1230,37 @@ export default function AddCardScreen() {
                         formSideBySide && styles.basicSideColRight,
                       ]}
                     >
-                      <View
-                        style={[
-                          styles.basicSideHeaderRow,
-                          formSideBySide && styles.basicSideHeaderRowBalanced,
-                        ]}
-                      >
-                        <Text style={[styles.basicSideHeading, { color: C.text }]}>
-                          {t("back")}
-                          <Text style={{ color: "#ef4444" }}> *</Text>
-                        </Text>
-                        <TouchableOpacity
-                          style={[
-                            styles.aiLabelBtn,
-                            {
-                              borderColor: C.tint,
-                              backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
-                              opacity: !frontText.trim() || aiBackBusy ? 0.5 : 1,
-                            },
-                          ]}
-                          onPress={handleAiFillBack}
-                          disabled={aiBackBusy || !frontText.trim()}
-                          activeOpacity={0.75}
-                          accessibilityRole="button"
-                          accessibilityLabel={t("aiGenerateBack")}
-                        >
-                          {aiBackBusy ? (
-                            <ActivityIndicator size="small" color={C.tint} />
-                          ) : (
-                            <Feather name="zap" size={14} color={C.tint} />
-                          )}
-                          <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
-                            {aiBackBusy ? t("aiGenerateBackLoading") : t("aiGenerateBack")}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                      <Field
-                        label={t("back")}
-                        hideLabel
-                        style={formSideBySide ? styles.basicSideTextField : undefined}
-                      >
+                      <CardSideColumnHeader
+                        title={t("back")}
+                        balanced={formSideBySide}
+                        right={
+                          <TouchableOpacity
+                            style={[
+                              styles.aiLabelBtn,
+                              {
+                                borderColor: C.tint,
+                                backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+                                opacity: !frontText.trim() || aiBackBusy ? 0.5 : 1,
+                              },
+                            ]}
+                            onPress={handleAiFillBack}
+                            disabled={aiBackBusy || !frontText.trim()}
+                            activeOpacity={0.75}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("aiGenerateBack")}
+                          >
+                            {aiBackBusy ? (
+                              <ActivityIndicator size="small" color={C.tint} />
+                            ) : (
+                              <Feather name="zap" size={14} color={C.tint} />
+                            )}
+                            <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+                              {aiBackBusy ? t("aiGenerateBackLoading") : t("aiGenerateBack")}
+                            </Text>
+                          </TouchableOpacity>
+                        }
+                      />
+                      <Field hideLabel>
                         <InputRow
                           icon="align-right"
                           focused={focusedField === "back"}
@@ -1276,31 +1364,6 @@ export default function AddCardScreen() {
                   ) : null}
                 </>
               )}
-
-              <View style={[styles.divider, { backgroundColor: C.borderLight }]} />
-
-              {/* NOTES */}
-              <Field label={t("notes")}>
-                <InputRow
-                  icon="file-text"
-                  focused={focusedField === "notes"}
-                  onFocus={() => setFocusedField("notes")}
-                  onBlur={() => setFocusedField(null)}
-                  multiline
-                >
-                  <TextInput
-                    style={[styles.input, styles.inputNotes, webTextInputNoOutline]}
-                    placeholder={t("notesPlaceholder")}
-                    placeholderTextColor={C.placeholder}
-                    value={notes}
-                    onChangeText={setNotes}
-                    onFocus={() => setFocusedField("notes")}
-                    onBlur={() => setFocusedField(null)}
-                    multiline
-                    textAlignVertical="top"
-                  />
-                </InputRow>
-              </Field>
 
               {/* ERROR */}
               {error ? (
@@ -1483,7 +1546,9 @@ export default function AddCardScreen() {
                 onPress={() => setStudyPreviewShowBack((v) => !v)}
               >
                 <View style={styles.studyPreviewCardInner}>
-                  {cardType === "cloze" && isClozeGapComplete(clozePartsPreview) ? (
+                  {cardType === "cloze" &&
+                  clozeFrontSideHasContent(clozePartsPreview, mediaForm, notes) &&
+                  clozeBackSideHasContent(clozePartsPreview, mediaForm) ? (
                     <>
                       {!studyPreviewShowBack ? (
                         <AddCardStudyClozeFront parts={clozePartsPreview} />
@@ -1517,7 +1582,7 @@ export default function AddCardScreen() {
                       {t("addCardPreviewIncomplete")}
                     </Text>
                   )}
-                  {studyPreviewShowBack && notes.trim() ? (
+                  {!studyPreviewShowBack && notes.trim() ? (
                     <Text style={[styles.studyPreviewNotes, { color: C.textSub }]}>{notes.trim()}</Text>
                   ) : null}
                   {!studyPreviewShowBack ? (
@@ -1551,6 +1616,66 @@ export default function AddCardScreen() {
 }
 
 /* ─── HELPER SUB-COMPONENTS ─── */
+function CardSideColumnHeader({
+  title,
+  balanced,
+  right,
+}: {
+  title: string;
+  balanced?: boolean;
+  right?: ReactNode;
+}) {
+  const C = useAppColors();
+  return (
+    <View style={[styles.basicSideHeaderRow, balanced && styles.basicSideHeaderRowBalanced]}>
+      <Text style={[styles.basicSideHeading, { color: C.text }]}>{title}</Text>
+      {right ?? (balanced ? <View style={styles.basicSideHeaderSpacer} /> : null)}
+    </View>
+  );
+}
+
+function CardNotesField({
+  notes,
+  onChangeNotes,
+  focusedField,
+  onFocusField,
+  formSideBySide,
+  t,
+}: {
+  notes: string;
+  onChangeNotes: (v: string) => void;
+  focusedField: string | null;
+  onFocusField: (v: string | null) => void;
+  formSideBySide: boolean;
+  t: (k: string) => string;
+}) {
+  const C = useAppColors();
+  return (
+    <Field label={t("notes")}>
+      <Text style={[styles.notesFrontHint, { color: C.textMuted }]}>{t("notesFrontHint")}</Text>
+      <InputRow
+        icon="file-text"
+        focused={focusedField === "notes"}
+        onFocus={() => onFocusField("notes")}
+        onBlur={() => onFocusField(null)}
+        multiline
+      >
+        <TextInput
+          style={[styles.input, styles.inputNotes, webTextInputNoOutline]}
+          placeholder={t("notesPlaceholder")}
+          placeholderTextColor={C.placeholder}
+          value={notes}
+          onChangeText={onChangeNotes}
+          onFocus={() => onFocusField("notes")}
+          onBlur={() => onFocusField(null)}
+          multiline
+          textAlignVertical="top"
+        />
+      </InputRow>
+    </Field>
+  );
+}
+
 function Field({
   label,
   required,
@@ -1559,7 +1684,7 @@ function Field({
   style,
   children,
 }: {
-  label: string;
+  label?: string;
   required?: boolean;
   hideLabel?: boolean;
   labelRight?: React.ReactNode;
@@ -1617,6 +1742,7 @@ function InputRow({
         fill && styles.inputRowFill,
         focused && [styles.inputRowFocused, C.isDark && { backgroundColor: C.surface, borderColor: '#6366f1' }],
       ]}
+      pointerEvents="box-none"
     >
       <Feather
         name={icon}
@@ -1764,6 +1890,11 @@ const styles = StyleSheet.create({
   inputNotes: {
     minHeight: 60,
     textAlignVertical: "top",
+  },
+  notesFrontHint: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: -2,
   },
 
   /* ERROR */
@@ -1941,27 +2072,32 @@ const styles = StyleSheet.create({
   studyPreviewScrollInner: {
     padding: 16,
     paddingBottom: 24,
+    flexGrow: 1,
   },
   studyPreviewCard: {
     width: "100%",
-    minHeight: 200,
+    minHeight: 160,
     backgroundColor: "#fff",
     borderRadius: 16,
-    padding: 24,
-    justifyContent: "center",
-    alignItems: "center",
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    justifyContent: "flex-start",
+    alignItems: "stretch",
     borderLeftWidth: 6,
     borderLeftColor: "#66BB6A",
   },
   studyPreviewCardInner: {
-    alignItems: "center",
     width: "100%",
+    alignItems: "stretch",
+    gap: 12,
   },
   studyPreviewCardTitle: {
     fontSize: 22,
     fontWeight: "700",
+    lineHeight: 30,
     textAlign: "center",
-    marginBottom: 12,
+    width: "100%",
+    marginBottom: 4,
   },
   studyPreviewNotes: {
     fontSize: 15,
@@ -1971,7 +2107,9 @@ const styles = StyleSheet.create({
   },
   studyPreviewTapHint: {
     fontSize: 14,
-    marginTop: 16,
+    marginTop: 8,
+    textAlign: "center",
+    width: "100%",
   },
 
   typeRow: {
@@ -1999,11 +2137,10 @@ const styles = StyleSheet.create({
   typeChipTxtOn: {
     color: "#4255ff",
   },
-  clozeIntro: {
+  formIntro: {
     fontSize: 14,
-    color: "#4b5563",
     lineHeight: 20,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   inputClozeCompact: {
     minHeight: 44,
@@ -2018,9 +2155,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   inputClozeHidden: {
-    minHeight: 56,
     fontWeight: "600",
-    textAlignVertical: "top",
   },
   revToggle: {
     flexDirection: "row",
@@ -2074,16 +2209,12 @@ const styles = StyleSheet.create({
   basicSideColRight: {
     paddingLeft: 14,
   },
-  basicSideTextField: {
-    flex: 1,
-    minHeight: 80,
-  },
   basicSideHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    marginBottom: 2,
+    marginBottom: 10,
   },
   basicSideHeaderRowBalanced: {
     minHeight: 34,
@@ -2095,11 +2226,12 @@ const styles = StyleSheet.create({
   inputRowFill: {
     flex: 1,
     alignSelf: "stretch",
-    minHeight: 80,
+    minHeight: 120,
   },
   inputMultiFill: {
     flex: 1,
-    minHeight: 80,
+    minHeight: 96,
+    textAlignVertical: "top",
   },
   basicSideHeading: {
     fontSize: 15,
