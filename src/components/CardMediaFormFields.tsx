@@ -42,6 +42,7 @@ type Props = {
   onFocusField: (key: string | null) => void;
   t: (key: string) => string;
   imageLabelRight?: ReactNode;
+  audioLabelRight?: ReactNode;
 };
 
 export function CardMediaFormFields({
@@ -53,6 +54,7 @@ export function CardMediaFormFields({
   onFocusField,
   t,
   imageLabelRight,
+  audioLabelRight,
 }: Props) {
   const C = useAppColors();
   const sideForm = mediaForm[side];
@@ -94,6 +96,7 @@ export function CardMediaFormFields({
                   {t(LABEL_KEYS[side][kind])}
                 </Text>
                 {kind === "image" ? imageLabelRight : null}
+                {kind === "audio" ? audioLabelRight : null}
               </View>
               <View
                 style={[
@@ -112,14 +115,14 @@ export function CardMediaFormFields({
                 />
                 <TextInput
                   style={[styles.input, webTextInputNoOutline, { color: C.text }]}
-                  placeholder="https://..."
+                  placeholder={kind === "audio" ? t("mediaAudioPlaceholder") : "https://..."}
                   placeholderTextColor={C.placeholder}
                   value={sideForm.urls[kind]}
                   onChangeText={(value) => onUrlChange(side, kind, value)}
                   onFocus={() => onFocusField(focusKey)}
                   onBlur={() => onFocusField(null)}
                   autoCapitalize="none"
-                  keyboardType="url"
+                  keyboardType={kind === "audio" ? "default" : "url"}
                 />
                 {sideForm.urls[kind].length > 0 ? (
                   <Pressable onPress={() => onUrlChange(side, kind, "")} hitSlop={8}>

@@ -50,14 +50,18 @@ import { useAppColors } from "@/src/contexts/ThemeContext";
 const RATINGS: SubmitCardReviewRating[] = ["again", "hard", "good", "easy"];
 
 function ClozeFrontParts({ parts }: { parts: ClozeParts }) {
+  const C = useAppColors();
   const gap =
     parts.gapFront.trim().length > 0 ? (
-      <Text style={clozeTextStyles.gapHint}> {parts.gapFront.trim()} </Text>
+      <Text style={[clozeTextStyles.gapHint, { color: C.textSub }]}>
+        {" "}
+        {parts.gapFront.trim()}{" "}
+      </Text>
     ) : (
-      <Text style={clozeTextStyles.gap}> ▯▯▯ </Text>
+      <Text style={[clozeTextStyles.gap, { color: C.textMuted }]}> ▯▯▯ </Text>
     );
   return (
-    <Text style={clozeTextStyles.title}>
+    <Text style={[clozeTextStyles.title, { color: C.text }]}>
       {parts.before}
       {gap}
       {parts.after}
@@ -66,8 +70,9 @@ function ClozeFrontParts({ parts }: { parts: ClozeParts }) {
 }
 
 function ClozeBackParts({ parts }: { parts: ClozeParts }) {
+  const C = useAppColors();
   return (
-    <Text style={clozeTextStyles.title}>
+    <Text style={[clozeTextStyles.title, { color: C.text }]}>
       {parts.before}
       <Text style={clozeTextStyles.answer}>{parts.hidden}</Text>
       {parts.after}
@@ -79,17 +84,14 @@ const clozeTextStyles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#1f2937",
     textAlign: "center",
     marginBottom: 12,
   },
   gap: {
-    color: "#9ca3af",
     letterSpacing: 3,
     textDecorationLine: "underline",
   },
   gapHint: {
-    color: "#4b5563",
     fontStyle: "italic",
     fontWeight: "500",
   },
@@ -332,20 +334,20 @@ export default function DeckStudyScreen() {
           <View style={styles.cardInner}>
             {clozeOk ? (
               <>
+                {!showBack ? <ClozeFrontParts parts={clozeParts} /> : null}
+                {showBack ? <ClozeBackParts parts={clozeParts} /> : null}
                 {visibleMedia.map((item) => (
                   <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
                 ))}
-                {!showBack ? <ClozeFrontParts parts={clozeParts} /> : null}
-                {showBack ? <ClozeBackParts parts={clozeParts} /> : null}
               </>
             ) : (
               <>
-                {visibleMedia.map((item) => (
-                  <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
-                ))}
                 <Text style={[styles.cardTitle, { color: C.text }]}>
                   {showBack ? currentCard.back_text : currentCard.front_text}
                 </Text>
+                {visibleMedia.map((item) => (
+                  <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
+                ))}
               </>
             )}
             {showBack && currentCard.notes ? (
@@ -475,20 +477,17 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#1f2937",
     textAlign: "center",
     marginBottom: 12,
   },
   cardNotes: {
     fontSize: 15,
-    color: "#6b7280",
     fontStyle: "italic",
     textAlign: "center",
     marginTop: 8,
   },
   hint: {
     fontSize: 14,
-    color: "#9ca3af",
     marginTop: 16,
   },
   ratingButtons: {

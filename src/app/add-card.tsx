@@ -1,7 +1,16 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type ReactElement,
+} from "react";
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -16,9 +25,10 @@ import {
     useWindowDimensions,
     View,
 } from "react-native";
-import type { TextStyle } from "react-native";
+import type { StyleProp, TextStyle } from "react-native";
 
 import { Deck } from "@/assets/data/decks";
+import { AudioUploadModal, type AudioUploadModalPhase } from "@/src/components/AudioUploadModal";
 import ConfirmModal from "@/src/components/ConfirmModal";
 import { CardMediaFormFields } from "@/src/components/CardMediaFormFields";
 import { CardSideMedia } from "@/src/components/CardSideMedia";
@@ -43,9 +53,16 @@ import {
   orderedMediaFromForm,
   replaceCardMedia,
   swapCardMediaFormSides,
+  type CardMediaSide,
 } from "@/src/lib/cardMedia";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 import { generateCardBack, generateCardImageUrl } from "@/src/lib/gemini";
+import {
+  pickCardAudioFile,
+  uploadAudioErrorKey,
+  uploadCardAudioToStorage,
+  type UploadAudioPhase,
+} from "@/src/lib/uploadCardAudio";
 
 /** Web: hide browser default focus outline on TextInput (RN typings omit outlineStyle "none"). */
 const webTextInputNoOutline: TextStyle | undefined =
@@ -57,17 +74,14 @@ const addCardStudyClozeStyles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#1f2937",
     textAlign: "center",
     marginBottom: 12,
   },
   gap: {
-    color: "#9ca3af",
     letterSpacing: 3,
     textDecorationLine: "underline",
   },
   gapHint: {
-    color: "#4b5563",
     fontStyle: "italic",
     fontWeight: "500",
   },
@@ -78,14 +92,18 @@ const addCardStudyClozeStyles = StyleSheet.create({
 });
 
 function AddCardStudyClozeFront({ parts }: { parts: ClozeParts }) {
+  const C = useAppColors();
   const gap =
     parts.gapFront.trim().length > 0 ? (
-      <Text style={addCardStudyClozeStyles.gapHint}> {parts.gapFront.trim()} </Text>
+      <Text style={[addCardStudyClozeStyles.gapHint, { color: C.textSub }]}>
+        {" "}
+        {parts.gapFront.trim()}{" "}
+      </Text>
     ) : (
-      <Text style={addCardStudyClozeStyles.gap}> ▯▯▯ </Text>
+      <Text style={[addCardStudyClozeStyles.gap, { color: C.textMuted }]}> ▯▯▯ </Text>
     );
   return (
-    <Text style={addCardStudyClozeStyles.title}>
+    <Text style={[addCardStudyClozeStyles.title, { color: C.text }]}>
       {parts.before}
       {gap}
       {parts.after}
@@ -94,8 +112,9 @@ function AddCardStudyClozeFront({ parts }: { parts: ClozeParts }) {
 }
 
 function AddCardStudyClozeBack({ parts }: { parts: ClozeParts }) {
+  const C = useAppColors();
   return (
-    <Text style={addCardStudyClozeStyles.title}>
+    <Text style={[addCardStudyClozeStyles.title, { color: C.text }]}>
       {parts.before}
       <Text style={addCardStudyClozeStyles.answer}>{parts.hidden}</Text>
       {parts.after}
@@ -299,6 +318,93 @@ export default function AddCardScreen() {
   const [aiBackBusy, setAiBackBusy] = useState(false);
   const [aiFrontImgBusy, setAiFrontImgBusy] = useState(false);
   const [aiBackImgBusy, setAiBackImgBusy] = useState(false);
+  const [audioUploadModal, setAudioUploadModal] = useState<{
+    visible: boolean;
+    phase: AudioUploadModalPhase;
+    side: CardMediaSide | null;
+    fileName?: string;
+  } | null>(null);
+
+  const mapUploadPhase = (phase: UploadAudioPhase): AudioUploadModalPhase => {
+    if (phase === "caching") return "preparing";
+    return phase;
+  };
+
+  const handlePickAudio = useCallback(
+    async (side: CardMediaSide) => {
+      if (!user?.id) {
+        setErrorModal(t("uploadAudioNeedLogin"));
+        return;
+      }
+      if (!deckId) {
+        setErrorModal(t("deckNotFound"));
+        return;
+      }
+      const asset = await pickCardAudioFile();
+      if (!asset) return;
+
+      const fileName = asset.name ?? "audio";
+      setAudioUploadModal({ visible: true, phase: "reading", side, fileName });
+
+      const result = await uploadCardAudioToStorage({
+        localUri: asset.uri,
+        fileName,
+        mimeType: asset.mimeType,
+        fileSize: asset.size ?? null,
+        userId: user.id,
+        deckId,
+        cardId,
+        side,
+        pickerCacheUri: asset.uri,
+        onPhase: (phase) =>
+          setAudioUploadModal({ visible: true, phase: mapUploadPhase(phase), side, fileName }),
+      });
+
+      if (!result.ok) {
+        setAudioUploadModal(null);
+        const key = uploadAudioErrorKey(result.error);
+        const byKey: Record<string, string> = {
+          too_large: t("uploadAudioTooLarge"),
+          not_authenticated: t("uploadAudioNeedLogin"),
+          bucket_missing: t("uploadAudioBucketMissing"),
+          permission: t("uploadAudioPermission"),
+          mime: t("uploadAudioMimeType"),
+          read_failed: t("uploadAudioReadFailed"),
+        };
+        setErrorModal(byKey[key] ?? `${t("uploadAudioError")}\n\n${result.error}`);
+        return;
+      }
+
+      setMediaUrl(side, "audio", result.publicUrl);
+      setAudioUploadModal({ visible: true, phase: "done", side, fileName });
+      setTimeout(() => setAudioUploadModal(null), 700);
+    },
+    [cardId, deckId, t, user?.id],
+  );
+
+  const renderAudioUploadBtn = (side: CardMediaSide) => {
+    const uploading = audioUploadModal?.visible && audioUploadModal.side === side;
+    return (
+      <TouchableOpacity
+        style={[
+          styles.aiLabelBtn,
+          {
+            borderColor: C.tint,
+            backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+            opacity: uploading ? 0.5 : 1,
+          },
+        ]}
+        onPress={() => handlePickAudio(side)}
+        disabled={uploading}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={t("uploadAudio")}
+      >
+        <Feather name="upload" size={14} color={C.tint} />
+        <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>{t("uploadAudio")}</Text>
+      </TouchableOpacity>
+    );
+  };
 
   const handleAiFillBack = useCallback(async () => {
     if (!deck || cardType !== "basic" || !frontText.trim()) {
@@ -621,6 +727,7 @@ export default function AddCardScreen() {
   };
   const frontPreviewMedia = orderedMediaFromForm(mediaForm, "front");
   const backPreviewMedia = orderedMediaFromForm(mediaForm, "back");
+
   const renderPreviewMedia = (items: typeof frontPreviewMedia) =>
     items.map((item) => (
       <CardSideMedia key={`${item.kind}-${item.url}`} url={item.url} kind={item.kind} />
@@ -833,6 +940,7 @@ export default function AddCardScreen() {
                         focusedField={focusedField}
                         onFocusField={setFocusedField}
                         t={t}
+                        audioLabelRight={renderAudioUploadBtn("front")}
                       />
                     </View>
 
@@ -900,6 +1008,7 @@ export default function AddCardScreen() {
                         focusedField={focusedField}
                         onFocusField={setFocusedField}
                         t={t}
+                        audioLabelRight={renderAudioUploadBtn("back")}
                       />
                     </View>
                   </View>
@@ -1008,6 +1117,7 @@ export default function AddCardScreen() {
                             </Text>
                           </TouchableOpacity>
                         }
+                        audioLabelRight={renderAudioUploadBtn("front")}
                       />
                     </View>
 
@@ -1135,6 +1245,7 @@ export default function AddCardScreen() {
                             </Text>
                           </TouchableOpacity>
                         }
+                        audioLabelRight={renderAudioUploadBtn("back")}
                       />
                     </View>
                   </View>
@@ -1178,7 +1289,7 @@ export default function AddCardScreen() {
                   multiline
                 >
                   <TextInput
-                    style={[styles.input, styles.inputNotes, webTextInputNoOutline, { color: C.text }]}
+                    style={[styles.input, styles.inputNotes, webTextInputNoOutline]}
                     placeholder={t("notesPlaceholder")}
                     placeholderTextColor={C.placeholder}
                     value={notes}
@@ -1374,43 +1485,43 @@ export default function AddCardScreen() {
                 <View style={styles.studyPreviewCardInner}>
                   {cardType === "cloze" && isClozeGapComplete(clozePartsPreview) ? (
                     <>
-                      {renderPreviewMedia(studyPreviewShowBack ? backPreviewMedia : frontPreviewMedia)}
                       {!studyPreviewShowBack ? (
                         <AddCardStudyClozeFront parts={clozePartsPreview} />
                       ) : (
                         <AddCardStudyClozeBack parts={clozePartsPreview} />
                       )}
+                      {renderPreviewMedia(studyPreviewShowBack ? backPreviewMedia : frontPreviewMedia)}
                     </>
                   ) : cardType === "basic" ? (
                     <>
                       {studyPreviewPairSlot === 1 ? (
                         <>
-                          {renderPreviewMedia(studyPreviewShowBack ? backPreviewMedia : frontPreviewMedia)}
-                          <Text style={styles.studyPreviewCardTitle}>
+                          <Text style={[styles.studyPreviewCardTitle, { color: C.text }]}>
                             {studyPreviewShowBack ? backText.trim() : frontText.trim()}
                           </Text>
+                          {renderPreviewMedia(studyPreviewShowBack ? backPreviewMedia : frontPreviewMedia)}
                         </>
                       ) : (
                         <>
-                          {renderPreviewMedia(studyPreviewShowBack ? frontPreviewMedia : backPreviewMedia)}
-                          <Text style={styles.studyPreviewCardTitle}>
+                          <Text style={[styles.studyPreviewCardTitle, { color: C.text }]}>
                             {studyPreviewShowBack
                               ? frontText.trim()
                               : backText.trim()}
                           </Text>
+                          {renderPreviewMedia(studyPreviewShowBack ? frontPreviewMedia : backPreviewMedia)}
                         </>
                       )}
                     </>
                   ) : (
-                    <Text style={styles.studyPreviewCardTitle}>
+                    <Text style={[styles.studyPreviewCardTitle, { color: C.textSub }]}>
                       {t("addCardPreviewIncomplete")}
                     </Text>
                   )}
                   {studyPreviewShowBack && notes.trim() ? (
-                    <Text style={styles.studyPreviewNotes}>{notes.trim()}</Text>
+                    <Text style={[styles.studyPreviewNotes, { color: C.textSub }]}>{notes.trim()}</Text>
                   ) : null}
                   {!studyPreviewShowBack ? (
-                    <Text style={styles.studyPreviewTapHint}>{t("showAnswer")}</Text>
+                    <Text style={[styles.studyPreviewTapHint, { color: C.textMuted }]}>{t("showAnswer")}</Text>
                   ) : null}
                 </View>
               </TouchableOpacity>
@@ -1419,6 +1530,12 @@ export default function AddCardScreen() {
           </View>
         </View>
       </Modal>
+
+      <AudioUploadModal
+        visible={Boolean(audioUploadModal?.visible)}
+        phase={audioUploadModal?.phase ?? "reading"}
+        fileName={audioUploadModal?.fileName}
+      />
 
       <ConfirmModal
         visible={Boolean(errorModal)}
@@ -1484,6 +1601,13 @@ function InputRow({
   children: React.ReactNode;
 }) {
   const C = useAppColors();
+  const coloredChildren = Children.map(children, (child) => {
+    if (!isValidElement(child) || child.type !== TextInput) return child;
+    const input = child as ReactElement<{ style?: StyleProp<TextStyle> }>;
+    return cloneElement(input, {
+      style: StyleSheet.flatten([input.props.style, { color: C.text }]),
+    });
+  });
   return (
     <View
       style={[
@@ -1500,7 +1624,7 @@ function InputRow({
         color={focused ? C.tint : C.textMuted}
         style={multiline ? { marginTop: 3 } : undefined}
       />
-      {children}
+      {coloredChildren}
     </View>
   );
 }
@@ -1631,7 +1755,6 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    color: "#111827",
     paddingVertical: 0,
   },
   inputMulti: {
@@ -1837,20 +1960,17 @@ const styles = StyleSheet.create({
   studyPreviewCardTitle: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#1f2937",
     textAlign: "center",
     marginBottom: 12,
   },
   studyPreviewNotes: {
     fontSize: 15,
-    color: "#6b7280",
     fontStyle: "italic",
     textAlign: "center",
     marginTop: 8,
   },
   studyPreviewTapHint: {
     fontSize: 14,
-    color: "#9ca3af",
     marginTop: 16,
   },
 
@@ -1896,12 +2016,10 @@ const styles = StyleSheet.create({
   inputClozeGapHint: {
     fontStyle: "italic",
     fontWeight: "500",
-    color: "#4b5563",
   },
   inputClozeHidden: {
     minHeight: 56,
     fontWeight: "600",
-    color: "#111827",
     textAlignVertical: "top",
   },
   revToggle: {

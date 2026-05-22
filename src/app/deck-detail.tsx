@@ -1415,6 +1415,9 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
         ) : null}
       </View>
 
+      <Text style={[styles.cardFront, { color: C.text }]}>
+        {clozePreview ?? card.front_text}
+      </Text>
       {frontMedia.map((item) => (
         <CardSideMedia
           key={item.media_id}
@@ -1423,9 +1426,6 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
           layout="list"
         />
       ))}
-      <Text style={[styles.cardFront, { color: C.text }]}>
-        {clozePreview ?? card.front_text}
-      </Text>
 
       {showBack ? (
         <>
@@ -1437,6 +1437,9 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
             <View style={[styles.cardDividerLine, { backgroundColor: `${accent}30` }]} />
           </View>
 
+          {backDisplay.length > 0 ? (
+            <Text style={[styles.cardBack, { color: C.textSub }]}>{backDisplay}</Text>
+          ) : null}
           {backMedia.map((item) => (
             <CardSideMedia
               key={item.media_id}
@@ -1445,9 +1448,6 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
               layout="list"
             />
           ))}
-          {backDisplay.length > 0 ? (
-            <Text style={[styles.cardBack, { color: C.textSub }]}>{backDisplay}</Text>
-          ) : null}
         </>
       ) : null}
 
@@ -1729,13 +1729,13 @@ const styles = StyleSheet.create({
   cardMedia: { width: "100%", height: 100, borderRadius: 10, marginBottom: 8, backgroundColor: "#f3f4f6" },
   cardMediaAudio: { alignItems: "center", justifyContent: "center" },
 
-  cardFront: { fontSize: 17, fontWeight: "700", color: "#111827", lineHeight: 24 },
+  cardFront: { fontSize: 17, fontWeight: "700", color: "#111827", lineHeight: 24, marginBottom: 10 },
 
   cardDividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 12, gap: 8 },
   cardDividerLine: { flex: 1, height: 1 },
   cardDividerArrow: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
 
-  cardBack: { fontSize: 15, color: "#4b5563", lineHeight: 22 },
+  cardBack: { fontSize: 15, color: "#4b5563", lineHeight: 22, marginBottom: 10 },
 
   cardNotesRow: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 10 },
   cardNotes: { flex: 1, fontSize: 13, color: "#9ca3af", fontStyle: "italic", lineHeight: 18 },
