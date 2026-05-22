@@ -52,9 +52,12 @@ import {
 import {
   cardMediaRowsToForm,
   emptyCardMediaForm,
+  getCardMediaUrlIssues,
   hasMediaFormChanges,
   hasMediaFormContent,
   hasMediaFormSideContent,
+  isCardMediaFormUrlsValid,
+  mediaUrlIssueMessageKey,
   moveMediaInForm,
   orderedMediaFromForm,
   replaceCardMedia,
@@ -118,6 +121,7 @@ function isCardFormValid(
     mediaForm: CardMediaForm;
   },
 ): boolean {
+  if (!isCardMediaFormUrlsValid(fields.mediaForm)) return false;
   if (cardType === "cloze") {
     return (
       clozeFrontSideHasContent(fields.cloze, fields.mediaForm, fields.notes) &&
@@ -402,7 +406,7 @@ export default function AddCardScreen() {
   } | null>(null);
 
   const mapUploadPhase = (phase: UploadAudioPhase): AudioUploadModalPhase => {
-    if (phase === "caching") return "preparing";
+    if (phase === "caching" || phase === "done") return "preparing";
     return phase;
   };
 
@@ -432,8 +436,10 @@ export default function AddCardScreen() {
         cardId,
         side,
         pickerCacheUri: asset.uri,
-        onPhase: (phase) =>
-          setAudioUploadModal({ visible: true, phase: mapUploadPhase(phase), side, fileName }),
+        onPhase: (phase) => {
+          if (phase === "done") return;
+          setAudioUploadModal({ visible: true, phase: mapUploadPhase(phase), side, fileName });
+        },
       });
 
       if (!result.ok) {
@@ -452,8 +458,7 @@ export default function AddCardScreen() {
       }
 
       setMediaUrl(side, "audio", result.publicUrl);
-      setAudioUploadModal({ visible: true, phase: "done", side, fileName });
-      setTimeout(() => setAudioUploadModal(null), 700);
+      setAudioUploadModal(null);
     },
     [cardId, deckId, t, user?.id],
   );
@@ -625,6 +630,12 @@ export default function AddCardScreen() {
   const handleSave = async () => {
     if (!cardId && !deckId) {
       setError(t("deckNotFound"));
+      return;
+    }
+
+    const urlIssues = getCardMediaUrlIssues(mediaForm);
+    if (urlIssues.length > 0) {
+      setErrorModal(t(mediaUrlIssueMessageKey(urlIssues[0])));
       return;
     }
 

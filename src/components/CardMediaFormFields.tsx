@@ -1,10 +1,16 @@
 import Feather from "@expo/vector-icons/Feather";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { TextStyle } from "react-native";
 
 import { useAppColors } from "@/src/contexts/ThemeContext";
 import type { CardMediaForm, CardMediaSide, CardMediaType } from "@/src/lib/cardMedia";
+import {
+  getMediaUrlValidationIssue,
+  mediaUrlIssueMessageKey,
+  type MediaUrlIssue,
+} from "@/src/lib/cardMedia";
 
 const webTextInputNoOutline: TextStyle | undefined =
   Platform.OS === "web"
@@ -45,12 +51,31 @@ export function CardMediaFormFields({
 }: Props) {
   const C = useAppColors();
   const sideForm = mediaForm[side];
+  const [blurredFields, setBlurredFields] = useState<Set<string>>(() => new Set());
+
+  const markBlurred = (focusKey: string) => {
+    setBlurredFields((prev) => {
+      if (prev.has(focusKey)) return prev;
+      const next = new Set(prev);
+      next.add(focusKey);
+      return next;
+    });
+  };
 
   return (
     <View style={[styles.wrap, { borderTopColor: C.borderLight }]}>
       <Text style={[styles.orderHint, { color: C.textSub }]}>{t("mediaOrderHint")}</Text>
       {sideForm.order.map((kind, index) => {
         const focusKey = `${side}${MEDIA_META[kind].focusSuffix}`;
+        const url = sideForm.urls[kind];
+        const validationReason = getMediaUrlValidationIssue(url, kind);
+        const showValidation =
+          url.trim().length > 0 &&
+          validationReason !== null &&
+          blurredFields.has(focusKey);
+        const issue: MediaUrlIssue | null = showValidation
+          ? { side, mediaType: kind, url: url.trim(), reason: validationReason }
+          : null;
         const canMoveUp = index > 0;
         const canMoveDown = index < sideForm.order.length - 1;
         return (
@@ -88,8 +113,11 @@ export function CardMediaFormFields({
               <View
                 style={[
                   styles.inputRow,
-                  { backgroundColor: C.inputBg, borderColor: C.inputBorder },
-                  focusedField === focusKey && [
+                  {
+                    backgroundColor: C.inputBg,
+                    borderColor: issue ? "#ef4444" : C.inputBorder,
+                  },
+                  focusedField === focusKey && !issue && [
                     styles.inputRowFocused,
                     C.isDark && { backgroundColor: C.surface, borderColor: "#6366f1" },
                   ],
@@ -98,25 +126,34 @@ export function CardMediaFormFields({
                 <Feather
                   name={MEDIA_META[kind].icon}
                   size={16}
-                  color={focusedField === focusKey ? C.tint : C.textMuted}
+                  color={
+                    issue ? "#ef4444" : focusedField === focusKey ? C.tint : C.textMuted
+                  }
                 />
                 <TextInput
                   style={[styles.input, webTextInputNoOutline, { color: C.text }]}
                   placeholder={kind === "audio" ? t("mediaAudioPlaceholder") : "https://..."}
                   placeholderTextColor={C.placeholder}
-                  value={sideForm.urls[kind]}
+                  value={url}
                   onChangeText={(value) => onUrlChange(side, kind, value)}
                   onFocus={() => onFocusField(focusKey)}
-                  onBlur={() => onFocusField(null)}
+                  onBlur={() => {
+                    onFocusField(null);
+                    markBlurred(focusKey);
+                  }}
                   autoCapitalize="none"
-                  keyboardType={kind === "audio" ? "default" : "url"}
+                  keyboardType="url"
+                  autoCorrect={false}
                 />
-                {sideForm.urls[kind].length > 0 ? (
+                {url.length > 0 ? (
                   <Pressable onPress={() => onUrlChange(side, kind, "")} hitSlop={8}>
                     <Feather name="x-circle" size={16} color={C.textMuted} />
                   </Pressable>
                 ) : null}
               </View>
+              {issue ? (
+                <Text style={styles.urlError}>{t(mediaUrlIssueMessageKey(issue))}</Text>
+              ) : null}
             </View>
           </View>
         );
@@ -182,4 +219,9 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   input: { flex: 1, fontSize: 15, paddingVertical: 0 },
+  urlError: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#ef4444",
+  },
 });

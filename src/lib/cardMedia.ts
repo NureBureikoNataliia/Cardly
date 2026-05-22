@@ -1,4 +1,5 @@
 import type { Card, CardMedia, CardMediaSide, CardMediaType } from "@/assets/data/cards";
+import { canPlayMediaUrl } from "@/src/lib/resolveMediaPlaybackUrl";
 import { supabase } from "@/src/lib/supabase";
 
 export type { CardMedia, CardMediaSide, CardMediaType };
@@ -89,6 +90,59 @@ export function hasMediaFormSideContent(
   side: CardMediaSide,
 ): boolean {
   return CARD_MEDIA_TYPES.some((type) => form[side].urls[type].trim().length > 0);
+}
+
+export type MediaUrlIssueReason = "invalid_format" | "unsupported";
+
+export type MediaUrlIssue = {
+  side: CardMediaSide;
+  mediaType: CardMediaType;
+  url: string;
+  reason: MediaUrlIssueReason;
+};
+
+export function isValidHttpMediaUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return true;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function getMediaUrlValidationIssue(
+  url: string,
+  mediaType: CardMediaType,
+): MediaUrlIssueReason | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (!isValidHttpMediaUrl(trimmed)) return "invalid_format";
+  if (!canPlayMediaUrl(trimmed, mediaType)) return "unsupported";
+  return null;
+}
+
+export function getCardMediaUrlIssues(form: CardMediaForm): MediaUrlIssue[] {
+  const issues: MediaUrlIssue[] = [];
+  for (const side of ["front", "back"] as const) {
+    for (const mediaType of CARD_MEDIA_TYPES) {
+      const url = form[side].urls[mediaType].trim();
+      const reason = getMediaUrlValidationIssue(url, mediaType);
+      if (reason) issues.push({ side, mediaType, url, reason });
+    }
+  }
+  return issues;
+}
+
+export function isCardMediaFormUrlsValid(form: CardMediaForm): boolean {
+  return getCardMediaUrlIssues(form).length === 0;
+}
+
+export function mediaUrlIssueMessageKey(issue: MediaUrlIssue): string {
+  return issue.reason === "invalid_format"
+    ? "mediaUrlInvalidFormat"
+    : "mediaUrlUnsupported";
 }
 
 export function mediaFormToInsertRows(
