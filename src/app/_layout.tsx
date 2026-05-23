@@ -195,7 +195,6 @@ function WebAuthenticatedShell({
               headerTitle: ({ children }: { children?: string }) => (
                 <StackHeaderTitle color={headerText}>{children}</StackHeaderTitle>
               ),
-              headerTitleContainerStyle: { flex: 1, minWidth: 0 },
               headerRight: sharedHeaderRight,
               headerLeft: isCompact ? headerLeft : undefined,
               animation: 'slide_from_right',
@@ -210,6 +209,8 @@ function WebAuthenticatedShell({
             <Stack.Screen name="admin" options={{ headerShown: true, title: 'Admin' }} />
             <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
             <Stack.Screen name="deck-study" options={{ headerShown: true }} />
+            <Stack.Screen name="deck-quiz-new" options={{ headerShown: true }} />
+            <Stack.Screen name="deck-quiz-play" options={{ headerShown: true }} />
             <Stack.Screen name="settings" options={{ headerShown: true }} />
             <Stack.Screen name="add-deck" options={{ headerShown: true }} />
             <Stack.Screen name="add-card" options={{ headerShown: true }} />
@@ -325,7 +326,6 @@ function RootLayoutNav() {
         headerTitle: ({ children }: { children?: string }) => (
           <StackHeaderTitle color={headerText}>{children}</StackHeaderTitle>
         ),
-        headerTitleContainerStyle: { flex: 1, minWidth: 0 },
         headerRight: sharedHeaderRight,
         ...(nativeAuthenticated ? { headerLeft: () => <NativeStackHeaderMenu /> } : {}),
         animation: 'slide_from_right',
@@ -340,6 +340,8 @@ function RootLayoutNav() {
       <Stack.Screen name="admin" options={{ headerShown: true, title: 'Admin' }} />
       <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
       <Stack.Screen name="deck-study" options={{ headerShown: true }} />
+      <Stack.Screen name="deck-quiz-new" options={{ headerShown: true }} />
+      <Stack.Screen name="deck-quiz-play" options={{ headerShown: true }} />
       <Stack.Screen name="settings" options={{ headerShown: true }} />
       <Stack.Screen name="add-deck" options={{ headerShown: true }} />
       <Stack.Screen name="add-card" options={{ headerShown: true }} />

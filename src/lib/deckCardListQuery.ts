@@ -9,17 +9,16 @@ import {
 } from "@/src/lib/cardModel";
 import { getNextSrsDayBoundary } from "@/src/lib/srsDayBoundary";
 import type { UserCardProgress } from "@/src/lib/userCardProgress";
+import { supabase } from "@/src/lib/supabase";
 
 export type CardListFilter =
   | "all"
-  | "basic"
+  | "standard"
   | "cloze"
   | "reversible"
   | "withMedia"
-  | "withNotes"
   | "dueToday"
-  | "new"
-  | "learned";
+  | "new";
 
 export type CardListSort =
   | "newest"
@@ -69,8 +68,8 @@ export function matchesCardFilter(
   const endOfSrsDay = getNextSrsDayBoundary(now, srsDayStartHour);
 
   switch (filter) {
-    case "basic":
-      return ctype === "basic";
+    case "standard":
+      return ctype !== "cloze";
     case "cloze":
       return ctype === "cloze";
     case "reversible":
@@ -80,17 +79,12 @@ export function matchesCardFilter(
         getCardMediaForSide(card, "front").length > 0 ||
         getCardMediaForSide(card, "back").length > 0
       );
-    case "withNotes":
-      return Boolean(card.notes?.trim());
     case "new":
       return !progress || progress.status === "new";
     case "dueToday":
       if (!progress) return true;
       if (progress.due_date == null) return true;
       return new Date(progress.due_date) <= endOfSrsDay;
-    case "learned":
-      if (!progress?.due_date) return false;
-      return new Date(progress.due_date) > endOfSrsDay;
     default:
       return true;
   }
@@ -118,6 +112,34 @@ export function sortDeckCards(cards: Card[], sort: CardListSort): Card[] {
     }
   });
   return list;
+}
+
+export async function fetchProgressMapForCardIds(
+  userId: string,
+  cardIds: string[],
+): Promise<Map<string, UserCardProgress>> {
+  const map = new Map<string, UserCardProgress>();
+  if (!cardIds.length) return map;
+
+  const { data, error } = await supabase
+    .from("user_card_progress")
+    .select("*")
+    .eq("user_id", userId)
+    .in("card_id", cardIds);
+
+  if (error) throw error;
+  for (const row of data ?? []) {
+    map.set(row.card_id as string, row as UserCardProgress);
+  }
+  return map;
+}
+
+export function hasActiveDeckCardQuery(
+  search: string,
+  filter: CardListFilter,
+  sort: CardListSort,
+): boolean {
+  return search.trim().length > 0 || filter !== "all" || sort !== "newest";
 }
 
 export function queryDeckCards(cards: Card[], options: DeckCardQueryOptions): Card[] {

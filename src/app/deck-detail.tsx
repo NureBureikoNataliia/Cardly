@@ -23,6 +23,7 @@ import type { TextStyle } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
+import { DeckCardListToolbar } from "@/src/components/DeckCardListToolbar";
 import { CardSideMedia } from "@/src/components/CardSideMedia";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
@@ -39,6 +40,7 @@ import {
 } from "@/src/lib/cardModel";
 import { getCardMediaForSide, normalizeCardMediaRows } from "@/src/lib/cardMedia";
 import {
+  hasActiveDeckCardQuery,
   type CardListFilter,
   type CardListSort,
   queryDeckCards,
@@ -113,7 +115,6 @@ export default function DeckDetailScreen() {
   const [collaboratorToRemove, setCollaboratorToRemove] = useState<Collaborator | null>(null);
 
   const [cardSearch, setCardSearch] = useState("");
-  const [cardSearchFocused, setCardSearchFocused] = useState(false);
   const [cardFilter, setCardFilter] = useState<CardListFilter>("all");
   const [cardSort, setCardSort] = useState<CardListSort>("newest");
 
@@ -469,8 +470,7 @@ export default function DeckDetailScreen() {
     [displayedCards, numCols],
   );
 
-  const hasActiveCardQuery =
-    cardSearch.trim().length > 0 || cardFilter !== "all" || cardSort !== "newest";
+  const hasActiveCardQuery = hasActiveDeckCardQuery(cardSearch, cardFilter, cardSort);
 
   const clearCardQuery = useCallback(() => {
     setCardSearch("");
@@ -636,19 +636,26 @@ export default function DeckDetailScreen() {
               </View>
             )}
 
-            {canEdit && user && (
-              <View style={styles.actionRowPrimary}>
+            {user ? (
+              <View style={[styles.actionRowPrimary, styles.actionRowPrimaryStack]}>
+                {canEdit ? (
+                  <ActionBtn
+                    label={t("deckReviewCards")}
+                    bg={C.isDark ? "#3d9470" : "#2f9e73"}
+                    onPress={() =>
+                      router.push({ pathname: "/deck-study", params: { id: deck.deck_id, today: "1" } })
+                    }
+                    fullWidth
+                  />
+                ) : null}
                 <ActionBtn
-                  icon="zap"
-                  label={t("studyAllToday")}
-                  bg="#059669"
-                  onPress={() =>
-                    router.push({ pathname: "/deck-study", params: { id: deck.deck_id, today: "1" } })
-                  }
-                  flex
+                  label={t("deckTakeTest")}
+                  bg={C.isDark ? "#6a6ec8" : "#5f63c0"}
+                  onPress={() => router.push({ pathname: "/deck-quiz-new", params: { id: deck.deck_id } })}
+                  fullWidth
                 />
               </View>
-            )}
+            ) : null}
 
             {/* Secondary row — wraps to 2×2 on narrow viewports */}
             {(user || canEdit) ? (
@@ -962,16 +969,15 @@ export default function DeckDetailScreen() {
             </View>
 
             {cards.length > 0 ? (
-              <CardListToolbar
+              <DeckCardListToolbar
                 search={cardSearch}
                 onSearchChange={setCardSearch}
-                searchFocused={cardSearchFocused}
-                onSearchFocusChange={setCardSearchFocused}
                 filter={cardFilter}
                 onFilterChange={setCardFilter}
                 sort={cardSort}
                 onSortChange={setCardSort}
                 showStudyFilters={Boolean(user)}
+                searchPlaceholder={t("searchCards")}
                 t={t}
               />
             ) : null}
@@ -1168,7 +1174,7 @@ function ActionBtn({
   compactLayout,
   fixedWidth,
 }: {
-  icon: keyof typeof Feather.glyphMap;
+  icon?: keyof typeof Feather.glyphMap;
   label: string;
   bg: string;
   textColor?: string;
@@ -1192,166 +1198,26 @@ function ActionBtn({
         fullWidth && { width: "100%" },
         fixedWidth != null && { width: fixedWidth, flexGrow: 0, flexShrink: 0 },
         compactLayout && styles.actionBtnCompact,
+        !icon && styles.actionBtnNoIcon,
         disabled && styles.actionBtnDisabled,
       ]}
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.8}
     >
-      <Feather name={icon} size={compactLayout ? 20 : 18} color={textColor} />
+      {icon ? <Feather name={icon} size={compactLayout ? 20 : 18} color={textColor} /> : null}
       <Text
         style={[
           styles.actionBtnTxt,
           { color: textColor },
           compactLayout && styles.actionBtnTxtCompact,
+          !icon && styles.actionBtnTxtNoIcon,
         ]}
         numberOfLines={2}
       >
         {label}
       </Text>
     </TouchableOpacity>
-  );
-}
-
-/* ─── Card list search / filter / sort ─── */
-function CardListToolbar({
-  search,
-  onSearchChange,
-  searchFocused,
-  onSearchFocusChange,
-  filter,
-  onFilterChange,
-  sort,
-  onSortChange,
-  showStudyFilters,
-  t,
-}: {
-  search: string;
-  onSearchChange: (v: string) => void;
-  searchFocused: boolean;
-  onSearchFocusChange: (v: boolean) => void;
-  filter: CardListFilter;
-  onFilterChange: (v: CardListFilter) => void;
-  sort: CardListSort;
-  onSortChange: (v: CardListSort) => void;
-  showStudyFilters: boolean;
-  t: (k: string) => string;
-}) {
-  const C = useAppColors();
-
-  const filterOptions: { key: CardListFilter; label: string }[] = [
-    { key: "all", label: t("cardsFilterAll") },
-    { key: "basic", label: t("cardTypeBasic") },
-    { key: "cloze", label: t("cardTypeCloze") },
-    { key: "reversible", label: t("cardsFilterReversible") },
-    { key: "withMedia", label: t("cardsFilterWithMedia") },
-    { key: "withNotes", label: t("cardsFilterWithNotes") },
-    ...(showStudyFilters
-      ? ([
-          { key: "dueToday" as const, label: t("cardsFilterDueToday") },
-          { key: "new" as const, label: t("cardsFilterNew") },
-          { key: "learned" as const, label: t("cardsFilterLearned") },
-        ] as const)
-      : []),
-  ];
-
-  const sortOptions: { key: CardListSort; label: string }[] = [
-    { key: "newest", label: t("newest") },
-    { key: "oldest", label: t("oldest") },
-    { key: "frontAsc", label: t("cardsSortFrontAZ") },
-    { key: "frontDesc", label: t("cardsSortFrontZA") },
-    { key: "updatedDesc", label: t("cardsSortUpdated") },
-  ];
-
-  return (
-    <View style={styles.cardListControls}>
-      <View
-        style={[
-          styles.cardListSearch,
-          { backgroundColor: C.inputBg, borderColor: C.inputBorder },
-          searchFocused &&
-            (C.isDark
-              ? { borderColor: "#6366f1", backgroundColor: C.surface }
-              : styles.cardListSearchFocused),
-        ]}
-      >
-        <Feather name="search" size={16} color={searchFocused ? C.tint : C.textMuted} />
-        <TextInput
-          style={[styles.cardListSearchInput, webTextInputNoOutline, { color: C.text }]}
-          value={search}
-          onChangeText={onSearchChange}
-          placeholder={t("searchCards")}
-          placeholderTextColor={C.placeholder}
-          onFocus={() => onSearchFocusChange(true)}
-          onBlur={() => onSearchFocusChange(false)}
-        />
-        {search.length > 0 ? (
-          <Pressable onPress={() => onSearchChange("")} hitSlop={8}>
-            <Feather name="x-circle" size={16} color={C.textMuted} />
-          </Pressable>
-        ) : null}
-      </View>
-
-      <View style={styles.cardListControlBlock}>
-        <Text style={[styles.cardListChipsLabel, { color: C.textSub }]}>{t("filterBy")}</Text>
-        <View style={styles.cardListChipsRow}>
-          {filterOptions.map(({ key, label }) => (
-            <Pressable
-              key={key}
-              style={[
-                styles.cardListChip,
-                { backgroundColor: C.surface, borderColor: C.border },
-                filter === key && {
-                  borderColor: C.tint,
-                  backgroundColor: C.isDark ? "rgba(165,180,252,0.15)" : "rgba(66,85,255,0.12)",
-                },
-              ]}
-              onPress={() => onFilterChange(key)}
-            >
-              <Text
-                style={[
-                  styles.cardListChipTxt,
-                  { color: C.textSub },
-                  filter === key && { color: C.tint, fontWeight: "600" },
-                ]}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.cardListControlBlock}>
-        <Text style={[styles.cardListChipsLabel, { color: C.textSub }]}>{t("sortBy")}</Text>
-        <View style={styles.cardListChipsRow}>
-          {sortOptions.map(({ key, label }) => (
-            <Pressable
-              key={key}
-              style={[
-                styles.cardListChip,
-                { backgroundColor: C.surface, borderColor: C.border },
-                sort === key && {
-                  borderColor: C.tint,
-                  backgroundColor: C.isDark ? "rgba(165,180,252,0.15)" : "rgba(66,85,255,0.12)",
-                },
-              ]}
-              onPress={() => onSortChange(key)}
-            >
-              <Text
-                style={[
-                  styles.cardListChipTxt,
-                  { color: C.textSub },
-                  sort === key && { color: C.tint, fontWeight: "600" },
-                ]}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-    </View>
   );
 }
 
@@ -1582,6 +1448,7 @@ const styles = StyleSheet.create({
   /* ── ACTIONS ── */
   actions: { marginHorizontal: 16, marginTop: 16, gap: 10 },
   actionRowPrimary: { flexDirection: "row", gap: 10 },
+  actionRowPrimaryStack: { flexDirection: "column", width: "100%" },
   actionRowSecondary: { flexDirection: "row", gap: 10 },
   actionRowSecondaryWrap: { flexWrap: "wrap" },
   actionBtn: {
@@ -1600,7 +1467,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionBtnDisabled: { opacity: 0.5, shadowOpacity: 0 },
+  actionBtnNoIcon: { gap: 0 },
   actionBtnTxt: { fontSize: 13, fontWeight: "700", textAlign: 'center', flexShrink: 1 },
+  actionBtnTxtNoIcon: { fontSize: 15 },
   actionBtnTxtCompact: { fontSize: 11, lineHeight: 14 },
 
   /* ── CARDS SECTION ── */
@@ -1617,37 +1486,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 999,
   },
-
-  cardListControls: { gap: 10, marginBottom: 14 },
-  cardListSearch: {
-    height: 46,
-    borderRadius: 13,
-    borderWidth: 1.5,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  cardListSearchFocused: {
-    borderColor: "#1a1a1a",
-    backgroundColor: "#fff",
-    shadowColor: "#1a1a1a",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  cardListSearchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
-  cardListControlBlock: { gap: 6 },
-  cardListChipsLabel: { fontSize: 12, fontWeight: "600" },
-  cardListChipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  cardListChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1.5,
-  },
-  cardListChipTxt: { fontSize: 13, fontWeight: "500" },
 
   cardsNoResults: { alignItems: "center", paddingVertical: 36, gap: 12 },
   cardsNoResultsTxt: { fontSize: 15, textAlign: "center", paddingHorizontal: 24 },

@@ -193,7 +193,7 @@ export default function DeckStudyScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: includeScheduledToday ? t("studyAllTodayTitle") : t("studying"),
+      title: includeScheduledToday ? t("deckReviewCardsTitle") : t("studying"),
     });
   }, [navigation, t, includeScheduledToday]);
 
