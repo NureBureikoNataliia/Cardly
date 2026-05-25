@@ -526,6 +526,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     notifWebReminderNote: 'Daily reminders work in the iOS or Android app. The web version does not schedule them yet.',
     notifExpoGoReminderNote:
       'Daily reminders are not available in Expo Go on Android. Install a development build or test on iOS Expo Go to use reminders.',
+    notifAndroidBackgroundNote:
+      'Please allow notifications for Cardly in system settings.',
+    notifOpenSystemSettings: 'Open system settings',
     help: 'Help',
     // Misc
     failedToLoadDeck: 'Failed to load deck',
@@ -1186,6 +1189,9 @@ export const translations: Record<Locale, Record<string, string>> = {
       'Щоденні нагадування працюють у застосунку на iOS або Android. У вебверсії їх поки не планується.',
     notifExpoGoReminderNote:
       'Щоденні нагадування недоступні в Expo Go на Android. Встановіть development build або тестуйте в Expo Go на iOS.',
+    notifAndroidBackgroundNote:
+      'Будь ласка, увімкніть сповіщення для Cardly у системних налаштуваннях.',
+    notifOpenSystemSettings: 'Відкрити налаштування системи',
     help: 'Допомога',
     // Misc
     failedToLoadDeck: 'Не вдалося завантажити дошку',

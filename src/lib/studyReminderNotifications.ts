@@ -1,5 +1,5 @@
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import type { NotificationTriggerInput } from 'expo-notifications';
 
 export const STUDY_DAILY_NOTIFICATION_ID = 'cardly-study-daily';
@@ -40,8 +40,21 @@ async function ensureAndroidStudyChannel(
   androidChannelEnsured = true;
   await Notifications.setNotificationChannelAsync(ANDROID_STUDY_CHANNEL_ID, {
     name: 'Study reminders',
-    importance: Notifications.AndroidImportance.DEFAULT,
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
+}
+
+/** Opens app settings so the user can allow alarms / disable battery restrictions (Android). */
+export async function openNotificationSettings(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    await Linking.openSettings();
+  } catch {
+    // no-op
+  }
 }
 
 export type SyncStudyDailyReminderResult =
@@ -92,7 +105,7 @@ export async function syncStudyDailyReminder(options: {
 
     const hour = Math.max(0, Math.min(23, Math.floor(options.hour)));
     const trigger: NotificationTriggerInput = {
-      type: 'daily',
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour,
       minute: 0,
       ...(Platform.OS === 'android' ? { channelId: ANDROID_STUDY_CHANNEL_ID } : {}),
@@ -104,7 +117,9 @@ export async function syncStudyDailyReminder(options: {
         title: options.title,
         body: options.body,
         sound: true,
+        priority: Notifications.AndroidNotificationPriority.MAX,
         data: { kind: 'study-daily' },
+        ...(Platform.OS === 'android' ? { channelId: ANDROID_STUDY_CHANNEL_ID } : {}),
       },
       trigger,
     });
@@ -154,11 +169,12 @@ export async function sendTestPushNotification(options: {
         title: options.title,
         body: options.body,
         sound: true,
+        priority: Notifications.AndroidNotificationPriority.MAX,
         data: { kind: 'admin-test' },
         ...(Platform.OS === 'android' ? { channelId: ANDROID_STUDY_CHANNEL_ID } : {}),
       },
       trigger: {
-        type: 'timeInterval',
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
         seconds: 1,
         repeats: false,
       },

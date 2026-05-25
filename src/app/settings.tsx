@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Switch,
   TextInput,
+  Platform,
   TouchableOpacity,
   View as RNView,
 } from 'react-native';
@@ -19,7 +20,11 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useStudySettings } from '@/src/contexts/StudySettingsContext';
 import { supabase } from '@/src/lib/supabase';
-import { sendTestPushNotification, syncStudyDailyReminder } from '@/src/lib/studyReminderNotifications';
+import {
+  openNotificationSettings,
+  sendTestPushNotification,
+  syncStudyDailyReminder,
+} from '@/src/lib/studyReminderNotifications';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
 
@@ -611,6 +616,20 @@ export default function SettingsScreen() {
             </RNView>
           )}
 
+          {notifPrefs.studyReminder && Platform.OS === 'android' && (
+            <RNView style={styles.notifAndroidHint}>
+              <Text style={styles.infoSubText}>{t('notifAndroidBackgroundNote')}</Text>
+              <TouchableOpacity
+                style={[styles.notifSettingsLink, { borderColor: C.border }]}
+                onPress={() => void openNotificationSettings()}
+              >
+                <Text style={[styles.notifSettingsLinkText, { color: C.tint }]}>
+                  {t('notifOpenSystemSettings')}
+                </Text>
+              </TouchableOpacity>
+            </RNView>
+          )}
+
           <RNView style={styles.notifDivider} />
 
           {/* Streak reminder */}
@@ -1049,6 +1068,15 @@ const styles = StyleSheet.create({
   notifTestBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '600' },
   notifTestMsg: { fontSize: 13, lineHeight: 18 },
   notifTimeRow: { paddingLeft: 60, gap: 8 },
+  notifAndroidHint: { paddingLeft: 60, paddingRight: 16, gap: 10, marginTop: 4 },
+  notifSettingsLink: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  notifSettingsLinkText: { fontSize: 14, fontWeight: '600' },
   srsHourRow: {
     flexDirection: 'row',
     alignItems: 'center',
