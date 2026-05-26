@@ -17,6 +17,7 @@
       "supportsTablet": true
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "package": "com.cardly.app",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",

@@ -2,18 +2,18 @@ import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
-  Children,
-  cloneElement,
-  isValidElement,
   useCallback,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useState,
-  type ReactElement,
+  memo,
   type ReactNode,
 } from "react";
 import {
     ActivityIndicator,
+    Dimensions,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -21,17 +21,15 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
-    useWindowDimensions,
     View,
 } from "react-native";
-import type { StyleProp, TextStyle } from "react-native";
 
 import { Deck } from "@/assets/data/decks";
 import { AudioUploadModal, type AudioUploadModalPhase } from "@/src/components/AudioUploadModal";
 import ConfirmModal from "@/src/components/ConfirmModal";
 import { CardMediaFormFields } from "@/src/components/CardMediaFormFields";
+import { FormTextInputRow } from "@/src/components/FormTextInputRow";
 import { CardSideMedia } from "@/src/components/CardSideMedia";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
@@ -74,11 +72,16 @@ import {
   type UploadAudioPhase,
 } from "@/src/lib/uploadCardAudio";
 
-/** Web: hide browser default focus outline on TextInput (RN typings omit outlineStyle "none"). */
-const webTextInputNoOutline: TextStyle | undefined =
-  Platform.OS === "web"
-    ? ({ outlineWidth: 0, outlineStyle: "none" } as unknown as TextStyle)
-    : undefined;
+/** Locked at mount — window width changes when the mobile keyboard opens and remounts the form. */
+function initialFormSideBySide(): boolean {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return window.innerWidth >= 640;
+  }
+  if (Platform.OS !== "web") {
+    return Dimensions.get("screen").width >= 768;
+  }
+  return false;
+}
 
 function basicSideHasContent(
   text: string,
@@ -240,7 +243,7 @@ const clozeLivePreviewStyles = StyleSheet.create({
   answer: { fontWeight: "800", color: "#059669" },
 });
 
-function ClozeLivePreview({
+const ClozeLivePreview = memo(function ClozeLivePreview({
   parts,
   sideBySide,
   textColor,
@@ -305,95 +308,215 @@ function ClozeLivePreview({
       </View>
     </View>
   );
-}
+});
 
-export default function AddCardScreen() {
-  const router = useRouter();
-  const navigation = useNavigation();
-  const params = useLocalSearchParams();
-  const deckId = Array.isArray(params.deckId)
-    ? params.deckId[0]
-    : typeof params.deckId === "string"
-      ? params.deckId
-      : null;
-  const cardId = Array.isArray(params.cardId)
-    ? params.cardId[0]
-    : typeof params.cardId === "string"
-      ? params.cardId
-      : null;
-  const { t } = useLanguage();
-  const { user } = useAuth();
+type CardFormSnapshot = {
+  frontText: string;
+  backText: string;
+  mediaForm: CardMediaForm;
+  notes: string;
+  cardType: CardTypeName;
+  pairMeta: { pairId?: string; pairRole?: "forward" | "reverse" };
+  clozeBefore: string;
+  clozeGapFront: string;
+  clozeHidden: string;
+  clozeAfter: string;
+};
+
+const AudioUploadSideButton = memo(function AudioUploadSideButton({
+  side,
+  disabled,
+  onPress,
+  label,
+}: {
+  side: CardMediaSide;
+  disabled: boolean;
+  onPress: (side: CardMediaSide) => void;
+  label: string;
+}) {
   const C = useAppColors();
-  const { width: windowWidth } = useWindowDimensions();
-  const formSideBySide = windowWidth >= 640;
+  return (
+    <TouchableOpacity
+      style={[
+        styles.aiLabelBtn,
+        {
+          borderColor: C.tint,
+          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+          opacity: disabled ? 0.5 : 1,
+        },
+      ]}
+      onPress={() => onPress(side)}
+      disabled={disabled}
+      activeOpacity={0.75}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Feather name="upload" size={14} color={C.tint} />
+      <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+});
 
-  const isEdit = Boolean(cardId);
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: isEdit ? t("editCard") : t("addCard"),
-    });
-  }, [navigation, isEdit, t]);
+const AiFrontImageButton = memo(function AiFrontImageButton({
+  busy,
+  disabled,
+  onPress,
+  busyLabel,
+  idleLabel,
+}: {
+  busy: boolean;
+  disabled: boolean;
+  onPress: () => void;
+  busyLabel: string;
+  idleLabel: string;
+}) {
+  const C = useAppColors();
+  return (
+    <TouchableOpacity
+      style={[
+        styles.aiLabelBtn,
+        {
+          borderColor: C.tint,
+          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+          opacity: disabled ? 0.5 : 1,
+        },
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.75}
+      accessibilityRole="button"
+      accessibilityLabel={idleLabel}
+    >
+      {busy ? (
+        <ActivityIndicator size="small" color={C.tint} />
+      ) : (
+        <Feather name="image" size={14} color={C.tint} />
+      )}
+      <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+        {busy ? busyLabel : idleLabel}
+      </Text>
+    </TouchableOpacity>
+  );
+});
 
-  const [deck, setDeck] = useState<Deck | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [frontText, setFrontText] = useState("");
-  const [backText, setBackText] = useState("");
-  const [mediaForm, setMediaForm] = useState(emptyCardMediaForm);
-  const [notes, setNotes] = useState("");
-  const [initialFront, setInitialFront] = useState("");
-  const [initialBack, setInitialBack] = useState("");
-  const [initialMediaForm, setInitialMediaForm] = useState(emptyCardMediaForm);
-  const [initialNotes, setInitialNotes] = useState("");
+const AiBackFillButton = memo(function AiBackFillButton({
+  busy,
+  disabled,
+  onPress,
+  busyLabel,
+  idleLabel,
+}: {
+  busy: boolean;
+  disabled: boolean;
+  onPress: () => void;
+  busyLabel: string;
+  idleLabel: string;
+}) {
+  const C = useAppColors();
+  return (
+    <TouchableOpacity
+      style={[
+        styles.aiLabelBtn,
+        {
+          borderColor: C.tint,
+          backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
+          opacity: disabled ? 0.5 : 1,
+        },
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.75}
+      accessibilityRole="button"
+      accessibilityLabel={idleLabel}
+    >
+      {busy ? (
+        <ActivityIndicator size="small" color={C.tint} />
+      ) : (
+        <Feather name="zap" size={14} color={C.tint} />
+      )}
+      <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
+        {busy ? busyLabel : idleLabel}
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
+type CardEditorFormProps = {
+  deck: Deck;
+  deckId: string;
+  cardId: string | null;
+  userId: string | null;
+  isEdit: boolean;
+  formSideBySide: boolean;
+  snapshot: CardFormSnapshot;
+};
+
+/** Isolated form tree so typing does not re-render route shell / modals on every keystroke. */
+function CardEditorForm({
+  deck,
+  deckId,
+  cardId,
+  userId,
+  isEdit,
+  formSideBySide,
+  snapshot,
+}: CardEditorFormProps) {
+  const router = useRouter();
+  const { t } = useLanguage();
+  const C = useAppColors();
+
+  const [frontText, setFrontText] = useState(snapshot.frontText);
+  const [backText, setBackText] = useState(snapshot.backText);
+  const [mediaForm, setMediaForm] = useState(snapshot.mediaForm);
+  const [notes, setNotes] = useState(snapshot.notes);
+  const [initialFront] = useState(snapshot.frontText);
+  const [initialBack] = useState(snapshot.backText);
+  const [initialMediaForm] = useState(snapshot.mediaForm);
+  const [initialNotes] = useState(snapshot.notes);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorModal, setErrorModal] = useState<string | null>(null);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
   const [studyPreviewOpen, setStudyPreviewOpen] = useState(false);
   const [studyPreviewShowBack, setStudyPreviewShowBack] = useState(false);
   /** When creating a reversed pair, which of the two future cards to preview (1 = forward, 2 = reverse). */
   const [studyPreviewPairSlot, setStudyPreviewPairSlot] = useState<1 | 2>(1);
 
-  const [cardType, setCardType] = useState<CardTypeName>("basic");
-  const [initialCardType, setInitialCardType] = useState<CardTypeName>("basic");
+  const [cardType, setCardType] = useState(snapshot.cardType);
+  const [initialCardType] = useState(snapshot.cardType);
   /** Optional second card with swapped sides when creating a new basic card. */
   const [createReversedPair, setCreateReversedPair] = useState(false);
-  const [initialCreateReversed, setInitialCreateReversed] = useState(false);
+  const [initialCreateReversed] = useState(false);
   /** Preserve reversible link when editing. */
-  const [pairMeta, setPairMeta] = useState<{
-    pairId?: string;
-    pairRole?: "forward" | "reverse";
-  }>({});
+  const [pairMeta] = useState(snapshot.pairMeta);
 
-  const [clozeBefore, setClozeBefore] = useState("");
-  const [clozeGapFront, setClozeGapFront] = useState("");
-  const [clozeHidden, setClozeHidden] = useState("");
-  const [clozeAfter, setClozeAfter] = useState("");
-  const [initialClozeBefore, setInitialClozeBefore] = useState("");
-  const [initialClozeGapFront, setInitialClozeGapFront] = useState("");
-  const [initialClozeHidden, setInitialClozeHidden] = useState("");
-  const [initialClozeAfter, setInitialClozeAfter] = useState("");
+  const [clozeBefore, setClozeBefore] = useState(snapshot.clozeBefore);
+  const [clozeGapFront, setClozeGapFront] = useState(snapshot.clozeGapFront);
+  const [clozeHidden, setClozeHidden] = useState(snapshot.clozeHidden);
+  const [clozeAfter, setClozeAfter] = useState(snapshot.clozeAfter);
+  const [initialClozeBefore] = useState(snapshot.clozeBefore);
+  const [initialClozeGapFront] = useState(snapshot.clozeGapFront);
+  const [initialClozeHidden] = useState(snapshot.clozeHidden);
+  const [initialClozeAfter] = useState(snapshot.clozeAfter);
 
-  const setMediaUrl = (
-    side: "front" | "back",
-    mediaType: "image" | "audio" | "video",
-    value: string,
-  ) => {
-    setMediaForm((current) => ({
-      ...current,
-      [side]: {
-        ...current[side],
-        urls: { ...current[side].urls, [mediaType]: value },
-      },
-    }));
-  };
+  const setMediaUrl = useCallback(
+    (side: "front" | "back", mediaType: "image" | "audio" | "video", value: string) => {
+      setMediaForm((current) => ({
+        ...current,
+        [side]: {
+          ...current[side],
+          urls: { ...current[side].urls, [mediaType]: value },
+        },
+      }));
+    },
+    [],
+  );
 
-  const moveMediaOrder = (
-    side: "front" | "back",
-    mediaType: "image" | "audio" | "video",
-    direction: -1 | 1,
-  ) => {
-    setMediaForm((current) => moveMediaInForm(current, side, mediaType, direction));
-  };
+  const moveMediaOrder = useCallback(
+    (side: "front" | "back", mediaType: "image" | "audio" | "video", direction: -1 | 1) => {
+      setMediaForm((current) => moveMediaInForm(current, side, mediaType, direction));
+    },
+    [],
+  );
 
   const [aiBackBusy, setAiBackBusy] = useState(false);
   const [aiFrontImgBusy, setAiFrontImgBusy] = useState(false);
@@ -412,12 +535,8 @@ export default function AddCardScreen() {
 
   const handlePickAudio = useCallback(
     async (side: CardMediaSide) => {
-      if (!user?.id) {
+      if (!userId) {
         setErrorModal(t("uploadAudioNeedLogin"));
-        return;
-      }
-      if (!deckId) {
-        setErrorModal(t("deckNotFound"));
         return;
       }
       const asset = await pickCardAudioFile();
@@ -431,9 +550,9 @@ export default function AddCardScreen() {
         fileName,
         mimeType: asset.mimeType,
         fileSize: asset.size ?? null,
-        userId: user.id,
+        userId,
         deckId,
-        cardId,
+        cardId: cardId ?? undefined,
         side,
         pickerCacheUri: asset.uri,
         onPhase: (phase) => {
@@ -460,32 +579,16 @@ export default function AddCardScreen() {
       setMediaUrl(side, "audio", result.publicUrl);
       setAudioUploadModal(null);
     },
-    [cardId, deckId, t, user?.id],
+    [cardId, deckId, t, userId],
   );
 
-  const renderAudioUploadBtn = (side: CardMediaSide) => {
-    const uploading = audioUploadModal?.visible && audioUploadModal.side === side;
-    return (
-      <TouchableOpacity
-        style={[
-          styles.aiLabelBtn,
-          {
-            borderColor: C.tint,
-            backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
-            opacity: uploading ? 0.5 : 1,
-          },
-        ]}
-        onPress={() => handlePickAudio(side)}
-        disabled={uploading}
-        activeOpacity={0.75}
-        accessibilityRole="button"
-        accessibilityLabel={t("uploadAudio")}
-      >
-        <Feather name="upload" size={14} color={C.tint} />
-        <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>{t("uploadAudio")}</Text>
-      </TouchableOpacity>
-    );
-  };
+  const audioUploadLabel = t("uploadAudio");
+  const aiImageBusyLabel = t("aiGenerateImageLoading");
+  const aiImageIdleLabel = t("aiGenerateImage");
+  const aiBackBusyLabel = t("aiGenerateBackLoading");
+  const aiBackIdleLabel = t("aiGenerateBack");
+  const frontHasText = frontText.trim().length > 0;
+  const backOrFrontHasText = frontHasText || backText.trim().length > 0;
 
   const handleAiFillBack = useCallback(async () => {
     if (!deck || cardType !== "basic" || !frontText.trim()) {
@@ -538,94 +641,6 @@ export default function AddCardScreen() {
     if (url) setMediaUrl("back", "image", url);
     else setErrorModal(t("aiError"));
   }, [backText, cardType, deck, frontText, t]);
-
-  useEffect(() => {
-    if (!deckId) {
-      setError(t("deckNotFound"));
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    const loadDeckAndCard = async () => {
-      const [
-        { data: deckData, error: deckError },
-        { data: cardData, error: cardError },
-      ] = await Promise.all([
-        supabase.from("decks").select("*").eq("deck_id", deckId).single(),
-        cardId
-          ? supabase.from("cards").select("*, card_media(*)").eq("card_id", cardId).single()
-          : Promise.resolve({ data: null, error: null }),
-      ]);
-
-      if (deckError || cardError) {
-        setError(t("failedToLoadData"));
-      } else {
-        setDeck(deckData as Deck);
-        const front = cardData?.front_text ?? "";
-        const back = cardData?.back_text ?? "";
-        const loadedMediaForm = cardMediaRowsToForm(cardData?.card_media);
-        const notesVal = cardData?.notes ?? "";
-        setFrontText(front);
-        setBackText(normalizeCardType(cardData?.card_type) === "cloze" ? "" : back);
-        setMediaForm(loadedMediaForm);
-        setNotes(notesVal);
-        setInitialFront(front);
-        setInitialBack(normalizeCardType(cardData?.card_type) === "cloze" ? "" : back);
-        setInitialMediaForm(loadedMediaForm);
-        setInitialNotes(notesVal);
-
-        const ct = normalizeCardType(cardData?.card_type);
-        setCardType(ct);
-        setInitialCardType(ct);
-        const extra = parseCardExtra(cardData?.card_extra);
-        setPairMeta(
-          extra.pairId
-            ? { pairId: extra.pairId, pairRole: extra.pairRole }
-            : {},
-        );
-        setCreateReversedPair(false);
-        setInitialCreateReversed(false);
-
-        if (ct === "cloze" && cardData) {
-          const cp = getClozePartsFromCard(cardData as Card);
-          if (cp) {
-            setClozeBefore(cp.before);
-            setClozeGapFront(cp.gapFront);
-            setClozeHidden(clozeHiddenForEdit(cp.hidden));
-            setClozeAfter(cp.after);
-            setInitialClozeBefore(cp.before);
-            setInitialClozeGapFront(cp.gapFront);
-            setInitialClozeHidden(clozeHiddenForEdit(cp.hidden));
-            setInitialClozeAfter(cp.after);
-          } else {
-            setClozeBefore("");
-            setClozeGapFront("");
-            setClozeHidden("");
-            setClozeAfter("");
-            setInitialClozeBefore("");
-            setInitialClozeGapFront("");
-            setInitialClozeHidden("");
-            setInitialClozeAfter("");
-          }
-        } else {
-          setClozeBefore("");
-          setClozeGapFront("");
-          setClozeHidden("");
-          setClozeAfter("");
-          setInitialClozeBefore("");
-          setInitialClozeGapFront("");
-          setInitialClozeHidden("");
-          setInitialClozeAfter("");
-        }
-      }
-      setIsLoading(false);
-    };
-
-    loadDeckAndCard();
-  }, [deckId, cardId, t]);
 
   const handleSave = async () => {
     if (!cardId && !deckId) {
@@ -726,7 +741,7 @@ export default function AddCardScreen() {
             front_text: outFront,
             back_text: outBack,
             notes: notesVal,
-            created_by: user?.id ?? null,
+            created_by: userId,
           })
           .select("card_id")
           .single();
@@ -746,7 +761,7 @@ export default function AddCardScreen() {
           front_text: outBack,
           back_text: outFront,
           notes: notesVal,
-          created_by: user?.id ?? null,
+          created_by: userId,
         }).select("card_id").single();
         if (e2 || !secondRow?.card_id) {
           await supabase.from("cards").delete().eq("card_id", firstRow.card_id);
@@ -771,7 +786,7 @@ export default function AddCardScreen() {
         front_text: outFront,
         back_text: outBack,
         notes: notesVal,
-        created_by: user?.id ?? null,
+        created_by: userId,
       }).select("card_id").single();
 
       if (upsertError || !insertedCard?.card_id) {
@@ -817,12 +832,16 @@ export default function AddCardScreen() {
     notes !== initialNotes;
   const showPairStudySwitcher =
     cardType === "basic" && createReversedPair && !isEdit;
-  const clozePartsPreview: ClozeParts = {
-    before: clozeBefore,
-    gapFront: clozeGapFront.trim(),
-    hidden: normalizeClozeHidden(clozeHidden),
-    after: clozeAfter,
-  };
+  const clozePartsPreview: ClozeParts = useMemo(
+    () => ({
+      before: clozeBefore,
+      gapFront: clozeGapFront.trim(),
+      hidden: normalizeClozeHidden(clozeHidden),
+      after: clozeAfter,
+    }),
+    [clozeAfter, clozeBefore, clozeGapFront, clozeHidden],
+  );
+  const clozePartsPreviewDeferred = useDeferredValue(clozePartsPreview);
   const frontPreviewMedia = orderedMediaFromForm(mediaForm, "front");
   const backPreviewMedia = orderedMediaFromForm(mediaForm, "back");
 
@@ -831,42 +850,18 @@ export default function AddCardScreen() {
       <CardSideMedia key={`${item.kind}-${item.url}`} url={item.url} kind={item.kind} />
     ));
 
-  /* ── Loading state ── */
-  if (isLoading) {
-    return (
-      <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
-        <ActivityIndicator size="large" color={C.tint} />
-      </View>
-    );
-  }
-
-  /* ── Deck not found ── */
-  if (!deck) {
-    return (
-      <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
-        <Text style={{ color: C.textSub, marginBottom: 16 }}>
-          {error ?? t("deckNotFound")}
-        </Text>
-        <TouchableOpacity
-          style={[styles.btnCancel, { backgroundColor: C.surface, borderColor: C.border }]}
-          onPress={() => router.back()}
-        >
-          <Text style={[styles.btnCancelTxt, { color: C.textSub }]}>{t("goBack")}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1, backgroundColor: C.bg }}
       >
         <ScrollView
           contentContainerStyle={styles.scrollOuter}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={Platform.OS === 'web'}
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={Platform.OS === "web"}
+          removeClippedSubviews={Platform.OS === "android" ? false : undefined}
         >
           <View style={styles.formContainer}>
             {/* ── HERO HEADER ── */}
@@ -928,7 +923,7 @@ export default function AddCardScreen() {
                 <>
                   <Text style={[styles.formIntro, { color: C.textSub }]}>{t("clozeIntro")}</Text>
                   <ClozeLivePreview
-                    parts={clozePartsPreview}
+                    parts={clozePartsPreviewDeferred}
                     sideBySide={formSideBySide}
                     textColor={C.text}
                     subColor={C.textSub}
@@ -957,100 +952,54 @@ export default function AddCardScreen() {
                         balanced={formSideBySide}
                       />
                       <Field label={t("clozeFieldBefore")} required>
-                        <InputRow
+                        <FormTextInputRow
                           icon="align-left"
-                          focused={focusedField === "cBefore"}
-                          onFocus={() => setFocusedField("cBefore")}
-                          onBlur={() => setFocusedField(null)}
+                          value={clozeBefore}
+                          onChangeText={setClozeBefore}
+                          placeholder={t("clozePlaceholderBefore")}
                           multiline
-                        >
-                          <TextInput
-                            style={[styles.input, styles.inputClozeCompact, webTextInputNoOutline]}
-                            placeholder={t("clozePlaceholderBefore")}
-                            placeholderTextColor={C.placeholder}
-                            value={clozeBefore}
-                            onChangeText={setClozeBefore}
-                            onFocus={() => setFocusedField("cBefore")}
-                            onBlur={() => setFocusedField(null)}
-                            multiline
-                            textAlignVertical="top"
-                          />
-                        </InputRow>
+                          inputStyle={styles.inputClozeCompact}
+                        />
                       </Field>
                       <Field label={t("clozeFieldGapFront")}>
-                        <InputRow
+                        <FormTextInputRow
                           icon="book-open"
-                          focused={focusedField === "cGap"}
-                          onFocus={() => setFocusedField("cGap")}
-                          onBlur={() => setFocusedField(null)}
+                          value={clozeGapFront}
+                          onChangeText={setClozeGapFront}
+                          placeholder={t("clozePlaceholderGapFront")}
                           multiline
-                        >
-                          <TextInput
-                            style={[
-                              styles.input,
-                              styles.inputClozeGapHint,
-                              styles.inputClozeGap,
-                              webTextInputNoOutline,
-                            ]}
-                            placeholder={t("clozePlaceholderGapFront")}
-                            placeholderTextColor={C.placeholder}
-                            value={clozeGapFront}
-                            onChangeText={setClozeGapFront}
-                            onFocus={() => setFocusedField("cGap")}
-                            onBlur={() => setFocusedField(null)}
-                            multiline
-                            textAlignVertical="top"
-                          />
-                          {clozeGapFront.length > 0 && (
-                            <Pressable
-                              onPress={() => setClozeGapFront("")}
-                              hitSlop={8}
-                              style={{ marginTop: 2 }}
-                            >
-                              <Feather name="x-circle" size={16} color={C.textMuted} />
-                            </Pressable>
-                          )}
-                        </InputRow>
+                          showClear
+                          inputStyle={[styles.inputClozeGapHint, styles.inputClozeGap]}
+                        />
                       </Field>
                       <Field label={t("clozeFieldAfter")}>
-                        <InputRow
+                        <FormTextInputRow
                           icon="align-right"
-                          focused={focusedField === "cAfter"}
-                          onFocus={() => setFocusedField("cAfter")}
-                          onBlur={() => setFocusedField(null)}
+                          value={clozeAfter}
+                          onChangeText={setClozeAfter}
+                          placeholder={t("clozePlaceholderAfter")}
                           multiline
-                        >
-                          <TextInput
-                            style={[styles.input, styles.inputClozeCompact, webTextInputNoOutline]}
-                            placeholder={t("clozePlaceholderAfter")}
-                            placeholderTextColor={C.placeholder}
-                            value={clozeAfter}
-                            onChangeText={setClozeAfter}
-                            onFocus={() => setFocusedField("cAfter")}
-                            onBlur={() => setFocusedField(null)}
-                            multiline
-                            textAlignVertical="top"
-                          />
-                        </InputRow>
+                          inputStyle={styles.inputClozeCompact}
+                        />
                       </Field>
                       <CardMediaFormFields
                         side="front"
                         mediaForm={mediaForm}
                         onUrlChange={setMediaUrl}
                         onMove={moveMediaOrder}
-                        focusedField={focusedField}
-                        onFocusField={setFocusedField}
                         t={t}
-                        audioLabelRight={renderAudioUploadBtn("front")}
+                        audioLabelRight={
+                          <AudioUploadSideButton
+                            side="front"
+                            disabled={Boolean(
+                              audioUploadModal?.visible && audioUploadModal.side === "front",
+                            )}
+                            onPress={handlePickAudio}
+                            label={audioUploadLabel}
+                          />
+                        }
                       />
-                      <CardNotesField
-                        notes={notes}
-                        onChangeNotes={setNotes}
-                        focusedField={focusedField}
-                        onFocusField={setFocusedField}
-                        formSideBySide={formSideBySide}
-                        t={t}
-                      />
+                      <CardNotesField notes={notes} onChangeNotes={setNotes} t={t} />
                     </View>
 
                     {formSideBySide ? (
@@ -1070,56 +1019,40 @@ export default function AddCardScreen() {
                         balanced={formSideBySide}
                       />
                       <Field label={t("clozeFieldHidden")} required>
-                        <InputRow
+                        <FormTextInputRow
                           icon="target"
-                          focused={focusedField === "cHidden"}
-                          onFocus={() => setFocusedField("cHidden")}
-                          onBlur={() => setFocusedField(null)}
+                          value={clozeHidden}
+                          onChangeText={setClozeHidden}
+                          placeholder={t("clozePlaceholderHidden")}
                           multiline
                           fill={formSideBySide}
-                        >
-                          <TextInput
-                            style={[
-                              styles.input,
-                              styles.inputMulti,
-                              formSideBySide && styles.inputMultiFill,
-                              styles.inputClozeHidden,
-                              webTextInputNoOutline,
-                            ]}
-                            placeholder={t("clozePlaceholderHidden")}
-                            placeholderTextColor={C.placeholder}
-                            value={clozeHidden}
-                            onChangeText={setClozeHidden}
-                            onFocus={() => setFocusedField("cHidden")}
-                            onBlur={() => {
-                              setFocusedField(null);
-                              if (clozeHidden.trim()) {
-                                setClozeHidden(normalizeClozeHidden(clozeHidden));
-                              }
-                            }}
-                            multiline
-                            textAlignVertical="top"
-                          />
-                          {clozeHidden.length > 0 && (
-                            <Pressable
-                              onPress={() => setClozeHidden("")}
-                              hitSlop={8}
-                              style={{ marginTop: 2 }}
-                            >
-                              <Feather name="x-circle" size={16} color={C.textMuted} />
-                            </Pressable>
-                          )}
-                        </InputRow>
+                          showClear
+                          inputStyle={[
+                            styles.inputMulti,
+                            formSideBySide && styles.inputMultiFill,
+                            styles.inputClozeHidden,
+                          ]}
+                          onBlur={() => {
+                            setClozeHidden((v) => (v.trim() ? normalizeClozeHidden(v) : v));
+                          }}
+                        />
                       </Field>
                       <CardMediaFormFields
                         side="back"
                         mediaForm={mediaForm}
                         onUrlChange={setMediaUrl}
                         onMove={moveMediaOrder}
-                        focusedField={focusedField}
-                        onFocusField={setFocusedField}
                         t={t}
-                        audioLabelRight={renderAudioUploadBtn("back")}
+                        audioLabelRight={
+                          <AudioUploadSideButton
+                            side="back"
+                            disabled={Boolean(
+                              audioUploadModal?.visible && audioUploadModal.side === "back",
+                            )}
+                            onPress={handlePickAudio}
+                            label={audioUploadLabel}
+                          />
+                        }
                       />
                     </View>
                   </View>
@@ -1148,85 +1081,47 @@ export default function AddCardScreen() {
                         balanced={formSideBySide}
                       />
                       <Field hideLabel>
-                        <InputRow
+                        <FormTextInputRow
                           icon="align-left"
-                          focused={focusedField === "front"}
-                          onFocus={() => setFocusedField("front")}
-                          onBlur={() => setFocusedField(null)}
+                          value={frontText}
+                          onChangeText={setFrontText}
+                          placeholder={t("frontPlaceholder")}
                           multiline
                           fill={formSideBySide}
-                        >
-                          <TextInput
-                            style={[
-                              styles.input,
-                              styles.inputMulti,
-                              formSideBySide && styles.inputMultiFill,
-                              webTextInputNoOutline,
-                            ]}
-                            placeholder={t("frontPlaceholder")}
-                            placeholderTextColor={C.placeholder}
-                            value={frontText}
-                            onChangeText={setFrontText}
-                            onFocus={() => setFocusedField("front")}
-                            onBlur={() => setFocusedField(null)}
-                            multiline
-                            textAlignVertical="top"
-                          />
-                          {frontText.length > 0 && (
-                            <Pressable
-                              onPress={() => setFrontText("")}
-                              hitSlop={8}
-                              style={{ marginTop: 2 }}
-                            >
-                              <Feather name="x-circle" size={16} color={C.textMuted} />
-                            </Pressable>
-                          )}
-                        </InputRow>
+                          showClear
+                          inputStyle={[
+                            styles.inputMulti,
+                            formSideBySide && styles.inputMultiFill,
+                          ]}
+                        />
                       </Field>
                       <CardMediaFormFields
                         side="front"
                         mediaForm={mediaForm}
                         onUrlChange={setMediaUrl}
                         onMove={moveMediaOrder}
-                        focusedField={focusedField}
-                        onFocusField={setFocusedField}
                         t={t}
                         imageLabelRight={
-                          <TouchableOpacity
-                            style={[
-                              styles.aiLabelBtn,
-                              {
-                                borderColor: C.tint,
-                                backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
-                                opacity: !frontText.trim() || aiFrontImgBusy ? 0.5 : 1,
-                              },
-                            ]}
+                          <AiFrontImageButton
+                            busy={aiFrontImgBusy}
+                            disabled={aiFrontImgBusy || !frontHasText}
                             onPress={handleAiFrontImage}
-                            disabled={aiFrontImgBusy || !frontText.trim()}
-                            activeOpacity={0.75}
-                            accessibilityRole="button"
-                            accessibilityLabel={t("aiGenerateImage")}
-                          >
-                            {aiFrontImgBusy ? (
-                              <ActivityIndicator size="small" color={C.tint} />
-                            ) : (
-                              <Feather name="image" size={14} color={C.tint} />
-                            )}
-                            <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
-                              {aiFrontImgBusy ? t("aiGenerateImageLoading") : t("aiGenerateImage")}
-                            </Text>
-                          </TouchableOpacity>
+                            busyLabel={aiImageBusyLabel}
+                            idleLabel={aiImageIdleLabel}
+                          />
                         }
-                        audioLabelRight={renderAudioUploadBtn("front")}
+                        audioLabelRight={
+                          <AudioUploadSideButton
+                            side="front"
+                            disabled={Boolean(
+                              audioUploadModal?.visible && audioUploadModal.side === "front",
+                            )}
+                            onPress={handlePickAudio}
+                            label={audioUploadLabel}
+                          />
+                        }
                       />
-                      <CardNotesField
-                        notes={notes}
-                        onChangeNotes={setNotes}
-                        focusedField={focusedField}
-                        onFocusField={setFocusedField}
-                        formSideBySide={formSideBySide}
-                        t={t}
-                      />
+                      <CardNotesField notes={notes} onChangeNotes={setNotes} t={t} />
                     </View>
 
                     {formSideBySide ? (
@@ -1245,106 +1140,55 @@ export default function AddCardScreen() {
                         title={t("back")}
                         balanced={formSideBySide}
                         right={
-                          <TouchableOpacity
-                            style={[
-                              styles.aiLabelBtn,
-                              {
-                                borderColor: C.tint,
-                                backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
-                                opacity: !frontText.trim() || aiBackBusy ? 0.5 : 1,
-                              },
-                            ]}
+                          <AiBackFillButton
+                            busy={aiBackBusy}
+                            disabled={aiBackBusy || !frontHasText}
                             onPress={handleAiFillBack}
-                            disabled={aiBackBusy || !frontText.trim()}
-                            activeOpacity={0.75}
-                            accessibilityRole="button"
-                            accessibilityLabel={t("aiGenerateBack")}
-                          >
-                            {aiBackBusy ? (
-                              <ActivityIndicator size="small" color={C.tint} />
-                            ) : (
-                              <Feather name="zap" size={14} color={C.tint} />
-                            )}
-                            <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
-                              {aiBackBusy ? t("aiGenerateBackLoading") : t("aiGenerateBack")}
-                            </Text>
-                          </TouchableOpacity>
+                            busyLabel={aiBackBusyLabel}
+                            idleLabel={aiBackIdleLabel}
+                          />
                         }
                       />
                       <Field hideLabel>
-                        <InputRow
+                        <FormTextInputRow
                           icon="align-right"
-                          focused={focusedField === "back"}
-                          onFocus={() => setFocusedField("back")}
-                          onBlur={() => setFocusedField(null)}
+                          value={backText}
+                          onChangeText={setBackText}
+                          placeholder={t("backPlaceholder")}
                           multiline
                           fill={formSideBySide}
-                        >
-                          <TextInput
-                            style={[
-                              styles.input,
-                              styles.inputMulti,
-                              formSideBySide && styles.inputMultiFill,
-                              webTextInputNoOutline,
-                            ]}
-                            placeholder={t("backPlaceholder")}
-                            placeholderTextColor={C.placeholder}
-                            value={backText}
-                            onChangeText={setBackText}
-                            onFocus={() => setFocusedField("back")}
-                            onBlur={() => setFocusedField(null)}
-                            multiline
-                            textAlignVertical="top"
-                          />
-                          {backText.length > 0 && (
-                            <Pressable
-                              onPress={() => setBackText("")}
-                              hitSlop={8}
-                              style={{ marginTop: 2 }}
-                            >
-                              <Feather name="x-circle" size={16} color={C.textMuted} />
-                            </Pressable>
-                          )}
-                        </InputRow>
+                          showClear
+                          inputStyle={[
+                            styles.inputMulti,
+                            formSideBySide && styles.inputMultiFill,
+                          ]}
+                        />
                       </Field>
                       <CardMediaFormFields
                         side="back"
                         mediaForm={mediaForm}
                         onUrlChange={setMediaUrl}
                         onMove={moveMediaOrder}
-                        focusedField={focusedField}
-                        onFocusField={setFocusedField}
                         t={t}
                         imageLabelRight={
-                          <TouchableOpacity
-                            style={[
-                              styles.aiLabelBtn,
-                              {
-                                borderColor: C.tint,
-                                backgroundColor: C.isDark ? "rgba(99,102,241,0.12)" : "#eef0ff",
-                                opacity:
-                                  (!frontText.trim() && !backText.trim()) || aiBackImgBusy ? 0.5 : 1,
-                              },
-                            ]}
+                          <AiFrontImageButton
+                            busy={aiBackImgBusy}
+                            disabled={aiBackImgBusy || !backOrFrontHasText}
                             onPress={handleAiBackImage}
-                            disabled={
-                              aiBackImgBusy || (!frontText.trim() && !backText.trim())
-                            }
-                            activeOpacity={0.75}
-                            accessibilityRole="button"
-                            accessibilityLabel={t("aiGenerateImage")}
-                          >
-                            {aiBackImgBusy ? (
-                              <ActivityIndicator size="small" color={C.tint} />
-                            ) : (
-                              <Feather name="image" size={14} color={C.tint} />
-                            )}
-                            <Text style={[styles.aiLabelBtnTxt, { color: C.tint }]}>
-                              {aiBackImgBusy ? t("aiGenerateImageLoading") : t("aiGenerateImage")}
-                            </Text>
-                          </TouchableOpacity>
+                            busyLabel={aiImageBusyLabel}
+                            idleLabel={aiImageIdleLabel}
+                          />
                         }
-                        audioLabelRight={renderAudioUploadBtn("back")}
+                        audioLabelRight={
+                          <AudioUploadSideButton
+                            side="back"
+                            disabled={Boolean(
+                              audioUploadModal?.visible && audioUploadModal.side === "back",
+                            )}
+                            onPress={handlePickAudio}
+                            label={audioUploadLabel}
+                          />
+                        }
                       />
                     </View>
                   </View>
@@ -1626,6 +1470,153 @@ export default function AddCardScreen() {
   );
 }
 
+const emptySnapshot: CardFormSnapshot = {
+  frontText: "",
+  backText: "",
+  mediaForm: emptyCardMediaForm(),
+  notes: "",
+  cardType: "basic",
+  pairMeta: {},
+  clozeBefore: "",
+  clozeGapFront: "",
+  clozeHidden: "",
+  clozeAfter: "",
+};
+
+function buildSnapshotFromCard(cardData: Card | null): CardFormSnapshot {
+  const front = cardData?.front_text ?? "";
+  const back = cardData?.back_text ?? "";
+  const ct = normalizeCardType(cardData?.card_type);
+  const extra = parseCardExtra(cardData?.card_extra);
+  const base: CardFormSnapshot = {
+    frontText: front,
+    backText: ct === "cloze" ? "" : back,
+    mediaForm: cardMediaRowsToForm(cardData?.card_media),
+    notes: cardData?.notes ?? "",
+    cardType: ct,
+    pairMeta: extra.pairId ? { pairId: extra.pairId, pairRole: extra.pairRole } : {},
+    clozeBefore: "",
+    clozeGapFront: "",
+    clozeHidden: "",
+    clozeAfter: "",
+  };
+  if (ct === "cloze" && cardData) {
+    const cp = getClozePartsFromCard(cardData);
+    if (cp) {
+      return {
+        ...base,
+        clozeBefore: cp.before,
+        clozeGapFront: cp.gapFront,
+        clozeHidden: clozeHiddenForEdit(cp.hidden),
+        clozeAfter: cp.after,
+      };
+    }
+  }
+  return base;
+}
+
+export default function AddCardScreen() {
+  const router = useRouter();
+  const navigation = useNavigation();
+  const params = useLocalSearchParams();
+  const deckId = Array.isArray(params.deckId)
+    ? params.deckId[0]
+    : typeof params.deckId === "string"
+      ? params.deckId
+      : null;
+  const cardId = Array.isArray(params.cardId)
+    ? params.cardId[0]
+    : typeof params.cardId === "string"
+      ? params.cardId
+      : null;
+  const { t } = useLanguage();
+  const { user } = useAuth();
+  const C = useAppColors();
+  const [formSideBySide] = useState(initialFormSideBySide);
+  const isEdit = Boolean(cardId);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: isEdit ? t("editCard") : t("addCard"),
+    });
+  }, [navigation, isEdit, t]);
+
+  const [deck, setDeck] = useState<Deck | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<CardFormSnapshot>(emptySnapshot);
+
+  useEffect(() => {
+    if (!deckId) {
+      setLoadError(t("deckNotFound"));
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    const loadDeckAndCard = async () => {
+      const [
+        { data: deckData, error: deckError },
+        { data: cardData, error: cardError },
+      ] = await Promise.all([
+        supabase.from("decks").select("*").eq("deck_id", deckId).single(),
+        cardId
+          ? supabase.from("cards").select("*, card_media(*)").eq("card_id", cardId).single()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+
+      if (deckError || cardError) {
+        setLoadError(t("failedToLoadData"));
+      } else {
+        setDeck(deckData as Deck);
+        setSnapshot(buildSnapshotFromCard(cardData as Card | null));
+      }
+      setIsLoading(false);
+    };
+
+    void loadDeckAndCard();
+  }, [deckId, cardId, t]);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
+        <ActivityIndicator size="large" color={C.tint} />
+      </View>
+    );
+  }
+
+  if (!deck || !deckId) {
+    return (
+      <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
+        <Text style={{ color: C.textSub, marginBottom: 16 }}>
+          {loadError ?? t("deckNotFound")}
+        </Text>
+        <TouchableOpacity
+          style={[styles.btnCancel, { backgroundColor: C.surface, borderColor: C.border }]}
+          onPress={() => router.back()}
+        >
+          <Text style={[styles.btnCancelTxt, { color: C.textSub }]}>{t("goBack")}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <CardEditorForm
+      key={cardId ?? `new-${deckId}`}
+      deck={deck}
+      deckId={deckId}
+      cardId={cardId}
+      userId={user?.id ?? null}
+      isEdit={isEdit}
+      formSideBySide={formSideBySide}
+      snapshot={snapshot}
+    />
+  );
+}
+
 /* ─── HELPER SUB-COMPONENTS ─── */
 function CardSideColumnHeader({
   title,
@@ -1648,41 +1639,24 @@ function CardSideColumnHeader({
 function CardNotesField({
   notes,
   onChangeNotes,
-  focusedField,
-  onFocusField,
-  formSideBySide,
   t,
 }: {
   notes: string;
   onChangeNotes: (v: string) => void;
-  focusedField: string | null;
-  onFocusField: (v: string | null) => void;
-  formSideBySide: boolean;
   t: (k: string) => string;
 }) {
   const C = useAppColors();
   return (
     <Field label={t("notes")}>
       <Text style={[styles.notesFrontHint, { color: C.textMuted }]}>{t("notesFrontHint")}</Text>
-      <InputRow
+      <FormTextInputRow
         icon="file-text"
-        focused={focusedField === "notes"}
-        onFocus={() => onFocusField("notes")}
-        onBlur={() => onFocusField(null)}
+        value={notes}
+        onChangeText={onChangeNotes}
+        placeholder={t("notesPlaceholder")}
         multiline
-      >
-        <TextInput
-          style={[styles.input, styles.inputNotes, webTextInputNoOutline]}
-          placeholder={t("notesPlaceholder")}
-          placeholderTextColor={C.placeholder}
-          value={notes}
-          onChangeText={onChangeNotes}
-          onFocus={() => onFocusField("notes")}
-          onBlur={() => onFocusField(null)}
-          multiline
-          textAlignVertical="top"
-        />
-      </InputRow>
+        inputStyle={styles.inputNotes}
+      />
     </Field>
   );
 }
@@ -1715,53 +1689,6 @@ function Field({
         </View>
       ) : null}
       {children}
-    </View>
-  );
-}
-
-function InputRow({
-  icon,
-  focused,
-  onFocus,
-  onBlur,
-  multiline,
-  fill,
-  children,
-}: {
-  icon: keyof typeof Feather.glyphMap;
-  focused: boolean;
-  onFocus: () => void;
-  onBlur: () => void;
-  multiline?: boolean;
-  fill?: boolean;
-  children: React.ReactNode;
-}) {
-  const C = useAppColors();
-  const coloredChildren = Children.map(children, (child) => {
-    if (!isValidElement(child) || child.type !== TextInput) return child;
-    const input = child as ReactElement<{ style?: StyleProp<TextStyle> }>;
-    return cloneElement(input, {
-      style: StyleSheet.flatten([input.props.style, { color: C.text }]),
-    });
-  });
-  return (
-    <View
-      style={[
-        styles.inputRow,
-        { backgroundColor: C.inputBg, borderColor: C.inputBorder },
-        multiline && styles.inputRowMulti,
-        fill && styles.inputRowFill,
-        focused && [styles.inputRowFocused, C.isDark && { backgroundColor: C.surface, borderColor: '#6366f1' }],
-      ]}
-      pointerEvents="box-none"
-    >
-      <Feather
-        name={icon}
-        size={16}
-        color={focused ? C.tint : C.textMuted}
-        style={multiline ? { marginTop: 3 } : undefined}
-      />
-      {coloredChildren}
     </View>
   );
 }

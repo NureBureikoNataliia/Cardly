@@ -1,5 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { TextStyle } from "react-native";
@@ -19,11 +19,11 @@ const webTextInputNoOutline: TextStyle | undefined =
 
 const MEDIA_META: Record<
   CardMediaType,
-  { icon: keyof typeof Feather.glyphMap; labelKey: string; focusSuffix: string }
+  { icon: keyof typeof Feather.glyphMap; labelKey: string }
 > = {
-  image: { icon: "image", labelKey: "mediaKindImage", focusSuffix: "Image" },
-  audio: { icon: "volume-2", labelKey: "mediaKindAudio", focusSuffix: "Audio" },
-  video: { icon: "video", labelKey: "mediaKindVideo", focusSuffix: "Video" },
+  image: { icon: "image", labelKey: "mediaKindImage" },
+  audio: { icon: "volume-2", labelKey: "mediaKindAudio" },
+  video: { icon: "video", labelKey: "mediaKindVideo" },
 };
 
 type Props = {
@@ -31,20 +31,94 @@ type Props = {
   mediaForm: CardMediaForm;
   onUrlChange: (side: CardMediaSide, mediaType: CardMediaType, value: string) => void;
   onMove: (side: CardMediaSide, mediaType: CardMediaType, direction: -1 | 1) => void;
-  focusedField: string | null;
-  onFocusField: (key: string | null) => void;
   t: (key: string) => string;
   imageLabelRight?: ReactNode;
   audioLabelRight?: ReactNode;
 };
 
-export function CardMediaFormFields({
+function MediaUrlField({
+  side,
+  kind,
+  url,
+  onUrlChange,
+  onBlurField,
+  issue,
+  t,
+  labelRight,
+}: {
+  side: CardMediaSide;
+  kind: CardMediaType;
+  url: string;
+  onUrlChange: (side: CardMediaSide, mediaType: CardMediaType, value: string) => void;
+  onBlurField: () => void;
+  issue: MediaUrlIssue | null;
+  t: (key: string) => string;
+  labelRight?: ReactNode;
+}) {
+  const C = useAppColors();
+  const [focused, setFocused] = useState(false);
+  const meta = MEDIA_META[kind];
+
+  return (
+    <View style={styles.mediaFieldCol}>
+      <View style={styles.labelRow}>
+        <Text style={[styles.fieldLabel, { color: C.textSub }]}>{t(meta.labelKey)}</Text>
+        {labelRight}
+      </View>
+      <View
+        style={[
+          styles.inputRow,
+          {
+            backgroundColor: C.inputBg,
+            borderColor: issue ? "#ef4444" : C.inputBorder,
+          },
+          focused &&
+            !issue &&
+            (C.isDark
+              ? { backgroundColor: C.surface, borderColor: "#6366f1" }
+              : Platform.OS === "android"
+                ? { borderColor: "#6366f1", backgroundColor: "#fff" }
+                : styles.inputRowFocused),
+        ]}
+      >
+        <Feather
+          name={meta.icon}
+          size={16}
+          color={issue ? "#ef4444" : focused ? C.tint : C.textMuted}
+        />
+        <TextInput
+          style={[styles.input, webTextInputNoOutline, { color: C.text }]}
+          placeholder={kind === "audio" ? t("mediaAudioPlaceholder") : "https://..."}
+          placeholderTextColor={C.placeholder}
+          value={url}
+          onChangeText={(value) => onUrlChange(side, kind, value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            onBlurField();
+          }}
+          autoCapitalize="none"
+          keyboardType="url"
+          autoCorrect={false}
+        />
+        {url.length > 0 ? (
+          <Pressable onPress={() => onUrlChange(side, kind, "")} hitSlop={8}>
+            <Feather name="x-circle" size={16} color={C.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
+      {issue ? (
+        <Text style={styles.urlError}>{t(mediaUrlIssueMessageKey(issue))}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+export const CardMediaFormFields = memo(function CardMediaFormFields({
   side,
   mediaForm,
   onUrlChange,
   onMove,
-  focusedField,
-  onFocusField,
   t,
   imageLabelRight,
   audioLabelRight,
@@ -66,7 +140,7 @@ export function CardMediaFormFields({
     <View style={[styles.wrap, { borderTopColor: C.borderLight }]}>
       <Text style={[styles.orderHint, { color: C.textSub }]}>{t("mediaOrderHint")}</Text>
       {sideForm.order.map((kind, index) => {
-        const focusKey = `${side}${MEDIA_META[kind].focusSuffix}`;
+        const focusKey = `${side}-${kind}`;
         const url = sideForm.urls[kind];
         const validationReason = getMediaUrlValidationIssue(url, kind);
         const showValidation =
@@ -102,65 +176,24 @@ export function CardMediaFormFields({
                 <Feather name="chevron-down" size={18} color={canMoveDown ? C.tint : C.textMuted} />
               </Pressable>
             </View>
-            <View style={styles.mediaFieldCol}>
-              <View style={styles.labelRow}>
-                <Text style={[styles.fieldLabel, { color: C.textSub }]}>
-                  {t(MEDIA_META[kind].labelKey)}
-                </Text>
-                {kind === "image" ? imageLabelRight : null}
-                {kind === "audio" ? audioLabelRight : null}
-              </View>
-              <View
-                style={[
-                  styles.inputRow,
-                  {
-                    backgroundColor: C.inputBg,
-                    borderColor: issue ? "#ef4444" : C.inputBorder,
-                  },
-                  focusedField === focusKey && !issue && [
-                    styles.inputRowFocused,
-                    C.isDark && { backgroundColor: C.surface, borderColor: "#6366f1" },
-                  ],
-                ]}
-              >
-                <Feather
-                  name={MEDIA_META[kind].icon}
-                  size={16}
-                  color={
-                    issue ? "#ef4444" : focusedField === focusKey ? C.tint : C.textMuted
-                  }
-                />
-                <TextInput
-                  style={[styles.input, webTextInputNoOutline, { color: C.text }]}
-                  placeholder={kind === "audio" ? t("mediaAudioPlaceholder") : "https://..."}
-                  placeholderTextColor={C.placeholder}
-                  value={url}
-                  onChangeText={(value) => onUrlChange(side, kind, value)}
-                  onFocus={() => onFocusField(focusKey)}
-                  onBlur={() => {
-                    onFocusField(null);
-                    markBlurred(focusKey);
-                  }}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                  autoCorrect={false}
-                />
-                {url.length > 0 ? (
-                  <Pressable onPress={() => onUrlChange(side, kind, "")} hitSlop={8}>
-                    <Feather name="x-circle" size={16} color={C.textMuted} />
-                  </Pressable>
-                ) : null}
-              </View>
-              {issue ? (
-                <Text style={styles.urlError}>{t(mediaUrlIssueMessageKey(issue))}</Text>
-              ) : null}
-            </View>
+            <MediaUrlField
+              side={side}
+              kind={kind}
+              url={url}
+              onUrlChange={onUrlChange}
+              onBlurField={() => markBlurred(focusKey)}
+              issue={issue}
+              t={t}
+              labelRight={
+                kind === "image" ? imageLabelRight : kind === "audio" ? audioLabelRight : undefined
+              }
+            />
           </View>
         );
       })}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: {
