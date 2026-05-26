@@ -9,6 +9,7 @@ import {
   Platform,
   TouchableOpacity,
   View as RNView,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
@@ -29,6 +30,8 @@ import { useAppColors } from '@/src/contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
 
 type SettingsField = 'avatar' | 'username' | 'email' | 'delete';
+
+const ACCOUNT_COMPACT_WIDTH = 520;
 
 function authProviderLabel(user: User | null, t: (key: string) => string): string {
   if (!user) return '—';
@@ -58,6 +61,8 @@ export default function SettingsScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const C = useAppColors();
+  const { width: windowWidth } = useWindowDimensions();
+  const compactAccount = windowWidth < ACCOUNT_COMPACT_WIDTH;
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: t('settings') });
@@ -102,16 +107,10 @@ export default function SettingsScreen() {
   type NotifPrefs = {
     studyReminder: boolean;
     studyReminderHour: number;
-    streakReminder: boolean;
-    weeklySummary: boolean;
-    newCards: boolean;
   };
   const defaultNotifPrefs: NotifPrefs = {
     studyReminder: false,
     studyReminderHour: 9,
-    streakReminder: true,
-    weeklySummary: false,
-    newCards: true,
   };
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(defaultNotifPrefs);
   const [savingNotif, setSavingNotif] = useState(false);
@@ -121,13 +120,21 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (!user) return;
-    const saved = user.user_metadata?.notifications as NotifPrefs | undefined;
-    if (saved) setNotifPrefs({ ...defaultNotifPrefs, ...saved });
+    const saved = user.user_metadata?.notifications as Partial<NotifPrefs> | undefined;
+    if (saved) {
+      setNotifPrefs({
+        studyReminder: saved.studyReminder ?? defaultNotifPrefs.studyReminder,
+        studyReminderHour: saved.studyReminderHour ?? defaultNotifPrefs.studyReminderHour,
+      });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const handleSaveNotif = async (patch: Partial<NotifPrefs>) => {
-    const next = { ...notifPrefs, ...patch };
+    const next: NotifPrefs = {
+      studyReminder: patch.studyReminder ?? notifPrefs.studyReminder,
+      studyReminderHour: patch.studyReminderHour ?? notifPrefs.studyReminderHour,
+    };
     setNotifPrefs(next);
     setSavingNotif(true);
     setNotifMsg(null);
@@ -352,7 +359,9 @@ export default function SettingsScreen() {
 
       {activeSection === 'account' ? (
       <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
-        <Text style={styles.sectionHeader}>{t('account')}</Text>
+        <Text style={[styles.sectionHeader, compactAccount && styles.sectionHeaderCompact]}>
+          {t('account')}
+        </Text>
 
         <RNView style={styles.accountTopRow}>
           <RNView style={styles.avatarWrap}>
@@ -381,7 +390,11 @@ export default function SettingsScreen() {
           <RNView style={styles.editBlock}>
             <Text style={styles.fieldLabel}>{t('avatarUrl')}</Text>
             <TextInput
-              style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+              style={[
+                styles.inlineInput,
+                compactAccount && styles.inlineInputFull,
+                { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+              ]}
               value={avatarUrl}
               onChangeText={(text) => {
                 setAvatarUrl(text);
@@ -394,16 +407,20 @@ export default function SettingsScreen() {
               editable={!savingAvatar && !deletingAccount}
             />
             {renderFieldFeedback('avatar')}
-            <RNView style={styles.inlineActions}>
+            <RNView style={[styles.inlineActions, compactAccount && styles.inlineActionsStacked]}>
               <TouchableOpacity
-                style={[styles.buttonSecondary, (savingAvatar || deletingAccount) && styles.buttonDisabled]}
+                style={[
+                  styles.buttonSecondary,
+                  compactAccount && styles.buttonSecondaryFlex,
+                  (savingAvatar || deletingAccount) && styles.buttonDisabled,
+                ]}
                 onPress={handleSaveAvatar}
                 disabled={savingAvatar || deletingAccount}
               >
                 {savingAvatar ? <ActivityIndicator color={C.text} /> : <Text style={[styles.buttonSecondaryText, { color: C.text }]}>{t('save')}</Text>}
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.buttonGhost}
+                style={[styles.buttonGhost, compactAccount && styles.buttonGhostFlex]}
                 onPress={() => handleCancelEdit('avatar')}
                 disabled={savingAvatar || deletingAccount}
               >
@@ -415,14 +432,30 @@ export default function SettingsScreen() {
         {!editingField && renderFieldFeedback('avatar')}
 
           <RNView style={[styles.securitySection, { borderTopColor: C.border }]}>
-          <Text style={styles.securityTitle}>{t('accountSecurity')}</Text>
+          <Text style={[styles.securityTitle, compactAccount && styles.securityTitleCompact]}>
+            {t('accountSecurity')}
+          </Text>
 
-          <RNView style={styles.infoRow}>
-            <RNView style={styles.infoRowText}>
+          <RNView
+            style={[
+              styles.infoRow,
+              compactAccount && editingField === 'username' && styles.infoRowStacked,
+            ]}
+          >
+            <RNView
+              style={[
+                styles.infoRowText,
+                compactAccount && editingField === 'username' && styles.infoRowTextStacked,
+              ]}
+            >
               <Text style={styles.infoLabel}>{t('username')}</Text>
               {editingField === 'username' ? (
                 <TextInput
-                  style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                  style={[
+                    styles.inlineInput,
+                    compactAccount && styles.inlineInputFull,
+                    { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+                  ]}
                   value={username}
                   onChangeText={(text) => {
                     setUsername(text);
@@ -440,9 +473,13 @@ export default function SettingsScreen() {
               {renderFieldFeedback('username')}
             </RNView>
             {editingField === 'username' ? (
-              <RNView style={styles.inlineActions}>
+              <RNView style={[styles.inlineActions, compactAccount && styles.inlineActionsStacked]}>
                 <TouchableOpacity
-                  style={[styles.buttonSecondary, (savingUsername || deletingAccount) && styles.buttonDisabled]}
+                  style={[
+                    styles.buttonSecondary,
+                    compactAccount && styles.buttonSecondaryFlex,
+                    (savingUsername || deletingAccount) && styles.buttonDisabled,
+                  ]}
                   onPress={handleSaveUsername}
                   disabled={savingUsername || deletingAccount}
                 >
@@ -453,7 +490,7 @@ export default function SettingsScreen() {
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.buttonGhost}
+                  style={[styles.buttonGhost, compactAccount && styles.buttonGhostFlex]}
                   onPress={() => handleCancelEdit('username')}
                   disabled={savingUsername || deletingAccount}
                 >
@@ -462,7 +499,12 @@ export default function SettingsScreen() {
               </RNView>
             ) : (
               <TouchableOpacity
-                style={[styles.buttonOutline, { backgroundColor: C.surface, borderColor: C.border }]}
+                style={[
+                  styles.buttonOutline,
+                  styles.infoRowAction,
+                  compactAccount && styles.buttonOutlineCompact,
+                  { backgroundColor: C.surface, borderColor: C.border },
+                ]}
                 onPress={() => {
                   resetFieldFromUser('username');
                   setEditingField('username');
@@ -476,12 +518,26 @@ export default function SettingsScreen() {
             )}
           </RNView>
 
-          <RNView style={styles.infoRow}>
-            <RNView style={styles.infoRowText}>
+          <RNView
+            style={[
+              styles.infoRow,
+              compactAccount && editingField === 'email' && styles.infoRowStacked,
+            ]}
+          >
+            <RNView
+              style={[
+                styles.infoRowText,
+                compactAccount && editingField === 'email' && styles.infoRowTextStacked,
+              ]}
+            >
               <Text style={styles.infoLabel}>{t('email')}</Text>
               {editingField === 'email' ? (
                 <TextInput
-                  style={[styles.inlineInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                  style={[
+                    styles.inlineInput,
+                    compactAccount && styles.inlineInputFull,
+                    { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+                  ]}
                   value={email}
                   onChangeText={(text) => {
                     setEmail(text);
@@ -495,14 +551,20 @@ export default function SettingsScreen() {
                   editable={!savingEmail && !deletingAccount}
                 />
               ) : (
-                <Text style={styles.infoValue}>{email || t('notSpecified')}</Text>
+                <Text style={styles.infoValue} numberOfLines={2} ellipsizeMode="tail">
+                  {email || t('notSpecified')}
+                </Text>
               )}
               {renderFieldFeedback('email')}
             </RNView>
             {editingField === 'email' ? (
-              <RNView style={styles.inlineActions}>
+              <RNView style={[styles.inlineActions, compactAccount && styles.inlineActionsStacked]}>
                 <TouchableOpacity
-                  style={[styles.buttonSecondary, (savingEmail || deletingAccount) && styles.buttonDisabled]}
+                  style={[
+                    styles.buttonSecondary,
+                    compactAccount && styles.buttonSecondaryFlex,
+                    (savingEmail || deletingAccount) && styles.buttonDisabled,
+                  ]}
                   onPress={handleSaveEmail}
                   disabled={savingEmail || deletingAccount}
                 >
@@ -513,7 +575,7 @@ export default function SettingsScreen() {
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.buttonGhost}
+                  style={[styles.buttonGhost, compactAccount && styles.buttonGhostFlex]}
                   onPress={() => handleCancelEdit('email')}
                   disabled={savingEmail || deletingAccount}
                 >
@@ -522,7 +584,12 @@ export default function SettingsScreen() {
               </RNView>
             ) : (
               <TouchableOpacity
-                style={[styles.buttonOutline, { backgroundColor: C.surface, borderColor: C.border }]}
+                style={[
+                  styles.buttonOutline,
+                  styles.infoRowAction,
+                  compactAccount && styles.buttonOutlineCompact,
+                  { backgroundColor: C.surface, borderColor: C.border },
+                ]}
                 onPress={() => {
                   resetFieldFromUser('email');
                   setEditingField('email');
@@ -545,13 +612,18 @@ export default function SettingsScreen() {
           </RNView>
 
           <RNView style={styles.deleteInlineBlock}>
-            <RNView style={styles.infoRow}>
+            <RNView style={[styles.infoRow, styles.infoRowAlignTop]}>
               <RNView style={styles.infoRowText}>
                 <Text style={styles.infoLabel}>{t('deleteAccount')}</Text>
                 <Text style={styles.infoSubText}>{t('deleteAccountHintLong')}</Text>
               </RNView>
               <TouchableOpacity
-                style={[styles.deleteButtonInline, deletingAccount && styles.buttonDisabled]}
+                style={[
+                  styles.deleteButtonInline,
+                  styles.infoRowActionShrink,
+                  compactAccount && styles.deleteButtonInlineCompact,
+                  deletingAccount && styles.buttonDisabled,
+                ]}
                 onPress={() => setDeleteModalVisible(true)}
                 disabled={deletingAccount}
               >
@@ -594,9 +666,11 @@ export default function SettingsScreen() {
 
           {/* Time picker (visible only when study reminder is on) */}
           {notifPrefs.studyReminder && (
-            <RNView style={styles.notifTimeRow}>
-              <Text style={styles.fieldLabel}>{t('notifStudyTime')}</Text>
-              <RNView style={styles.srsHourRow}>
+            <RNView style={[styles.notifTimeRow, compactAccount && styles.notifTimeRowCompact]}>
+              <Text style={[styles.fieldLabel, compactAccount && styles.notifTimeLabelCompact]}>
+                {t('notifStudyTime')}
+              </Text>
+              <RNView style={[styles.srsHourRow, compactAccount && styles.srsHourRowCompact]}>
                 <TouchableOpacity
                   style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
                   onPress={() => handleSaveNotif({ studyReminderHour: (notifPrefs.studyReminderHour + 23) % 24 })}
@@ -629,69 +703,6 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </RNView>
           )}
-
-          <RNView style={styles.notifDivider} />
-
-          {/* Streak reminder */}
-          <RNView style={styles.notifRow}>
-            <RNView style={styles.notifRowLeft}>
-              <RNView style={[styles.notifIconWrap, { backgroundColor: '#fef3c7' }]}>
-                <Feather name="zap" size={18} color="#d97706" />
-              </RNView>
-              <RNView style={styles.notifRowText}>
-                <Text style={styles.infoLabel}>{t('notifStreakReminder')}</Text>
-                <Text style={styles.infoSubText}>{t('notifStreakReminderDesc')}</Text>
-              </RNView>
-            </RNView>
-            <Switch
-              value={notifPrefs.streakReminder}
-              onValueChange={v => handleSaveNotif({ streakReminder: v })}
-              trackColor={{ false: '#e5e7eb', true: '#fde68a' }}
-              thumbColor={notifPrefs.streakReminder ? '#d97706' : '#f4f4f5'}
-            />
-          </RNView>
-
-          <RNView style={styles.notifDivider} />
-
-          {/* New cards */}
-          <RNView style={styles.notifRow}>
-            <RNView style={styles.notifRowLeft}>
-              <RNView style={[styles.notifIconWrap, { backgroundColor: '#d1fae5' }]}>
-                <Feather name="layers" size={18} color="#059669" />
-              </RNView>
-              <RNView style={styles.notifRowText}>
-                <Text style={styles.infoLabel}>{t('notifNewCards')}</Text>
-                <Text style={styles.infoSubText}>{t('notifNewCardsDesc')}</Text>
-              </RNView>
-            </RNView>
-            <Switch
-              value={notifPrefs.newCards}
-              onValueChange={v => handleSaveNotif({ newCards: v })}
-              trackColor={{ false: '#e5e7eb', true: '#a7f3d0' }}
-              thumbColor={notifPrefs.newCards ? '#059669' : '#f4f4f5'}
-            />
-          </RNView>
-
-          <RNView style={styles.notifDivider} />
-
-          {/* Weekly summary */}
-          <RNView style={styles.notifRow}>
-            <RNView style={styles.notifRowLeft}>
-              <RNView style={[styles.notifIconWrap, { backgroundColor: '#fce7f3' }]}>
-                <Feather name="bar-chart-2" size={18} color="#db2777" />
-              </RNView>
-              <RNView style={styles.notifRowText}>
-                <Text style={styles.infoLabel}>{t('notifWeeklySummary')}</Text>
-                <Text style={styles.infoSubText}>{t('notifWeeklySummaryDesc')}</Text>
-              </RNView>
-            </RNView>
-            <Switch
-              value={notifPrefs.weeklySummary}
-              onValueChange={v => handleSaveNotif({ weeklySummary: v })}
-              trackColor={{ false: '#e5e7eb', true: '#fbcfe8' }}
-              thumbColor={notifPrefs.weeklySummary ? '#db2777' : '#f4f4f5'}
-            />
-          </RNView>
 
           <RNView style={[styles.notifDivider, { backgroundColor: C.borderLight }]} />
 
@@ -866,6 +877,9 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '700',
   },
+  sectionHeaderCompact: {
+    fontSize: 26,
+  },
   accountTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -919,15 +933,38 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700',
   },
+  securityTitleCompact: {
+    fontSize: 22,
+  },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
   },
+  infoRowAlignTop: {
+    alignItems: 'flex-start',
+  },
+  infoRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 12,
+  },
+  infoRowAction: {
+    flexShrink: 0,
+    alignSelf: 'center',
+  },
+  infoRowActionShrink: {
+    flexShrink: 0,
+  },
   infoRowText: {
     flex: 1,
     gap: 4,
+    minWidth: 0,
+  },
+  infoRowTextStacked: {
+    flex: 0,
+    width: '100%',
   },
   infoLabel: {
     fontSize: 18,
@@ -949,11 +986,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 16,
     color: '#111827',
+    minWidth: 0,
+  },
+  inlineInputFull: {
+    width: '100%',
+    alignSelf: 'stretch',
   },
   inlineActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
+  },
+  inlineActionsStacked: {
+    width: '100%',
+    alignSelf: 'stretch',
   },
   buttonOutline: {
     borderWidth: 1,
@@ -962,6 +1009,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingVertical: 14,
     backgroundColor: '#fff',
+    flexShrink: 0,
+  },
+  buttonOutlineCompact: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  buttonSecondaryFlex: {
+    flex: 1,
+    minWidth: 0,
+  },
+  buttonGhostFlex: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
   },
   buttonOutlineText: {
     fontSize: 16,
@@ -1005,6 +1067,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: '#fff',
+  },
+  deleteButtonInlineCompact: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   deleteButtonInlineText: {
     color: '#dc2626',
@@ -1068,6 +1134,14 @@ const styles = StyleSheet.create({
   notifTestBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '600' },
   notifTestMsg: { fontSize: 13, lineHeight: 18 },
   notifTimeRow: { paddingLeft: 60, gap: 8 },
+  notifTimeRowCompact: {
+    paddingLeft: 0,
+    alignItems: 'center',
+  },
+  notifTimeLabelCompact: {
+    width: '100%',
+    textAlign: 'center',
+  },
   notifAndroidHint: { paddingLeft: 60, paddingRight: 16, gap: 10, marginTop: 4 },
   notifSettingsLink: {
     alignSelf: 'flex-start',
@@ -1083,6 +1157,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 20,
     marginTop: 12,
+  },
+  srsHourRowCompact: {
+    marginTop: 0,
+    width: '100%',
   },
   srsHourButton: {
     width: 48,

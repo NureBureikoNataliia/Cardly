@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
@@ -14,6 +14,7 @@ import {
     StyleSheet,
     TouchableOpacity,
     View,
+    useWindowDimensions,
 } from 'react-native';
 
 import { Text } from '@/src/components/Themed';
@@ -86,8 +87,36 @@ function formatDate(iso: string | null, neverLabel: string, dateLocaleTag: strin
   return new Date(iso).toLocaleDateString(dateLocaleTag, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function shortMonthDay(iso: string, dateLocaleTag: string): string {
-  return new Date(iso).toLocaleDateString(dateLocaleTag, { month: 'short', day: 'numeric' });
+function parseIsoDate(iso: string): Date {
+  return new Date(iso.includes('T') ? iso : `${iso}T12:00:00`);
+}
+
+function formatLongDate(iso: string, dateLocaleTag: string): string {
+  return parseIsoDate(iso).toLocaleDateString(dateLocaleTag, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+const COMPACT_CHART_WIDTH = 520;
+
+function chartAxisDate(iso: string, dateLocaleTag: string, compact: boolean): string {
+  const d = parseIsoDate(iso);
+  if (compact) {
+    return d.toLocaleDateString(dateLocaleTag, { day: 'numeric', month: 'numeric' });
+  }
+  return d.toLocaleDateString(dateLocaleTag, { month: 'short', day: 'numeric' });
+}
+
+/** Which bar indices get an X-axis label (start, middle, end). */
+function chartLabelIndices(length: number): number[] {
+  if (length <= 0) return [];
+  if (length === 1) return [0];
+  const mid = Math.floor(length / 2);
+  if (mid <= 0 || mid >= length - 1) return [0, length - 1];
+  return [0, mid, length - 1];
 }
 
 function pct(part: number, total: number): number {
@@ -298,9 +327,64 @@ type BarDatum = {
   label?: string;
   value: number;
   highlight?: boolean;
+  /** Full date line shown when the bar is selected */
+  detailTitle?: string;
+  detailBody?: string;
 };
 
 const Y_AXIS_W = 32;
+const TOOLTIP_SPACE = 58;
+
+type TooltipAlign = 'left' | 'center' | 'right';
+
+function barTooltipAlign(index: number, total: number): TooltipAlign {
+  if (total <= 1) return 'center';
+  if (index < total * 0.15) return 'left';
+  if (index > total * 0.85) return 'right';
+  return 'center';
+}
+
+function BarColumnTooltip({
+  title,
+  body,
+  barHeightPx,
+  align,
+  accentColor,
+}: {
+  title: string;
+  body?: string;
+  barHeightPx: number;
+  align: TooltipAlign;
+  accentColor: string;
+}) {
+  const C = useAppColors();
+  return (
+    <View
+      style={[
+        styles.bcTooltip,
+        align === 'left' && styles.bcTooltipLeft,
+        align === 'right' && styles.bcTooltipRight,
+        align === 'center' && styles.bcTooltipCenter,
+        {
+          bottom: barHeightPx + 6,
+          backgroundColor: C.isDark ? '#1f2937' : '#ffffff',
+          borderColor: accentColor,
+          shadowColor: '#000',
+        },
+      ]}
+      pointerEvents="none"
+    >
+      <Text style={[styles.bcTooltipTitle, { color: C.text }]} numberOfLines={2}>
+        {title}
+      </Text>
+      {body ? (
+        <Text style={[styles.bcTooltipBody, { color: C.textSub }]} numberOfLines={2}>
+          {body}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
 
 function BarChart({
   data,
@@ -314,12 +398,13 @@ function BarChart({
   showXLabels?: boolean;
 }) {
   const C = useAppColors();
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const peak = Math.max(0, ...data.map((d) => d.value));
   const { max, ticks } = niceScale(peak);
 
   return (
     <View style={styles.bcWrap}>
-      <View style={[styles.bcRow, { height: barHeight }]}>
+      <View style={[styles.bcRow, { height: barHeight + TOOLTIP_SPACE, paddingTop: TOOLTIP_SPACE }]}>
         {/* ── Y axis with tick labels ── */}
         <View style={[styles.bcYAxis, { width: Y_AXIS_W, height: barHeight }]}>
           {ticks.map((tick) => (
@@ -340,7 +425,7 @@ function BarChart({
         </View>
 
         {/* ── Chart area: gridlines + bars ── */}
-        <View style={[styles.bcChartArea, { height: barHeight }]}>
+        <View style={[styles.bcChartArea, { height: barHeight, overflow: 'visible' }]}>
           {ticks.map((tick) => (
             <View
               key={`g-${tick}`}
@@ -354,25 +439,51 @@ function BarChart({
             />
           ))}
 
-          <View style={[styles.bcBars, { height: barHeight }]}>
+          <View style={[styles.bcBars, { height: barHeight, overflow: 'visible' }]}>
             {data.map((d, i) => {
               const h = d.value > 0
                 ? Math.max(2, Math.round((d.value / max) * barHeight))
                 : 0;
+              const barH = Math.max(h, 4);
+              const isSelected = selectedIndex === i;
               return (
-                <View key={i} style={styles.bcBarCol}>
+                <Pressable
+                  key={i}
+                  style={[
+                    styles.bcBarCol,
+                    isSelected && styles.bcBarColSelected,
+                  ]}
+                  onPress={() => setSelectedIndex(isSelected ? null : i)}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    d.detailTitle && d.detailBody
+                      ? `${d.detailTitle}. ${d.detailBody}`
+                      : d.detailTitle ?? d.label ?? String(d.value)
+                  }
+                >
+                  {isSelected && d.detailTitle ? (
+                    <BarColumnTooltip
+                      title={d.detailTitle}
+                      body={d.detailBody}
+                      barHeightPx={barH}
+                      align={barTooltipAlign(i, data.length)}
+                      accentColor={color}
+                    />
+                  ) : null}
                   <View
                     style={[
                       styles.bcBar,
+                      isSelected && styles.bcBarSelected,
                       {
-                        height: h,
+                        height: barH,
                         backgroundColor: d.value === 0
-                          ? 'transparent'
-                          : d.highlight ? color : `${color}80`,
+                          ? (isSelected ? `${color}33` : 'transparent')
+                          : isSelected ? color : d.highlight ? color : `${color}80`,
+                        borderColor: isSelected ? color : 'transparent',
                       },
                     ]}
                   />
-                </View>
+                </Pressable>
               );
             })}
           </View>
@@ -382,17 +493,36 @@ function BarChart({
       {showXLabels && (
         <View style={styles.bcXRow}>
           <View style={{ width: Y_AXIS_W }} />
-          <View style={styles.bcXBars}>
-            {data.map((d, i) => (
-              <View key={i} style={styles.bcXCol}>
-                <Text style={[styles.bcXLabel, { color: C.textMuted }]} numberOfLines={1}>
-                  {d.label ?? ''}
+          <View style={styles.bcXTrack}>
+            {data.map((d, i) => {
+              const text = (d.label ?? '').trim();
+              if (!text) return null;
+              const align: TooltipAlign =
+                i === 0 ? 'left' : i === data.length - 1 ? 'right' : 'center';
+              const xRatio = data.length > 1 ? i / (data.length - 1) : 0.5;
+              return (
+                <Text
+                  key={`x-${i}`}
+                  numberOfLines={2}
+                  style={[
+                    styles.bcXLabelAbs,
+                    align === 'left' && styles.bcXLabelLeft,
+                    align === 'right' && styles.bcXLabelRight,
+                    align === 'center' && {
+                      left: `${xRatio * 100}%`,
+                      transform: [{ translateX: '-50%' as const }],
+                    },
+                    { color: C.textMuted },
+                  ]}
+                >
+                  {text}
                 </Text>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </View>
       )}
+
     </View>
   );
 }
@@ -521,6 +651,8 @@ export default function StatisticsScreen() {
   const navigation = useNavigation();
   const C = useAppColors();
   const dateLocaleTag = bcp47ForAppLocale(locale);
+  const { width: windowWidth } = useWindowDimensions();
+  const compactCharts = windowWidth < COMPACT_CHART_WIDTH;
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: t('statistics') });
@@ -537,9 +669,13 @@ export default function StatisticsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const activityRangeRef = useRef(activityRange);
+  activityRangeRef.current = activityRange;
+
   const load = useCallback(async () => {
     if (!user) return;
     setError(null);
+    const range = activityRangeRef.current;
     const [
       statsRes,
       wordRes,
@@ -550,7 +686,7 @@ export default function StatisticsScreen() {
     ] = await Promise.all([
       supabase.rpc('get_my_stats'),
       supabase.rpc('get_my_word_stats'),
-      supabase.rpc('get_review_activity', { p_days: activityRange }),
+      supabase.rpc('get_review_activity', { p_days: range }),
       supabase.rpc('get_review_forecast', { p_days: 30 }),
       supabase.rpc('get_added_cards_activity', { p_days: 30 }),
       supabase.rpc('get_my_deck_stats'),
@@ -566,7 +702,16 @@ export default function StatisticsScreen() {
     setDeckStats((deckRes.data ?? []) as DeckStat[]);
     setLoading(false);
     setRefreshing(false);
-  }, [user, t, activityRange]);
+  }, [user, t]);
+
+  const loadActivityOnly = useCallback(async (range: ActivityRange) => {
+    if (!user) return;
+    const { data, error: activityError } = await supabase.rpc('get_review_activity', {
+      p_days: range,
+    });
+    if (activityError) setError(t('statLoadError'));
+    else setActivity((data ?? []) as ActivityDay[]);
+  }, [user, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -575,6 +720,16 @@ export default function StatisticsScreen() {
       void load();
     }, [user, load]),
   );
+
+  const skipActivityRangeFetch = useRef(true);
+  useEffect(() => {
+    if (!user) return;
+    if (skipActivityRangeFetch.current) {
+      skipActivityRangeFetch.current = false;
+      return;
+    }
+    void loadActivityOnly(activityRange);
+  }, [activityRange, user, loadActivityOnly]);
 
   const onRefresh = () => { setRefreshing(true); load(); };
 
@@ -604,33 +759,50 @@ export default function StatisticsScreen() {
 
   /* ─── Build chart data ─── */
   const todayIso = new Date().toISOString().split('T')[0];
+  const activityLabelIdx = new Set(chartLabelIndices(activity.length));
 
   const activityData: BarDatum[] = activity.map((d, i) => ({
-    label: i === 0 || i === activity.length - 1 || i === Math.floor(activity.length / 2)
-      ? shortMonthDay(d.review_date, dateLocaleTag)
+    label: activityLabelIdx.has(i)
+      ? chartAxisDate(d.review_date, dateLocaleTag, compactCharts)
       : '',
     value: d.count,
     highlight: d.review_date === todayIso,
+    detailTitle: formatLongDate(d.review_date, dateLocaleTag),
+    detailBody: d.count > 0
+      ? formatTemplate(t('statBarReviewsOnDay'), { count: d.count })
+      : t('statBarReviewsOnDayNone'),
   }));
   const activityHasData = activity.some((d) => d.count > 0);
 
+  const forecastLabelIdx = new Set(chartLabelIndices(forecast.length));
+
   const forecastData: BarDatum[] = forecast.map((d, i) => ({
-    label: i === 0
-      ? t('statToday')
-      : (i === Math.floor(forecast.length / 2) || i === forecast.length - 1)
-        ? `+${i}`
-        : '',
+    label: forecastLabelIdx.has(i)
+      ? (i === 0
+          ? (compactCharts ? t('statTodayShort') : t('statToday'))
+          : chartAxisDate(d.due_day, dateLocaleTag, compactCharts))
+      : '',
     value: d.count,
-    highlight: i === 0,
+    highlight: d.due_day === todayIso,
+    detailTitle: formatLongDate(d.due_day, dateLocaleTag),
+    detailBody: d.count > 0
+      ? formatTemplate(t('statBarDueOnDay'), { count: d.count })
+      : t('statBarDueOnDayNone'),
   }));
   const forecastTotal = forecast.reduce((s, d) => s + d.count, 0);
 
+  const addedLabelIdx = new Set(chartLabelIndices(added.length));
+
   const addedData: BarDatum[] = added.map((d, i) => ({
-    label: i === 0 || i === added.length - 1 || i === Math.floor(added.length / 2)
-      ? shortMonthDay(d.added_day, dateLocaleTag)
+    label: addedLabelIdx.has(i)
+      ? chartAxisDate(d.added_day, dateLocaleTag, compactCharts)
       : '',
     value: d.count,
     highlight: d.added_day === todayIso,
+    detailTitle: formatLongDate(d.added_day, dateLocaleTag),
+    detailBody: d.count > 0
+      ? formatTemplate(t('statBarAddedOnDay'), { count: d.count })
+      : t('statBarAddedOnDayNone'),
   }));
   const addedTotal = added.reduce((s, d) => s + d.count, 0);
 
@@ -687,7 +859,7 @@ export default function StatisticsScreen() {
           </View>
         ) : (
           <View style={[styles.whiteCard, { backgroundColor: C.surface }]}>
-            <BarChart data={activityData} color="#6366f1" />
+            <BarChart key={`activity-${activityRange}`} data={activityData} color="#6366f1" />
           </View>
         )}
       </View>
@@ -969,8 +1141,8 @@ const styles = StyleSheet.create({
   toggleTxt: { fontSize: 12, fontWeight: '700' },
 
   /* ── Bar chart ── */
-  bcWrap:       { paddingTop: 8 },
-  bcRow:        { flexDirection: 'row' },
+  bcWrap:       { paddingTop: 8, overflow: 'visible' },
+  bcRow:        { flexDirection: 'row', overflow: 'visible' },
   bcYAxis:      { position: 'relative' },
   bcYTick:      {
     position: 'absolute',
@@ -983,12 +1155,47 @@ const styles = StyleSheet.create({
   bcChartArea:  { flex: 1, position: 'relative' },
   bcGridLine:   { position: 'absolute', left: 0, right: 0, height: 1 },
   bcBars:       { flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
-  bcBarCol:     { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
-  bcBar:        { width: '100%', borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  bcBarCol: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    minHeight: 44,
+    position: 'relative',
+    overflow: 'visible',
+  },
+  bcBarColSelected: { zIndex: 20 },
+  bcBar:        { width: '100%', borderTopLeftRadius: 3, borderTopRightRadius: 3, borderWidth: 2 },
+  bcBarSelected:{ borderWidth: 2 },
+  bcTooltip: {
+    position: 'absolute',
+    width: 148,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    gap: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  bcTooltipLeft:   { left: 0 },
+  bcTooltipRight:  { right: 0 },
+  bcTooltipCenter: { left: '50%', marginLeft: -74 },
+  bcTooltipTitle:  { fontSize: 11, fontWeight: '700', lineHeight: 14 },
+  bcTooltipBody:   { fontSize: 11, lineHeight: 14 },
   bcXRow:       { flexDirection: 'row', marginTop: 6 },
-  bcXBars:      { flex: 1, flexDirection: 'row', gap: 2 },
-  bcXCol:       { flex: 1, alignItems: 'center' },
-  bcXLabel:     { fontSize: 10 },
+  bcXTrack:     { flex: 1, minHeight: 34, position: 'relative' },
+  bcXLabelAbs:  {
+    position: 'absolute',
+    top: 0,
+    fontSize: 10,
+    lineHeight: 13,
+    maxWidth: 88,
+    textAlign: 'center',
+  },
+  bcXLabelLeft:  { left: 0, textAlign: 'left', maxWidth: 96 },
+  bcXLabelRight: { right: 0, textAlign: 'right', maxWidth: 96 },
 
   /* ── Meta row beneath chart ── */
   metaRow: {

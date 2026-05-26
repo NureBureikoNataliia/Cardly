@@ -1,20 +1,22 @@
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
-import type { ExportDeckPdfArgs, ExportDeckPdfCard } from "./exportDeckPdf.shared";
-import { sanitizeFileName } from "./exportDeckPdf.shared";
+import type { ExportDeckPdfArgs } from "./exportDeckPdf.shared";
+import {
+  buildDeckPdfCardHtml,
+  buildDeckPdfEmptyHtml,
+  buildDeckPdfHeaderHtml,
+  sanitizeFileName,
+} from "./exportDeckPdf.shared";
 
 const PAGE_MARGIN = 32;
 const BLOCK_GAP = 10;
-const RENDER_WIDTH = 800;
+const RENDER_WIDTH = 720;
+const CANVAS_SCALE = 1;
+const JPEG_QUALITY = 0.82;
 
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+const FONT_FAMILY =
+  'system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans", sans-serif';
 
 async function renderHtmlToCanvas(html: string): Promise<HTMLCanvasElement> {
   const node = document.createElement("div");
@@ -24,134 +26,164 @@ async function renderHtmlToCanvas(html: string): Promise<HTMLCanvasElement> {
   node.style.width = `${RENDER_WIDTH}px`;
   node.style.background = "#ffffff";
   node.style.color = "#111827";
-  node.style.fontFamily = "Arial, sans-serif";
+  node.style.fontFamily = FONT_FAMILY;
   node.innerHTML = html;
   document.body.appendChild(node);
   try {
     return await html2canvas(node, {
-      scale: 2,
+      scale: CANVAS_SCALE,
       backgroundColor: "#ffffff",
       useCORS: true,
+      logging: false,
     });
   } finally {
-    if (node.parentNode) node.parentNode.removeChild(node);
+    node.remove();
   }
 }
 
-function buildHeaderHtml(title: string, description: string | null): string {
-  const desc = (description ?? "").trim();
-  return `
-    <div>
-      <h1 style="margin: 0 0 12px; font-size: 28px; font-weight: 700;">${escapeHtml(title || "")}</h1>
-      ${desc ? `<p style="margin: 0; font-size: 14px; color: #4b5563; line-height: 1.5; white-space: pre-wrap;">${escapeHtml(desc)}</p>` : ""}
-    </div>
-  `;
+function canvasToJpeg(canvas: HTMLCanvasElement): string {
+  return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
 }
 
-function buildEmptyCardsHtml(message: string): string {
-  return `
-    <p style="margin: 0; font-size: 15px; color: #6b7280;">${escapeHtml(message)}</p>
-  `;
-}
+type PageLayout = {
+  pageWidth: number;
+  pageHeight: number;
+  usableWidth: number;
+  usableHeight: number;
+};
 
-function buildCardHtml(card: ExportDeckPdfCard, index: number): string {
-  return `
-    <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px;">
-      <div style="font-size: 12px; color: #6b7280; margin-bottom: 6px; font-weight: 600;">${index + 1}</div>
-      <div style="font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 8px; white-space: pre-wrap;">${escapeHtml(card.front_text ?? "")}</div>
-      <div style="font-size: 14px; color: #374151; white-space: pre-wrap;">${escapeHtml(card.back_text ?? "")}</div>
-    </div>
-  `;
-}
-
-export async function exportDeckPdf(args: ExportDeckPdfArgs): Promise<void> {
-  const { title, description, cards } = args;
-  const fileName = sanitizeFileName(title);
-  const emptyMessage = (args.emptyMessage ?? "Ця дошка поки що немає карток").trim();
-
-  const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
+function getPageLayout(pdf: jsPDF): PageLayout {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const usableWidth = pageWidth - PAGE_MARGIN * 2;
-  const usableHeight = pageHeight - PAGE_MARGIN * 2;
+  return {
+    pageWidth,
+    pageHeight,
+    usableWidth: pageWidth - PAGE_MARGIN * 2,
+    usableHeight: pageHeight - PAGE_MARGIN * 2,
+  };
+}
 
-  let cursorY = PAGE_MARGIN;
+/** Slice a block that is taller than one page (rare — very long card text). */
+function appendTallCanvasToPdf(
+  pdf: jsPDF,
+  canvas: HTMLCanvasElement,
+  startY: number,
+): number {
+  const { pageHeight, usableWidth, usableHeight } = getPageLayout(pdf);
+  const imgWidth = usableWidth;
+  const pxPerPage = Math.max(1, Math.floor((usableHeight * canvas.width) / imgWidth));
 
-  const placeCanvas = (canvas: HTMLCanvasElement) => {
-    const imgWidth = usableWidth;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  let sourceY = 0;
+  let cursorY = startY;
+  let sliceIndex = 0;
 
-    if (imgHeight > usableHeight) {
-      // Rare: block taller than a single page — slice the source canvas.
-      const pxPerPage = Math.floor((usableHeight * canvas.width) / imgWidth);
-      let sourceY = 0;
+  while (sourceY < canvas.height) {
+    const sliceHeightPx = Math.min(pxPerPage, canvas.height - sourceY);
+    const sliceCanvas = document.createElement("canvas");
+    sliceCanvas.width = canvas.width;
+    sliceCanvas.height = sliceHeightPx;
+    const ctx = sliceCanvas.getContext("2d");
+    if (!ctx) break;
 
-      if (cursorY > PAGE_MARGIN) {
-        pdf.addPage();
-        cursorY = PAGE_MARGIN;
-      }
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+    ctx.drawImage(
+      canvas,
+      0,
+      sourceY,
+      canvas.width,
+      sliceHeightPx,
+      0,
+      0,
+      canvas.width,
+      sliceHeightPx,
+    );
 
-      while (sourceY < canvas.height) {
-        const sliceHeightPx = Math.min(pxPerPage, canvas.height - sourceY);
-        const sliceCanvas = document.createElement("canvas");
-        sliceCanvas.width = canvas.width;
-        sliceCanvas.height = sliceHeightPx;
-        const ctx = sliceCanvas.getContext("2d");
-        if (!ctx) break;
-        ctx.drawImage(
-          canvas,
-          0,
-          sourceY,
-          canvas.width,
-          sliceHeightPx,
-          0,
-          0,
-          canvas.width,
-          sliceHeightPx,
-        );
-        const sliceImgHeight = (sliceHeightPx * imgWidth) / canvas.width;
-        pdf.addImage(
-          sliceCanvas.toDataURL("image/png"),
-          "PNG",
-          PAGE_MARGIN,
-          cursorY,
-          imgWidth,
-          sliceImgHeight,
-        );
-        sourceY += sliceHeightPx;
-        if (sourceY < canvas.height) {
-          pdf.addPage();
-          cursorY = PAGE_MARGIN;
-        } else {
-          cursorY += sliceImgHeight + BLOCK_GAP;
-        }
-      }
-      return;
-    }
-
-    if (cursorY + imgHeight > pageHeight - PAGE_MARGIN && cursorY > PAGE_MARGIN) {
+    const sliceImgHeight = (sliceHeightPx * imgWidth) / canvas.width;
+    if (sliceIndex > 0 || (cursorY > PAGE_MARGIN && cursorY + sliceImgHeight > pageHeight - PAGE_MARGIN)) {
       pdf.addPage();
       cursorY = PAGE_MARGIN;
     }
 
-    pdf.addImage(canvas.toDataURL("image/png"), "PNG", PAGE_MARGIN, cursorY, imgWidth, imgHeight);
-    cursorY += imgHeight + BLOCK_GAP;
-  };
+    pdf.addImage(
+      canvasToJpeg(sliceCanvas),
+      "JPEG",
+      PAGE_MARGIN,
+      cursorY,
+      imgWidth,
+      sliceImgHeight,
+      undefined,
+      "FAST",
+    );
 
-  const headerCanvas = await renderHtmlToCanvas(buildHeaderHtml(title, description));
-  placeCanvas(headerCanvas);
-  cursorY += 8;
+    sourceY += sliceHeightPx;
+    cursorY += sliceImgHeight;
+    sliceIndex += 1;
+    if (sourceY < canvas.height) {
+      pdf.addPage();
+      cursorY = PAGE_MARGIN;
+    }
+  }
 
-  if (cards.length === 0) {
-    const emptyCanvas = await renderHtmlToCanvas(buildEmptyCardsHtml(emptyMessage));
-    placeCanvas(emptyCanvas);
+  return cursorY + BLOCK_GAP;
+}
+
+/** Place one rendered block; never split across pages unless taller than a full page. */
+function placeBlock(pdf: jsPDF, canvas: HTMLCanvasElement, cursorY: number): number {
+  const { pageHeight, usableWidth, usableHeight } = getPageLayout(pdf);
+  const imgWidth = usableWidth;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+  if (imgHeight > usableHeight) {
+    if (cursorY > PAGE_MARGIN) {
+      pdf.addPage();
+      cursorY = PAGE_MARGIN;
+    }
+    return appendTallCanvasToPdf(pdf, canvas, cursorY);
+  }
+
+  if (cursorY + imgHeight > pageHeight - PAGE_MARGIN && cursorY > PAGE_MARGIN) {
+    pdf.addPage();
+    cursorY = PAGE_MARGIN;
+  }
+
+  pdf.addImage(
+    canvasToJpeg(canvas),
+    "JPEG",
+    PAGE_MARGIN,
+    cursorY,
+    imgWidth,
+    imgHeight,
+    undefined,
+    "FAST",
+  );
+
+  return cursorY + imgHeight + BLOCK_GAP;
+}
+
+export async function exportDeckPdf(args: ExportDeckPdfArgs): Promise<void> {
+  const fileName = sanitizeFileName(args.title);
+  const emptyMessage = (args.emptyMessage ?? "Ця дошка поки що немає карток").trim();
+
+  const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
+  let cursorY = PAGE_MARGIN;
+
+  const headerCanvas = await renderHtmlToCanvas(
+    buildDeckPdfHeaderHtml(args.title, args.description),
+  );
+  cursorY = placeBlock(pdf, headerCanvas, cursorY);
+  cursorY += 6;
+
+  if (args.cards.length === 0) {
+    const emptyCanvas = await renderHtmlToCanvas(buildDeckPdfEmptyHtml(emptyMessage));
+    placeBlock(pdf, emptyCanvas, cursorY);
     pdf.save(`${fileName}.pdf`);
     return;
   }
 
-  for (let i = 0; i < cards.length; i++) {
-    const cardCanvas = await renderHtmlToCanvas(buildCardHtml(cards[i], i));
-    placeCanvas(cardCanvas);
+  for (let i = 0; i < args.cards.length; i++) {
+    const cardCanvas = await renderHtmlToCanvas(buildDeckPdfCardHtml(args.cards[i], i));
+    cursorY = placeBlock(pdf, cardCanvas, cursorY);
   }
 
   pdf.save(`${fileName}.pdf`);

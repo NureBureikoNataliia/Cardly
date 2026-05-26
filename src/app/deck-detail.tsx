@@ -745,10 +745,10 @@ export default function DeckDetailScreen() {
               <ActionBtn
                 icon="refresh-cw"
                 label={isUpdating ? `${t("saving")}...` : t("updateFromOriginal")}
-                bg="#eef0ff"
-                textColor="#6366f1"
+                bg={C.isDark ? C.surface : C.aiAccentBg}
+                textColor={C.tint}
                 border
-                borderColor="rgba(99,102,241,0.2)"
+                borderColor={C.aiAccentBorder}
                 onPress={handleUpdateFromOriginal}
                 disabled={isUpdating}
                 fullWidth

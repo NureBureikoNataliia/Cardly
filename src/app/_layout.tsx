@@ -124,7 +124,6 @@ function HeaderMenuTrigger({
 }
 
 function NativeStackHeaderMenu() {
-  const { t } = useLanguage();
   const colorScheme = useColorScheme();
   const headerText = Colors[colorScheme].text;
   const headerTint = Colors[colorScheme].tint;
@@ -134,9 +133,15 @@ function NativeStackHeaderMenu() {
       onPress={() => mobile?.openMenu()}
       tintColor={headerTint}
       textColor={headerText}
-      label={t('appName')}
+      label=""
     />
   );
+}
+
+/** Stack header brand — always "Cardly", never per-screen titles. */
+function AppHeaderBrand({ color }: { color: string }) {
+  const { t } = useLanguage();
+  return <StackHeaderTitle color={color}>{t('appName')}</StackHeaderTitle>;
 }
 
 /** Title row: flex minWidth 0 so long titles ellipsize instead of drawing under headerRight. */
@@ -160,7 +165,6 @@ function WebAuthenticatedShell({
   sharedHeaderRight: () => ReactNode;
 }) {
   const { isCompact, toggleDrawer } = useSidebarDrawer();
-  const { t } = useLanguage();
   const colorScheme = useColorScheme();
   const headerBg = Colors[colorScheme].header;
   const headerText = Colors[colorScheme].text;
@@ -173,11 +177,11 @@ function WebAuthenticatedShell({
           onPress={toggleDrawer}
           tintColor={headerTint}
           textColor={headerText}
-          label={t('appName')}
+          label=""
         />
       </View>
     ),
-    [toggleDrawer, headerText, headerTint, t],
+    [toggleDrawer, headerText, headerTint],
   );
 
   return (
@@ -192,9 +196,7 @@ function WebAuthenticatedShell({
               headerTintColor: headerText,
               headerTitleStyle: { fontSize: 18, fontWeight: '600' },
               headerTitleAlign: 'left',
-              headerTitle: ({ children }: { children?: string }) => (
-                <StackHeaderTitle color={headerText}>{children}</StackHeaderTitle>
-              ),
+              headerTitle: () => <AppHeaderBrand color={headerText} />,
               headerRight: sharedHeaderRight,
               headerLeft: isCompact ? headerLeft : undefined,
               animation: 'slide_from_right',
@@ -206,7 +208,7 @@ function WebAuthenticatedShell({
             <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
             <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
             <Stack.Screen name="public/browse" options={{ headerShown: true }} />
-            <Stack.Screen name="admin" options={{ headerShown: true, title: 'Admin' }} />
+            <Stack.Screen name="admin" options={{ headerShown: true }} />
             <Stack.Screen name="deck-rate" options={{ headerShown: true }} />
             <Stack.Screen name="deck-study" options={{ headerShown: true }} />
             <Stack.Screen name="deck-quiz-new" options={{ headerShown: true }} />
@@ -219,7 +221,11 @@ function WebAuthenticatedShell({
             <Stack.Screen name="help" options={{ headerShown: true }} />
             <Stack.Screen
               name="modal"
-              options={{ presentation: 'modal', title: 'Info', headerRight: () => <View style={{ marginRight: 12 }}><LanguageDropdown /></View> }}
+              options={{
+          presentation: 'modal',
+          headerTitle: () => <AppHeaderBrand color={headerText} />,
+          headerRight: () => <View style={{ marginRight: 12 }}><LanguageDropdown /></View>,
+        }}
             />
           </Stack>
         </View>
@@ -323,9 +329,7 @@ function RootLayoutNav() {
         headerTintColor: headerText,
         headerTitleStyle: { fontSize: 18, fontWeight: '600' },
         headerTitleAlign: 'left',
-        headerTitle: ({ children }: { children?: string }) => (
-          <StackHeaderTitle color={headerText}>{children}</StackHeaderTitle>
-        ),
+        headerTitle: () => <AppHeaderBrand color={headerText} />,
         headerRight: sharedHeaderRight,
         ...(nativeAuthenticated ? { headerLeft: () => <NativeStackHeaderMenu /> } : {}),
         animation: 'slide_from_right',
@@ -350,7 +354,11 @@ function RootLayoutNav() {
       <Stack.Screen name="help" options={{ headerShown: true }} />
       <Stack.Screen
         name="modal"
-        options={{ presentation: 'modal', title: 'Info', headerRight: () => <View style={{ marginRight: 12 }}><LanguageDropdown /></View> }}
+        options={{
+          presentation: 'modal',
+          headerTitle: () => <AppHeaderBrand color={headerText} />,
+          headerRight: () => <View style={{ marginRight: 12 }}><LanguageDropdown /></View>,
+        }}
       />
     </Stack>
   );
