@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
     FlatList,
-    Image,
+    ImageBackground,
     Modal,
     Platform,
     Pressable,
@@ -107,9 +107,10 @@ function DeckCardInner({
       >
         <View style={[styles.coverWrap, { backgroundColor: cs === 'dark' ? '#374151' : '#e8ecf2' }]}>
           {hasCover && !imgError ? (
-            <Image
+            <ImageBackground
               source={{ uri: item.cover_image_url! }}
               style={styles.cover}
+              imageStyle={styles.coverImageInner}
               resizeMode="cover"
               onError={() => setImgError(true)}
             />
@@ -247,7 +248,7 @@ export function ListOfDecks({
     const isCollaborated = collaboratedDeckIds?.has(item.deck_id) ?? false;
 
     return (
-      <View style={isGrid ? styles.gridCell : undefined}>
+      <View style={isGrid ? styles.gridCell : styles.listItem}>
         <DeckCardInner
           item={item}
           count={count}
@@ -320,6 +321,10 @@ const styles = StyleSheet.create({
   gridRow: {
     alignItems: 'stretch',
   },
+  listItem: {
+    width: '100%',
+    flex: 1,
+  },
   gridCell: {
     flex: 1,
     margin: 6,
@@ -329,7 +334,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 12,
     marginBottom: 12,
-    overflow: 'visible',
+    overflow: 'hidden',
+    width: '100%',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -351,15 +357,27 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 120,
     backgroundColor: '#e8ecf2',
+    overflow: 'hidden',
+    position: 'relative',
   },
   cover: {
-    width: '100%',
-    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: '#e5e7eb',
   },
-  coverPlaceholder: {
-    flex: 1,
+  coverImageInner: {
     width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+    ...(Platform.OS === 'web' ? { objectFit: 'cover' as const } : null),
+  },
+  coverPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#eef1f6',

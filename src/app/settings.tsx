@@ -9,7 +9,6 @@ import {
   Platform,
   TouchableOpacity,
   View as RNView,
-  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
@@ -26,6 +25,7 @@ import {
   sendTestPushNotification,
   syncStudyDailyReminder,
 } from '@/src/lib/studyReminderNotifications';
+import { useLayoutWidth } from '@/src/hooks/useLayoutWidth';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
 
@@ -61,8 +61,8 @@ export default function SettingsScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const C = useAppColors();
-  const { width: windowWidth } = useWindowDimensions();
-  const compactAccount = windowWidth < ACCOUNT_COMPACT_WIDTH;
+  const layoutWidth = useLayoutWidth();
+  const compactAccount = layoutWidth < ACCOUNT_COMPACT_WIDTH;
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: t('settings') });
@@ -329,7 +329,12 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: C.bg }]} contentContainerStyle={styles.contentOuter}><View style={styles.content}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: C.bg }]}
+      contentContainerStyle={styles.contentOuter}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    ><View style={styles.content}>
       <Text style={styles.title}>{t('account')}</Text>
 
       <View style={[styles.topMenuCard, { backgroundColor: C.surface, borderColor: C.border }]}>
@@ -611,11 +616,19 @@ export default function SettingsScreen() {
             </RNView>
           </RNView>
 
-          <RNView style={styles.deleteInlineBlock}>
+          <RNView
+            style={[
+              styles.deleteInlineBlock,
+              {
+                borderTopColor: C.border,
+                backgroundColor: C.isDark ? 'rgba(239, 68, 68, 0.06)' : 'rgba(254, 242, 242, 0.65)',
+              },
+            ]}
+          >
             <RNView style={[styles.infoRow, styles.infoRowAlignTop]}>
               <RNView style={styles.infoRowText}>
-                <Text style={styles.infoLabel}>{t('deleteAccount')}</Text>
-                <Text style={styles.infoSubText}>{t('deleteAccountHintLong')}</Text>
+                <Text style={[styles.infoLabel, { color: C.text }]}>{t('deleteAccount')}</Text>
+                <Text style={[styles.infoSubText, { color: C.textSub }]}>{t('deleteAccountHintLong')}</Text>
               </RNView>
               <TouchableOpacity
                 style={[
@@ -623,6 +636,10 @@ export default function SettingsScreen() {
                   styles.infoRowActionShrink,
                   compactAccount && styles.deleteButtonInlineCompact,
                   deletingAccount && styles.buttonDisabled,
+                  {
+                    backgroundColor: '#dc2626',
+                    borderColor: C.isDark ? '#f87171' : '#b91c1c',
+                  },
                 ]}
                 onPress={() => setDeleteModalVisible(true)}
                 disabled={deletingAccount}
@@ -630,7 +647,30 @@ export default function SettingsScreen() {
                 <Text style={styles.deleteButtonInlineText}>{t('delete')}</Text>
               </TouchableOpacity>
             </RNView>
-            <Text style={styles.deleteWarningText}>{t('deleteAccountWarning')}</Text>
+            <RNView
+              style={[
+                styles.deleteWarningBox,
+                {
+                  backgroundColor: C.isDark ? 'rgba(239, 68, 68, 0.18)' : '#fef2f2',
+                  borderColor: C.isDark ? 'rgba(248, 113, 113, 0.4)' : '#fecaca',
+                },
+              ]}
+            >
+              <Feather
+                name="alert-triangle"
+                size={16}
+                color={C.isDark ? '#fca5a5' : '#dc2626'}
+                style={styles.deleteWarningIcon}
+              />
+              <Text
+                style={[
+                  styles.deleteWarningText,
+                  { color: C.isDark ? '#fecaca' : '#b91c1c' },
+                ]}
+              >
+                {t('deleteAccountWarning')}
+              </Text>
+            </RNView>
             {renderFieldFeedback('delete')}
           </RNView>
         </RNView>
@@ -1058,29 +1098,47 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   deleteInlineBlock: {
-    gap: 10,
+    gap: 12,
+    marginTop: 8,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 4,
+    paddingBottom: 4,
   },
   deleteButtonInline: {
     borderWidth: 1,
-    borderColor: '#ef4444',
     borderRadius: 999,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#fff',
   },
   deleteButtonInlineCompact: {
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   deleteButtonInlineText: {
-    color: '#dc2626',
+    color: '#fff',
     fontSize: 16,
     fontWeight: '700',
   },
+  deleteWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  deleteWarningIcon: {
+    marginTop: 2,
+    flexShrink: 0,
+  },
   deleteWarningText: {
-    color: '#ef4444',
-    fontSize: 16,
-    lineHeight: 22,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
   },
   buttonDisabled: {
     opacity: 0.6,

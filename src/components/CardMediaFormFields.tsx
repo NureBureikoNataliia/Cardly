@@ -66,6 +66,7 @@ function MediaUrlField({
         {labelRight}
       </View>
       <View
+        collapsable={false}
         style={[
           styles.inputRow,
           {
@@ -80,6 +81,7 @@ function MediaUrlField({
                 ? { borderColor: "#6366f1", backgroundColor: "#fff" }
                 : styles.inputRowFocused),
         ]}
+        pointerEvents="box-none"
       >
         <Feather
           name={meta.icon}
@@ -225,6 +227,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
+    flexWrap: "wrap",
   },
   fieldLabel: {
     fontSize: 12,

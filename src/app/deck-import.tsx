@@ -28,7 +28,7 @@ import {
   parseImportFromXlsxArrayBuffer,
   type ImportWordRow,
 } from "@/src/lib/deckImportParse";
-import { readUriAsArrayBuffer, readUriAsUtf8 } from "@/src/lib/readImportFile";
+import { keyboardAvoidingBehavior } from "@/src/lib/keyboardAvoiding";
 import { supabase } from "@/src/lib/supabase";
 
 const MIME_TYPES = [
@@ -126,22 +126,25 @@ export default function DeckImportScreen() {
         return;
       }
       try {
-        let next: ImportWordRow[] = [];
+        let result: { rows: ImportWordRow[]; error?: "no_rows" | "invalid_format" };
         if (kind === "csv") {
           const text = await readUriAsUtf8(uri);
-          next = parseImportFromCsvText(text);
+          result = parseImportFromCsvText(text);
         } else if (kind === "txt") {
           const text = await readUriAsUtf8(uri);
-          next = parseImportFromTxtText(text);
+          result = parseImportFromTxtText(text);
         } else {
           const buf = await readUriAsArrayBuffer(uri);
-          next = parseImportFromXlsxArrayBuffer(buf);
+          result = parseImportFromXlsxArrayBuffer(buf);
         }
-        if (next.length === 0) {
+        if (result.error === "invalid_format") {
+          setParseError(t("importErrorInvalidFormat"));
+          setPairs([]);
+        } else if (result.rows.length === 0) {
           setParseError(t("importErrorNoRows"));
           setPairs([]);
         } else {
-          setPairs(next);
+          setPairs(result.rows);
         }
       } catch {
         setParseError(t("importErrorParse"));
@@ -280,7 +283,7 @@ export default function DeckImportScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: C.bg }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={keyboardAvoidingBehavior()}
     >
       <ScrollView
         contentContainerStyle={styles.scroll}

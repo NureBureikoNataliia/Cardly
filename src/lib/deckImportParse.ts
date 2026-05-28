@@ -9,6 +9,13 @@ export type ImportWordRow = {
   notes?: string;
 };
 
+export type ImportParseErrorCode = "no_rows" | "invalid_format";
+
+export type ImportParseResult = {
+  rows: ImportWordRow[];
+  error?: ImportParseErrorCode;
+};
+
 /** Strip BOM and unify newlines */
 function normalizeText(raw: string): string {
   return raw.replace(/^\ufeff/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -108,29 +115,58 @@ function parseTxtToMatrix(text: string): string[][] {
   return rows;
 }
 
-function matrixToPairs(matrix: string[][]): ImportWordRow[] {
-  if (matrix.length === 0) return [];
+const NON_FLASHCARD_HEADER_RE =
+  /^(id|date|score|value|difficulty|question|topic|type|media|raffica|medio|timestamp|index|num|number|count|amount|price|qty|quantity)/i;
 
-  let startRow = 0;
-  let fi = 0;
-  let bi = 1;
-  let ni: number | null = null;
+/** True when the first row looks like column headers rather than card content. */
+function isLikelyHeaderRow(header: string[], nextRow?: string[]): boolean {
+  const h = header.map((c) => clip(c)).filter((c) => c.length > 0);
+  if (h.length < 2) return false;
+  if (!nextRow || nextRow.length === 0) return false;
 
-  const head = matrix[0].map((c) => clip(c));
-  const detected = detectColumnIndices(head);
-  if (detected) {
-    startRow = 1;
-    fi = detected.fi;
-    bi = detected.bi;
-    ni = detected.ni;
-  } else if (head.length >= 2) {
-    fi = 0;
-    bi = 1;
-    ni = head.length > 2 ? 2 : null;
-  } else {
-    return [];
+  const n = nextRow.map((c) => clip(c));
+
+  if (h.some((c) => /_/.test(c) || NON_FLASHCARD_HEADER_RE.test(c))) {
+    return true;
   }
 
+  if (
+    n.some(
+      (c) =>
+        /^\d+$/.test(c) ||
+        /\d{4}/.test(c) ||
+        /^[A-Z][a-z]{2}\s+\d{1,2}\s+\d{4}/.test(c)
+    )
+  ) {
+    const hAllAsciiLabel = h.every((c) => /^[A-Za-z_\s\-.,]+$/.test(c));
+    if (hAllAsciiLabel) return true;
+  }
+
+  const nextNonEmpty = n.filter((c) => c.length > 0);
+  const firstCap = h.filter((c) => /^[A-Z]/.test(c)).length;
+  const nextCap = nextNonEmpty.filter((c) => /^[A-Z]/.test(c)).length;
+  if (firstCap === h.length && firstCap >= 2 && nextCap < nextNonEmpty.length) {
+    return true;
+  }
+
+  return false;
+}
+
+function hasNonFlashcardHeaderLabels(header: string[]): boolean {
+  return header.some((c) => {
+    const t = clip(c);
+    if (!t) return false;
+    return /_/.test(t) || NON_FLASHCARD_HEADER_RE.test(t) || /^\d/.test(t);
+  });
+}
+
+function extractPairs(
+  matrix: string[][],
+  startRow: number,
+  fi: number,
+  bi: number,
+  ni: number | null
+): ImportWordRow[] {
   const out: ImportWordRow[] = [];
   for (let r = startRow; r < matrix.length; r++) {
     const row = matrix[r];
@@ -146,18 +182,45 @@ function matrixToPairs(matrix: string[][]): ImportWordRow[] {
   return out;
 }
 
-export function parseImportFromCsvText(text: string): ImportWordRow[] {
+function matrixToPairs(matrix: string[][]): ImportParseResult {
+  if (matrix.length === 0) return { rows: [], error: "no_rows" };
+
+  const head = matrix[0].map((c) => clip(c));
+  const detected = detectColumnIndices(head);
+  if (detected) {
+    const rows = extractPairs(matrix, 1, detected.fi, detected.bi, detected.ni);
+    return rows.length > 0 ? { rows } : { rows: [], error: "no_rows" };
+  }
+
+  const colCount = head.filter((c) => c.length > 0).length > 0 ? head.length : 0;
+  if (colCount < 2) return { rows: [], error: "no_rows" };
+  if (colCount > 3) return { rows: [], error: "invalid_format" };
+
+  let startRow = 0;
+  if (isLikelyHeaderRow(head, matrix[1])) {
+    if (hasNonFlashcardHeaderLabels(head)) {
+      return { rows: [], error: "invalid_format" };
+    }
+    startRow = 1;
+  }
+
+  const ni = colCount > 2 ? 2 : null;
+  const rows = extractPairs(matrix, startRow, 0, 1, ni);
+  return rows.length > 0 ? { rows } : { rows: [], error: "no_rows" };
+}
+
+export function parseImportFromCsvText(text: string): ImportParseResult {
   return matrixToPairs(parseCsvToMatrix(text));
 }
 
-export function parseImportFromTxtText(text: string): ImportWordRow[] {
+export function parseImportFromTxtText(text: string): ImportParseResult {
   return matrixToPairs(parseTxtToMatrix(text));
 }
 
-export function parseImportFromXlsxArrayBuffer(buf: ArrayBuffer): ImportWordRow[] {
+export function parseImportFromXlsxArrayBuffer(buf: ArrayBuffer): ImportParseResult {
   const wb = XLSX.read(buf, { type: "array" });
   const sheetName = wb.SheetNames[0];
-  if (!sheetName) return [];
+  if (!sheetName) return { rows: [], error: "no_rows" };
   const sheet = wb.Sheets[sheetName];
   const matrix = XLSX.utils.sheet_to_json<string[]>(sheet, {
     header: 1,

@@ -17,6 +17,7 @@ import {
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { generateCards, GeneratedCard } from '@/src/lib/gemini';
+import { keyboardAvoidingBehavior } from '@/src/lib/keyboardAvoiding';
 import { supabase } from '@/src/lib/supabase';
 
 const COUNT_OPTIONS = [5, 10, 15, 20];
@@ -106,7 +107,7 @@ export default function GenerateCardsModal({ visible, deckId, deckTitle, deckDes
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={keyboardAvoidingBehavior()}
         style={[styles.overlay, { backgroundColor: overlay }]}
       >
         <View style={[styles.sheet, { backgroundColor: bg }]}>

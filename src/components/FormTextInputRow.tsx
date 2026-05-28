@@ -33,6 +33,8 @@ export type FormTextInputRowProps = {
   onBlur?: () => void;
   showClear?: boolean;
   trailing?: ReactNode;
+  keyboardType?: React.ComponentProps<typeof TextInput>["keyboardType"];
+  autoCapitalize?: React.ComponentProps<typeof TextInput>["autoCapitalize"];
 };
 
 /** Text row with local focus state so typing in one field does not re-style every field on the screen. */
@@ -47,6 +49,8 @@ export const FormTextInputRow = memo(function FormTextInputRow({
   onBlur,
   showClear,
   trailing,
+  keyboardType,
+  autoCapitalize,
 }: FormTextInputRowProps) {
   const C = useAppColors();
   const [focused, setFocused] = useState(false);
@@ -88,6 +92,8 @@ export const FormTextInputRow = memo(function FormTextInputRow({
         }}
         multiline={multiline}
         textAlignVertical={multiline ? "top" : "auto"}
+        keyboardType={keyboardType}
+        autoCapitalize={autoCapitalize}
       />
       {showClear && value.length > 0 ? (
         <Pressable onPress={() => onChangeText("")} hitSlop={8} style={{ marginTop: multiline ? 2 : 0 }}>

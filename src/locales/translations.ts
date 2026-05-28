@@ -42,6 +42,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     importFileUnnamed: 'file',
     importErrorExtension: 'Please choose a .csv, .txt, or .xlsx file.',
     importErrorNoRows: 'No word pairs found. Check columns and separators.',
+    importErrorInvalidFormat:
+      'This file is not a valid word list. Use Front and Back columns (or a two-column file without extra columns).',
     importErrorParse: 'Could not read this file.',
     importErrorTitle: 'Enter a deck title.',
     importErrorAuth: 'Sign in to import.',
@@ -155,6 +157,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     aiGenerateCardsNoKey: 'AI is not configured: add EXPO_PUBLIC_GEMINI_API_KEY to your environment.',
     aiGenerateCardsError: 'Could not generate cards. Check your API key.',
     aiError: 'AI unavailable. Try again later.',
+    aiErrorQuota:
+      'Gemini API quota exceeded. Wait a few minutes. For AI image, add an English translation on the card — search may work without Gemini.',
+    aiErrorNoImage: 'No matching stock photo found. Try a different word or add a URL manually.',
     aiFillBackNeedFront: 'Enter the front text first, then use AI fill for the back.',
     aiFillImageNeedText: 'Enter card text (front or back) before searching for an image.',
     // Add/Edit deck
@@ -711,6 +716,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     importFileUnnamed: 'файл',
     importErrorExtension: 'Оберіть файл .csv, .txt або .xlsx.',
     importErrorNoRows: 'Не знайдено пар слів. Перевірте стовпці та роздільники.',
+    importErrorInvalidFormat:
+      'Файл не схожий на список слів. Потрібні стовпці Front і Back (або два стовпці без зайвих колонок).',
     importErrorParse: 'Не вдалося прочитати файл.',
     importErrorTitle: 'Введіть назву дошки.',
     importErrorAuth: 'Увійдіть, щоб імпортувати.',
@@ -824,6 +831,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     aiGenerateCardsNoKey: 'ШІ не налаштовано: додайте EXPO_PUBLIC_GEMINI_API_KEY у середовище.',
     aiGenerateCardsError: 'Не вдалося згенерувати. Перевірте API ключ.',
     aiError: 'AI недоступний. Спробуйте пізніше.',
+    aiErrorQuota:
+      'Квота Gemini API вичерпана. Зачекайте кілька хвилин. Для AI фото додайте англійський переклад на картці — пошук може спрацювати без Gemini.',
+    aiErrorNoImage: 'Не знайдено відповідного фото. Спробуйте інше слово або вставте URL вручну.',
     aiFillBackNeedFront: 'Спочатку введіть текст лицьової сторони, потім натисніть AI для звороту.',
     aiFillImageNeedText: 'Спочатку введіть текст картки (лицьову або зворотню), потім підбір фото.',
     // Add/Edit deck

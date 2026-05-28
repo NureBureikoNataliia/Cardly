@@ -16,7 +16,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useWindowDimensions,
 } from "react-native";
 import type { TextStyle } from "react-native";
 
@@ -31,6 +30,7 @@ import DeckSrsOverridesPanel from "@/src/components/DeckSrsOverridesPanel";
 import CardComplaintModal from "@/src/components/CardComplaintModal";
 import GenerateCardsModal from "@/src/components/GenerateCardsModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
+import { useAppColors } from "@/src/contexts/ThemeContext";
 import {
   getClozePartsFromCard,
   isClozeGapComplete,
@@ -46,7 +46,7 @@ import {
   queryDeckCards,
 } from "@/src/lib/deckCardListQuery";
 import { estimateCardTileHeight, splitIntoBalancedColumns } from "@/src/lib/balancedColumns";
-import { useAppColors } from "@/src/contexts/ThemeContext";
+import { useLayoutWidth } from "@/src/hooks/useLayoutWidth";
 
 const scrollPositions: Record<string, number> = {};
 
@@ -81,7 +81,8 @@ export default function DeckDetailScreen() {
   const deckId = typeof params.id === "string" ? params.id : null;
   const { t } = useLanguage();
   const C = useAppColors();
-  const { width: windowWidth } = useWindowDimensions();
+  const layoutWidth = useLayoutWidth();
+  const pageWidth = Math.min(layoutWidth, 1000);
 
   const { user } = useAuth();
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -117,6 +118,7 @@ export default function DeckDetailScreen() {
   const [cardSearch, setCardSearch] = useState("");
   const [cardFilter, setCardFilter] = useState<CardListFilter>("all");
   const [cardSort, setCardSort] = useState<CardListSort>("newest");
+  const [coverImgRatio, setCoverImgRatio] = useState<number | null>(null);
 
   // ── Members map: userId → displayName (for card author labels) ──
   const [membersMap, setMembersMap] = useState<Record<string, string>>({});
@@ -451,7 +453,7 @@ export default function DeckDetailScreen() {
   const isCopiedDeck = Boolean(deck?.original_deck_id);
 
   /* ── responsive columns: 2 on wide, 1 on narrow ── */
-  const numCols = Platform.OS === "web" && windowWidth >= 860 ? 2 : 1;
+  const numCols = Platform.OS === "web" && layoutWidth >= 860 ? 2 : 1;
 
   const displayedCards = useMemo(
     () =>
@@ -478,13 +480,21 @@ export default function DeckDetailScreen() {
     setCardSort("newest");
   }, []);
 
-  /** Secondary deck actions (export / add / AI / rate): wrap 2-per-row below ~520dp to avoid horizontal clip. */
-  const compactSecondaryActions = windowWidth < 520;
-  const secondaryActionsInnerW = Math.max(0, windowWidth - 32);
-  const secondaryCellWidth =
-    compactSecondaryActions
-      ? Math.max(138, Math.floor((secondaryActionsInnerW - 10) / 2))
-      : undefined;
+  useEffect(() => {
+    const url = deck?.cover_image_url;
+    if (!url) {
+      setCoverImgRatio(null);
+      return;
+    }
+    Image.getSize(
+      url,
+      (w, h) => setCoverImgRatio(w / h),
+      () => setCoverImgRatio(null),
+    );
+  }, [deck?.cover_image_url]);
+
+  /** Secondary deck actions: 2×2 grid below ~520dp (export / add / AI / rate). */
+  const compactSecondaryActions = layoutWidth < 520;
 
   /* ── loading ── */
   if (loading) {
@@ -510,27 +520,62 @@ export default function DeckDetailScreen() {
   /* ── progress % ── */
   const progressPct = totalCards > 0 ? Math.round(((totalCards - dueToday) / totalCards) * 100) : 0;
 
+  /** Portrait/tall covers: fixed strip height, center crop. Landscape: height from aspect ratio. */
+  const isPortraitCover = coverImgRatio != null && coverImgRatio < 1.6;
+  const heroCoverH = deck.cover_image_url
+    ? isPortraitCover
+      ? 220
+      : coverImgRatio
+        ? Math.min(Math.max(pageWidth / coverImgRatio, 180), 320)
+        : 220
+    : undefined;
+
   return (
     <>
       <ScrollView
         ref={scrollViewRef}
         style={[styles.root, { backgroundColor: C.bg }]}
-        contentContainerStyle={styles.contentOuter}
+        contentContainerStyle={[styles.contentOuter, { width: pageWidth }]}
         onScroll={(e) => { if (deckId) scrollPositions[deckId] = e.nativeEvent.contentOffset.y; }}
         scrollEventThrottle={100}
         showsVerticalScrollIndicator={Platform.OS === 'web'}
       >
-        <View style={styles.pageWrap}>
+        <View style={[styles.pageWrap, { width: pageWidth }]}>
 
           {/* ════════════ HERO ════════════ */}
-          <View style={[styles.hero, !deck.cover_image_url && { backgroundColor: C.isDark ? '#1a2535' : '#C6E3ED' }]}>
+          <View
+            style={[
+              styles.hero,
+              deck.cover_image_url && heroCoverH != null && styles.heroWithCoverFixed,
+              deck.cover_image_url && heroCoverH != null && { height: heroCoverH },
+              deck.cover_image_url
+                ? { backgroundColor: C.isDark ? '#0f172a' : '#1e293b' }
+                : { backgroundColor: C.isDark ? '#1a2535' : '#C6E3ED' },
+            ]}
+          >
             {deck.cover_image_url ? (
-              <>
-                <Image source={{ uri: deck.cover_image_url }} style={styles.heroImage} resizeMode="cover" />
+              <View style={styles.heroImageStrip} pointerEvents="none">
+                <Image
+                  source={{ uri: deck.cover_image_url }}
+                  style={[
+                    styles.heroCoverImage,
+                    Platform.OS === "web"
+                      ? { objectFit: "cover" as const, objectPosition: "center center" }
+                      : null,
+                  ]}
+                  resizeMode="cover"
+                  onLoad={(e) => {
+                    const source = e.nativeEvent?.source;
+                    if (source?.width && source?.height) {
+                      setCoverImgRatio(source.width / source.height);
+                    }
+                  }}
+                />
                 <View style={styles.heroOverlay} />
-              </>
+              </View>
             ) : null}
 
+            <View style={deck.cover_image_url ? styles.heroContentOnCover : undefined}>
             {/* Badge row */}
             <View style={styles.heroBadgeRow}>
               <View style={[
@@ -570,10 +615,14 @@ export default function DeckDetailScreen() {
               {deck.title}
             </Text>
             {deck.description ? (
-              <Text style={[styles.heroDesc, { color: C.textSub }, deck.cover_image_url && styles.heroDescOnCover]}>
+              <Text
+                style={[styles.heroDesc, { color: C.textSub }, deck.cover_image_url && styles.heroDescOnCover]}
+                numberOfLines={deck.cover_image_url ? 2 : undefined}
+              >
                 {deck.description}
               </Text>
             ) : null}
+            </View>
           </View>
 
           {/* ════════════ STATS ROW ════════════ */}
@@ -677,7 +726,7 @@ export default function DeckDetailScreen() {
                   disabled={isExportingPdf}
                   flex={!compactSecondaryActions}
                   compactLayout={compactSecondaryActions}
-                  fixedWidth={secondaryCellWidth}
+                  gridHalf={compactSecondaryActions}
                 />
               ) : null}
               {canEdit && (
@@ -691,7 +740,7 @@ export default function DeckDetailScreen() {
                   onPress={() => router.push(`/add-card?deckId=${deck.deck_id}`)}
                   flex={!compactSecondaryActions}
                   compactLayout={compactSecondaryActions}
-                  fixedWidth={secondaryCellWidth}
+                  gridHalf={compactSecondaryActions}
                 />
               )}
               {canEdit && (
@@ -705,7 +754,7 @@ export default function DeckDetailScreen() {
                   onPress={() => setShowGenerateModal(true)}
                   flex={!compactSecondaryActions}
                   compactLayout={compactSecondaryActions}
-                  fixedWidth={secondaryCellWidth}
+                  gridHalf={compactSecondaryActions}
                 />
               )}
               {user ? (
@@ -719,7 +768,7 @@ export default function DeckDetailScreen() {
                   onPress={() => router.push(`/deck-rate?id=${deck.deck_id}`)}
                   flex={!compactSecondaryActions}
                   compactLayout={compactSecondaryActions}
-                  fixedWidth={secondaryCellWidth}
+                  gridHalf={compactSecondaryActions}
                 />
               ) : null}
             </View>
@@ -1134,14 +1183,14 @@ function StatChip({ icon, value, label, color, onInfoPress, infoAccessibilityLab
   return (
     <View style={styles.statChip}>
       {onInfoPress ? (
-        <View style={styles.statChipIconWithInfo}>
+        <View style={styles.statChipIconAnchor}>
           <View style={[styles.statChipIcon, { backgroundColor: `${color}18` }]}>
             <Feather name={icon} size={15} color={color} />
           </View>
           <Pressable
-            style={styles.statChipInfoHit}
+            style={styles.statChipInfoBtn}
             onPress={onInfoPress}
-            hitSlop={10}
+            hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={infoAccessibilityLabel ?? label}
           >
@@ -1172,7 +1221,7 @@ function ActionBtn({
   flex,
   fullWidth,
   compactLayout,
-  fixedWidth,
+  gridHalf,
 }: {
   icon?: keyof typeof Feather.glyphMap;
   label: string;
@@ -1186,7 +1235,8 @@ function ActionBtn({
   fullWidth?: boolean;
   /** Icon above label, smaller type — fits 2×2 action grid on phones */
   compactLayout?: boolean;
-  fixedWidth?: number;
+  /** ~half row width for 2-column compact grid */
+  gridHalf?: boolean;
 }) {
   return (
     <TouchableOpacity
@@ -1196,7 +1246,7 @@ function ActionBtn({
         border && { borderWidth: 1.5, borderColor: borderColor ?? textColor },
         flex && { flex: 1, minWidth: 0 },
         fullWidth && { width: "100%" },
-        fixedWidth != null && { width: fixedWidth, flexGrow: 0, flexShrink: 0 },
+        gridHalf && styles.actionBtnGridHalf,
         compactLayout && styles.actionBtnCompact,
         !icon && styles.actionBtnNoIcon,
         disabled && styles.actionBtnDisabled,
@@ -1351,8 +1401,8 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
 /* ═══════════════════ STYLES ═══════════════════ */
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  contentOuter: { alignItems: "center", paddingBottom: 40 },
-  pageWrap: { width: "100%", maxWidth: 1000, paddingHorizontal: 0 },
+  contentOuter: { alignSelf: "stretch", paddingBottom: 40 },
+  pageWrap: { alignSelf: "center", paddingHorizontal: 0 },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   errorMsg: { fontSize: 16, color: "#6b7280", textAlign: "center", paddingHorizontal: 32 },
@@ -1361,6 +1411,7 @@ const styles = StyleSheet.create({
 
   /* ── HERO ── */
   hero: {
+    alignSelf: "stretch",
     width: "100%",
     minHeight: 160,
     backgroundColor: "#C6E3ED",
@@ -1371,14 +1422,36 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
   },
-  heroImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+  heroWithCoverFixed: {
+    minHeight: undefined,
+    paddingTop: 0,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+  },
+  heroImageStrip: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+  },
+  heroCoverImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  heroContentOnCover: {
+    flex: 1,
+    justifyContent: "flex-end",
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 12,
+    zIndex: 1,
+  },
   heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.38)" },
   heroGradient: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#C6E3ED",
   },
   /* decorative soft circle */
-  heroBadgeRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
+  heroBadgeRow: { flexDirection: "row", gap: 8, marginBottom: 10, zIndex: 1 },
   badge: {
     flexDirection: "row", alignItems: "center", gap: 4,
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
@@ -1396,9 +1469,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
   },
   badgeTxtCopy: { fontSize: 12, fontWeight: "600", color: "#4f46e5" },
-  heroTitle: { fontSize: 26, fontWeight: "800", color: "#1e293b", letterSpacing: 0.1 },
+  heroTitle: { fontSize: 26, fontWeight: "800", color: "#1e293b", letterSpacing: 0.1, zIndex: 1 },
   heroTitleOnCover: { color: "#fff", textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  heroDesc: { marginTop: 6, fontSize: 14, color: "#334155", lineHeight: 20 },
+  heroDesc: { marginTop: 6, fontSize: 14, color: "#334155", lineHeight: 20, zIndex: 1 },
   heroDescOnCover: { color: "rgba(255,255,255,0.85)", textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
 
   /* ── STATS ── */
@@ -1411,18 +1484,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
   },
   statsDivider: { width: 1, height: 40, backgroundColor: "#f0f1f5" },
-  statChip: { flex: 1, alignItems: "center", gap: 4 },
-  /** Main icon stays centered like other chips; info sits to the right, outside the centering width. */
-  statChipIconWithInfo: {
-    position: "relative",
+  statChip: { flex: 1, alignItems: "center", gap: 4, minWidth: 0 },
+  statChipIconAnchor: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-  },
-  statChipInfoHit: {
-    position: "absolute",
-    left: "100%",
-    marginLeft: 4,
+    alignSelf: "center",
+    gap: 4,
     height: 32,
+  },
+  statChipInfoBtn: {
+    width: 20,
+    height: 32,
+    alignItems: "center",
     justifyContent: "center",
   },
   statChipIcon: {
@@ -1439,9 +1512,8 @@ const styles = StyleSheet.create({
   progressLabelRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     gap: 6,
-    alignSelf: "flex-end",
   },
   progressLabel: { fontSize: 12, color: "#9ca3af" },
 
@@ -1449,8 +1521,20 @@ const styles = StyleSheet.create({
   actions: { marginHorizontal: 16, marginTop: 16, gap: 10 },
   actionRowPrimary: { flexDirection: "row", gap: 10 },
   actionRowPrimaryStack: { flexDirection: "column", width: "100%" },
-  actionRowSecondary: { flexDirection: "row", gap: 10 },
-  actionRowSecondaryWrap: { flexWrap: "wrap" },
+  actionRowSecondary: { flexDirection: "row", gap: 10, width: "100%" },
+  actionRowSecondaryWrap: {
+    flexWrap: "wrap",
+    width: "100%",
+    justifyContent: "space-between",
+    rowGap: 10,
+    columnGap: 10,
+  },
+  actionBtnGridHalf: {
+    width: "48%",
+    maxWidth: "48%",
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   actionBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 8, paddingVertical: 14, paddingHorizontal: 16,

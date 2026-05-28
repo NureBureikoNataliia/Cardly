@@ -63,8 +63,10 @@ import {
   type CardMediaForm,
   type CardMediaSide,
 } from "@/src/lib/cardMedia";
+import { useLayoutWidth } from "@/src/hooks/useLayoutWidth";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 import { generateCardBack, generateCardImageUrl } from "@/src/lib/gemini";
+import { keyboardAvoidingBehavior } from "@/src/lib/keyboardAvoiding";
 import {
   pickCardAudioFile,
   uploadAudioErrorKey,
@@ -72,15 +74,19 @@ import {
   type UploadAudioPhase,
 } from "@/src/lib/uploadCardAudio";
 
-/** Locked at mount — window width changes when the mobile keyboard opens and remounts the form. */
-function initialFormSideBySide(): boolean {
-  if (Platform.OS === "web" && typeof window !== "undefined") {
-    return window.innerWidth >= 640;
+const FORM_SIDE_BY_SIDE_MIN_WIDTH = 768;
+
+/** Web: follow viewport width. Native: lock at mount so the keyboard does not flip the layout. */
+function useFormSideBySide(): boolean {
+  const layoutWidth = useLayoutWidth();
+  const [nativeSideBySide] = useState(
+    () => Platform.OS !== "web" && Dimensions.get("screen").width >= FORM_SIDE_BY_SIDE_MIN_WIDTH,
+  );
+
+  if (Platform.OS === "web") {
+    return layoutWidth >= FORM_SIDE_BY_SIDE_MIN_WIDTH;
   }
-  if (Platform.OS !== "web") {
-    return Dimensions.get("screen").width >= 768;
-  }
-  return false;
+  return nativeSideBySide;
 }
 
 function basicSideHasContent(
@@ -612,14 +618,16 @@ function CardEditorForm({
       return;
     }
     setAiFrontImgBusy(true);
-    const url = await generateCardImageUrl(
+    const result = await generateCardImageUrl(
       frontText.trim(),
       deck.title ?? "",
       deck.description,
       "front",
     );
     setAiFrontImgBusy(false);
-    if (url) setMediaUrl("front", "image", url);
+    if (result.ok) setMediaUrl("front", "image", result.url);
+    else if (result.reason === "quota") setErrorModal(t("aiErrorQuota"));
+    else if (result.reason === "no_match") setErrorModal(t("aiErrorNoImage"));
     else setErrorModal(t("aiError"));
   }, [cardType, deck, frontText, t]);
 
@@ -631,14 +639,16 @@ function CardEditorForm({
       return;
     }
     setAiBackImgBusy(true);
-    const url = await generateCardImageUrl(
+    const result = await generateCardImageUrl(
       cue,
       deck.title ?? "",
       deck.description,
       "back",
     );
     setAiBackImgBusy(false);
-    if (url) setMediaUrl("back", "image", url);
+    if (result.ok) setMediaUrl("back", "image", result.url);
+    else if (result.reason === "quota") setErrorModal(t("aiErrorQuota"));
+    else if (result.reason === "no_match") setErrorModal(t("aiErrorNoImage"));
     else setErrorModal(t("aiError"));
   }, [backText, cardType, deck, frontText, t]);
 
@@ -853,7 +863,7 @@ function CardEditorForm({
   return (
     <>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={keyboardAvoidingBehavior()}
         style={{ flex: 1, backgroundColor: C.bg }}
       >
         <ScrollView
@@ -944,6 +954,7 @@ function CardEditorForm({
                     <View
                       style={[
                         styles.basicSideCol,
+                        formSideBySide && styles.basicSideColFlex,
                         formSideBySide && styles.basicSideColLeft,
                       ]}
                     >
@@ -1011,7 +1022,10 @@ function CardEditorForm({
                     <View
                       style={[
                         styles.basicSideCol,
+                        formSideBySide && styles.basicSideColFlex,
                         formSideBySide && styles.basicSideColRight,
+                        !formSideBySide && styles.basicSideColStackedNext,
+                        { borderColor: C.borderLight },
                       ]}
                     >
                       <CardSideColumnHeader
@@ -1073,6 +1087,7 @@ function CardEditorForm({
                     <View
                       style={[
                         styles.basicSideCol,
+                        formSideBySide && styles.basicSideColFlex,
                         formSideBySide && styles.basicSideColLeft,
                       ]}
                     >
@@ -1133,7 +1148,10 @@ function CardEditorForm({
                     <View
                       style={[
                         styles.basicSideCol,
+                        formSideBySide && styles.basicSideColFlex,
                         formSideBySide && styles.basicSideColRight,
+                        !formSideBySide && styles.basicSideColStackedNext,
+                        { borderColor: C.borderLight },
                       ]}
                     >
                       <CardSideColumnHeader
@@ -1532,7 +1550,7 @@ export default function AddCardScreen() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const C = useAppColors();
-  const [formSideBySide] = useState(initialFormSideBySide);
+  const formSideBySide = useFormSideBySide();
   const isEdit = Boolean(cardId);
 
   useLayoutEffect(() => {
@@ -2128,7 +2146,7 @@ const styles = StyleSheet.create({
   },
   basicSidesRowStacked: {
     flexDirection: "column",
-    gap: 16,
+    gap: 0,
   },
   basicSidesDivider: {
     width: 1,
@@ -2136,10 +2154,19 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   basicSideCol: {
-    flex: 1,
     minWidth: 0,
+    width: "100%",
     gap: 14,
     alignSelf: "stretch",
+    flexShrink: 0,
+  },
+  basicSideColFlex: {
+    flex: 1,
+  },
+  basicSideColStackedNext: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   basicSideColLeft: {
     paddingRight: 14,

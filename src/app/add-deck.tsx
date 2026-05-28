@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -12,17 +13,18 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from 'react-native';
 
+import { FormTextInputRow } from '@/src/components/FormTextInputRow';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useAppColors } from '@/src/contexts/ThemeContext';
+import { useLayoutWidth } from '@/src/hooks/useLayoutWidth';
 import { generateDeckDescription, generateCardImageUrl } from '@/src/lib/gemini';
+import { keyboardAvoidingBehavior } from '@/src/lib/keyboardAvoiding';
 
 export default function AddDeckScreen() {
   const router = useRouter();
@@ -37,7 +39,10 @@ export default function AddDeckScreen() {
   const { user } = useAuth();
   const { t } = useLanguage();
   const C = useAppColors();
-  const { width: screenWidth } = useWindowDimensions();
+  const layoutWidth = useLayoutWidth();
+  /** Cover height from screen width on native — keyboard must not resize the hero block. */
+  const [nativeCoverLayoutWidth] = useState(() => Dimensions.get('screen').width);
+  const coverLayoutWidth = Platform.OS === 'web' ? layoutWidth : nativeCoverLayoutWidth;
   const isEdit = Boolean(deckId);
 
   useLayoutEffect(() => {
@@ -53,7 +58,6 @@ export default function AddDeckScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(isEdit);
   const [error, setError] = useState<string | null>(null);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
   const [imgRatio, setImgRatio] = useState<number | null>(null);
   const [isAiDesc, setIsAiDesc] = useState(false);
   const [isAiCover, setIsAiCover] = useState(false);
@@ -117,18 +121,20 @@ export default function AddDeckScreen() {
 
   const hasCover = coverUrl.trim().length > 0;
   const coverH = imgRatio
-    ? Math.min(Math.max((screenWidth - 48) / imgRatio, 120), 380)
+    ? Math.min(Math.max((coverLayoutWidth - 48) / imgRatio, 120), 380)
     : 160;
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={keyboardAvoidingBehavior()}
       style={{ flex: 1, backgroundColor: C.bg }}
     >
       <ScrollView
         contentContainerStyle={styles.scrollOuter}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={Platform.OS === 'web'}
+        removeClippedSubviews={Platform.OS === 'android' ? false : undefined}
       >
       <View style={styles.formContainer}>
 
@@ -159,7 +165,10 @@ export default function AddDeckScreen() {
                 <>
                   <Image
                     source={{ uri: coverUrl.trim() }}
-                    style={StyleSheet.absoluteFill}
+                    style={[
+                      StyleSheet.absoluteFill,
+                      Platform.OS === 'web' ? { objectFit: (imgRatio && imgRatio < 1.4 ? 'contain' : 'cover') as const } : null,
+                    ]}
                     resizeMode={imgRatio && imgRatio < 1.4 ? 'contain' : 'cover'}
                     onLoad={e => {
                       const source = e.nativeEvent?.source;
@@ -195,28 +204,13 @@ export default function AddDeckScreen() {
 
               {/* TITLE */}
               <Field label={t('title')} required>
-                <InputRow
+                <FormTextInputRow
                   icon="type"
-                  focused={focusedField === 'title'}
-                  onFocus={() => setFocusedField('title')}
-                  onBlur={() => setFocusedField(null)}
-                >
-                  <TextInput
-                    style={[styles.input, { color: C.text }]}
-                    placeholder={t('title')}
-                    placeholderTextColor={C.placeholder}
-                    value={title}
-                    onChangeText={setTitle}
-                    onFocus={() => setFocusedField('title')}
-                    onBlur={() => setFocusedField(null)}
-                    returnKeyType="next"
-                  />
-                  {title.length > 0 && (
-                    <Pressable onPress={() => setTitle('')} hitSlop={8}>
-                      <Feather name="x-circle" size={16} color={C.textMuted} />
-                    </Pressable>
-                  )}
-                </InputRow>
+                  placeholder={t('title')}
+                  value={title}
+                  onChangeText={setTitle}
+                  showClear
+                />
               </Field>
 
               {/* DESCRIPTION */}
@@ -246,26 +240,14 @@ export default function AddDeckScreen() {
                   </TouchableOpacity>
                 }
               >
-                <InputRow
+                <FormTextInputRow
                   icon="align-left"
-                  focused={focusedField === 'desc'}
-                  onFocus={() => setFocusedField('desc')}
-                  onBlur={() => setFocusedField(null)}
+                  placeholder={t('description')}
+                  value={description}
+                  onChangeText={setDescription}
                   multiline
-                >
-                  <TextInput
-                    style={[styles.input, styles.inputMulti, { color: C.text }]}
-                    placeholder={t('description')}
-                    placeholderTextColor={C.placeholder}
-                    value={description}
-                    onChangeText={setDescription}
-                    onFocus={() => setFocusedField('desc')}
-                    onBlur={() => setFocusedField(null)}
-                    multiline
-                    textAlignVertical="top"
-                    numberOfLines={3}
-                  />
-                </InputRow>
+                  inputStyle={styles.inputMulti}
+                />
               </Field>
 
               {/* COVER URL */}
@@ -279,9 +261,16 @@ export default function AddDeckScreen() {
                     onPress={async () => {
                       if (!title.trim()) return;
                       setIsAiCover(true);
-                      const url = await generateCardImageUrl(title.trim(), title.trim(), description || null, 'front');
+                      const result = await generateCardImageUrl(title.trim(), title.trim(), description || null, 'front');
                       setIsAiCover(false);
-                      if (url) { setCoverUrl(url); setImgRatio(null); }
+                      if (result.ok) {
+                        setCoverUrl(result.url);
+                        setImgRatio(null);
+                      } else if (result.reason === 'quota') {
+                        setError(t('aiErrorQuota'));
+                      } else if (result.reason === 'no_match') {
+                        setError(t('aiErrorNoImage'));
+                      }
                     }}
                   >
                     {isAiCover ? (
@@ -295,29 +284,18 @@ export default function AddDeckScreen() {
                   </TouchableOpacity>
                 }
               >
-                <InputRow
+                <FormTextInputRow
                   icon="link-2"
-                  focused={focusedField === 'cover'}
-                  onFocus={() => setFocusedField('cover')}
-                  onBlur={() => setFocusedField(null)}
-                >
-                  <TextInput
-                    style={[styles.input, { color: C.text }]}
-                    placeholder="https://..."
-                    placeholderTextColor={C.placeholder}
-                    value={coverUrl}
-                    onChangeText={setCoverUrl}
-                    onFocus={() => setFocusedField('cover')}
-                    onBlur={() => setFocusedField(null)}
-                    autoCapitalize="none"
-                    keyboardType="url"
-                  />
-                  {coverUrl.length > 0 && (
-                    <Pressable onPress={() => { setCoverUrl(''); setImgRatio(null); }} hitSlop={8}>
-                      <Feather name="x-circle" size={16} color={C.textMuted} />
-                    </Pressable>
-                  )}
-                </InputRow>
+                  placeholder="https://..."
+                  value={coverUrl}
+                  onChangeText={text => {
+                    setCoverUrl(text);
+                    if (!text.trim()) setImgRatio(null);
+                  }}
+                  showClear
+                  keyboardType="url"
+                  autoCapitalize="none"
+                />
               </Field>
 
               {/* VISIBILITY */}
@@ -433,42 +411,6 @@ function Field({
         </Text>
         {labelRight}
       </View>
-      {children}
-    </View>
-  );
-}
-
-function InputRow({
-  icon,
-  focused,
-  onFocus,
-  onBlur,
-  multiline,
-  children,
-}: {
-  icon: keyof typeof Feather.glyphMap;
-  focused: boolean;
-  onFocus: () => void;
-  onBlur: () => void;
-  multiline?: boolean;
-  children: React.ReactNode;
-}) {
-  const C = useAppColors();
-  return (
-    <View
-      style={[
-        styles.inputRow,
-        { backgroundColor: C.inputBg, borderColor: C.inputBorder },
-        multiline && styles.inputRowMulti,
-        focused && [styles.inputRowFocused, C.isDark && { backgroundColor: C.surface, borderColor: '#6366f1' }],
-      ]}
-    >
-      <Feather
-        name={icon}
-        size={16}
-        color={focused ? C.tint : C.textMuted}
-        style={multiline ? { marginTop: 3 } : undefined}
-      />
       {children}
     </View>
   );
@@ -608,43 +550,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  /* INPUT ROW */
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#f7f8fb',
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#e8eaee',
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-  },
-  inputRowMulti: {
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-  },
-  inputRowFocused: {
-    borderColor: '#1a1a1a',
-    backgroundColor: '#fff',
-    shadowColor: '#1a1a1a',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: '#111827',
-    paddingVertical: 0,
-    // @ts-ignore — web-only: disable default browser focus outline
-    outlineWidth: 0,
-    outlineStyle: 'none',
-  },
   inputMulti: {
     minHeight: 68,
-    textAlignVertical: 'top',
   },
 
   /* TOGGLE */

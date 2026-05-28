@@ -73,7 +73,7 @@ export default function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
   };
 
   return (
-    <View style={styles.overlay}>
+    <View style={styles.overlay} pointerEvents={visible ? 'auto' : 'none'}>
       <Pressable style={styles.outside} onPress={onClose} accessibilityRole="button" />
 
       <Animated.View style={[styles.container, { backgroundColor: C.surface, transform: [{ translateX }] }]}>

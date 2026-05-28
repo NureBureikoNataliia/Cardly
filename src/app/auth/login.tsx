@@ -18,7 +18,7 @@ import { AuthTopActions } from '@/src/components/AuthTopActions';
 import { PasswordField } from '@/src/components/PasswordField';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import { authFormStyles, authInputStyle } from '@/src/components/authFormStyles';
-import { mapAuthErrorMessage } from '@/src/lib/mapAuthError';
+import { keyboardAvoidingBehavior } from '@/src/lib/keyboardAvoiding';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -66,7 +66,7 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: C.bg }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={keyboardAvoidingBehavior()}
     >
       <AuthTopActions />
       <ScrollView

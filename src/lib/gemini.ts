@@ -5,9 +5,23 @@
 
 import { geminiGenerateText } from '@/src/lib/geminiRequest';
 
-async function callGemini(prompt: string, maxTokens = 512): Promise<string | null> {
-  const r = await geminiGenerateText(prompt, { maxOutputTokens: maxTokens, temperature: 0.4 });
-  return r.ok ? r.text : null;
+type GeminiCallResult = { text: string | null; quotaExceeded: boolean };
+
+async function callGemini(
+  prompt: string,
+  maxTokens = 512,
+  options?: { thinkingBudget?: number },
+): Promise<GeminiCallResult> {
+  const r = await geminiGenerateText(prompt, {
+    maxOutputTokens: maxTokens,
+    temperature: 0.4,
+    thinkingBudget: options?.thinkingBudget,
+  });
+  if (r.ok) return { text: r.text, quotaExceeded: false };
+  if (!r.noApiKey) {
+    return { text: null, quotaExceeded: Boolean(r.quotaExceeded) };
+  }
+  return { text: null, quotaExceeded: false };
 }
 
 /**
@@ -29,7 +43,7 @@ Original text: "${userText!.trim()}"`
     : `Write a short, engaging description (1–2 sentences) for a flashcard deck titled "${title}".
 Match the language of the title. Be informative and natural. Do not use quotes or markdown.`;
 
-  return callGemini(prompt, 200);
+  return callGemini(prompt, 200).then((r) => r.text);
 }
 
 /**
@@ -62,92 +76,304 @@ Rules:
 - Do not add meta text like "Translation:" or "Definition:" — just the answer
 - Do not wrap in quotes`;
 
-  return callGemini(prompt, 300);
+  return callGemini(prompt, 300).then((r) => r.text);
 }
 
 /**
  * Find a relevant stock photo URL for a flashcard using Pixabay.
  * Requires EXPO_PUBLIC_PIXABAY_API_KEY in .env (free at pixabay.com/api/docs/).
  *
- * Flow: try Gemini → English keywords; fall back to raw front text if Gemini is unavailable.
- * Then query Pixabay → return first image URL.
+ * Flow: Gemini → English photo keywords → Pixabay → best tag match.
  */
+const PIXABAY_SKIP_WORDS = new Set([
+  'ukrainian', 'ukraine', 'german', 'germany', 'chinese', 'china', 'french', 'france',
+  'italian', 'italy', 'japanese', 'japan', 'kiev', 'kyiv', 'lviv', 'european', 'eastern',
+  'traditional', 'national', 'regional', 'local', 'various', 'small', 'large', 'with', 'and',
+  'the', 'or', 'for', 'from', 'filled', 'fillings', 'type', 'kinds', 'kind',
+]);
+
+const FOOD_QUERY_WORDS = new Set([
+  'food', 'soup', 'bread', 'bun', 'buns', 'pastry', 'pastries', 'cake', 'pie', 'cookie',
+  'pancake', 'pancakes', 'dumpling', 'dumplings', 'meat', 'fish', 'fruit', 'vegetable',
+  'salad', 'cheese', 'coffee', 'tea', 'rice', 'pasta', 'pizza', 'borscht', 'soup',
+  'breakfast', 'dessert', 'snack', 'baked', 'fried', 'roast', 'stew', 'porridge',
+  'pyrizhky', 'varenyky', 'holubtsi', 'syrniki', 'mlyntsi',
+]);
+
+const ARCHITECTURE_TAG_RE =
+  /\b(building|architecture|church|cathedral|monastery|landmark|kyiv|kiev|ukraine|ukrainian|temple|urban|cityscape|belfry|orthodox|historic)\b/i;
+
+const FOOD_TAG_RE =
+  /\b(food|pastry|pastries|bun|buns|bread|baked|fried|soup|meal|dish|cuisine|gourmet|breakfast|dessert|cake|pie|cookie|snack|baking|kitchen|plate|bowl)\b/i;
+
+function parseKeywordText(text: string): string[] {
+  return text
+    .replace(/[^a-zA-Z0-9 \n]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function filterSearchWords(words: string[]): string[] {
+  return words
+    .map((w) => w.toLowerCase())
+    .filter((w) => w.length > 2 && !PIXABAY_SKIP_WORDS.has(w));
+}
+
+function toPixabayQuery(words: string[], maxWords = 4): string | null {
+  const filtered = filterSearchWords(words).slice(0, maxWords);
+  return filtered.length > 0 ? filtered.join('+') : null;
+}
+
+function extractEnglishPhotoHint(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const paren = trimmed.match(/\(([^)]+)\)/);
+  if (paren?.[1]?.trim() && /[a-zA-Z]/.test(paren[1])) {
+    return paren[1].trim();
+  }
+
+  if (/^[a-zA-Z0-9\s.,'()-]+$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
+}
+
+function hasNonLatinText(text: string): boolean {
+  return /[^\x00-\x7F]/.test(text);
+}
+
+function inferPixabayCategory(
+  deckTitle: string,
+  deckDescription?: string | null,
+  cardText?: string,
+): string | undefined {
+  const blob = `${deckTitle} ${deckDescription ?? ''} ${cardText ?? ''}`.toLowerCase();
+  if (
+    /food|cuisine|kitchen|recipe|cook|meal|restaurant|gastro|кулінар|їжа|страв|харч|culinary|buns|soup|bread|pastry|borscht|pyrizhky|varenyky|pancake|dumpling/.test(
+      blob,
+    )
+  ) {
+    return 'food';
+  }
+  if (/animal|zoo|pet|wildlife|тварин/.test(blob)) {
+    return 'animals';
+  }
+  if (/travel|place|city|country|geograph|landmark|міст|країн/.test(blob)) {
+    return 'places';
+  }
+  return undefined;
+}
+
+function normalizeForTagMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+}
+
+function tagMatchesWord(tags: string, word: string): boolean {
+  const w = normalizeForTagMatch(word);
+  if (w.length < 3) return false;
+  const normTags = normalizeForTagMatch(tags);
+  if (normTags.includes(w)) return true;
+  return normTags.split(',').some((tag) => {
+    const t = tag.trim();
+    return t.includes(w) || w.includes(t);
+  });
+}
+
+function pickBestPixabayHit(
+  hits: { tags?: string; webformatURL?: string }[],
+  queryWords: string[],
+  category?: string,
+): string | null {
+  if (hits.length === 0) return null;
+
+  const primaryWords = filterSearchWords(queryWords);
+  const words =
+    primaryWords.length > 0
+      ? primaryWords
+      : queryWords.map((w) => w.toLowerCase()).filter((w) => w.length > 2);
+
+  if (words.length === 0) return hits[0]?.webformatURL ?? null;
+
+  let bestHit = hits[0];
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const hit of hits) {
+    const tags = hit.tags ?? '';
+    const wordMatches = words.filter((w) => tagMatchesWord(tags, w)).length;
+    if (wordMatches === 0) continue;
+
+    let score = wordMatches;
+
+    if (category === 'food') {
+      if (FOOD_TAG_RE.test(tags)) score += 2;
+      if (ARCHITECTURE_TAG_RE.test(tags) && !FOOD_TAG_RE.test(tags)) score -= 8;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestHit = hit;
+    }
+  }
+
+  if (bestScore <= 0) return null;
+
+  return bestHit?.webformatURL ?? null;
+}
+
+async function fetchPixabayImage(
+  pixabayKey: string,
+  queryWords: string[],
+  category?: string,
+): Promise<string | null> {
+  const query = toPixabayQuery(queryWords);
+  if (!query) return null;
+
+  const params = new URLSearchParams({
+    key: pixabayKey,
+    q: query.replace(/\+/g, ' '),
+    image_type: 'photo',
+    safesearch: 'true',
+    per_page: '20',
+    orientation: 'horizontal',
+    order: 'popular',
+  });
+  if (category) params.set('category', category);
+
+  const res = await fetch(`https://pixabay.com/api/?${params.toString()}`);
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as {
+    hits?: { tags?: string; webformatURL?: string }[];
+  };
+
+  return pickBestPixabayHit(data.hits ?? [], queryWords, category);
+}
+
+function extractLatinHeadword(text: string): string | null {
+  const m = text.trim().match(/^([A-Za-z][A-Za-z'-]*)/);
+  return m?.[1] ?? null;
+}
+
+function usableKeywordWords(words: string[]): boolean {
+  return filterSearchWords(words).length >= 1 || (words.length === 1 && words[0].length >= 5);
+}
+
+async function resolveImageSearchWords(
+  cardText: string,
+  deckTitle: string,
+  deckDescription: string | null | undefined,
+  side: 'front' | 'back',
+): Promise<{ words: string[]; quotaExceeded: boolean }> {
+  const englishHint = extractEnglishPhotoHint(cardText);
+  if (englishHint) {
+    const words = parseKeywordText(englishHint);
+    if (usableKeywordWords(words)) return { words, quotaExceeded: false };
+  }
+
+  const latinHead = extractLatinHeadword(cardText);
+  if (latinHead) {
+    const words = parseKeywordText(latinHead);
+    if (usableKeywordWords(words)) return { words, quotaExceeded: false };
+  }
+
+  if (!hasNonLatinText(cardText)) {
+    const words = parseKeywordText(cardText);
+    if (usableKeywordWords(words)) return { words, quotaExceeded: false };
+  }
+
+  const context = [
+    `Deck title: "${deckTitle}"`,
+    deckDescription?.trim() ? `Deck description: "${deckDescription.trim()}"` : null,
+    `Card ${side} text: "${cardText}"`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const keywordPrompt = `You pick stock photo search terms for vocabulary flashcards.
+The photo must clearly show the exact object, food, place, or concept on the card.
+
+${context}
+
+Rules:
+- Reply with 2–4 simple English nouns only (lowercase, spaces between words, one line)
+- If the card text is not English, translate its meaning to English first
+- Name the visible subject only (e.g. "borscht soup", "fried buns", "pancakes")
+- Never use country, city, or nationality words (no ukrainian, german, kiev, etc.)
+- Do not use generic words like nature, background, abstract, concept, people
+- No punctuation, quotes, or explanations`;
+
+  const raw = await callGemini(keywordPrompt, 128, { thinkingBudget: 0 });
+  if (raw.quotaExceeded) return { words: [], quotaExceeded: true };
+  if (raw.text) {
+    const words = parseKeywordText(raw.text);
+    if (usableKeywordWords(words)) return { words, quotaExceeded: false };
+  }
+
+  const deckWords = parseKeywordText(deckTitle);
+  if (usableKeywordWords(deckWords)) return { words: deckWords, quotaExceeded: false };
+
+  return { words: [], quotaExceeded: false };
+}
+
+export type ImageGenResult =
+  | { ok: true; url: string }
+  | { ok: false; reason: 'quota' | 'no_match' | 'no_pixabay_key' };
+
 export async function generateCardImageUrl(
   frontText: string,
   deckTitle: string,
   deckDescription?: string | null,
   side: 'front' | 'back' = 'front',
-): Promise<string | null> {
+): Promise<ImageGenResult> {
   const pixabayKey = process.env.EXPO_PUBLIC_PIXABAY_API_KEY?.trim();
-  console.log('[AI image] Pixabay key present:', Boolean(pixabayKey));
-  if (!pixabayKey) return null;
+  if (!pixabayKey) return { ok: false, reason: 'no_pixabay_key' };
 
-  // Try to get refined keywords from Gemini; fall back to the card text itself
-  let query: string | null = null;
+  const cardText = frontText.trim();
+  if (!cardText) return { ok: false, reason: 'no_match' };
 
-  const context = [
-    `Deck title: "${deckTitle}"`,
-    deckDescription?.trim() ? `Deck description: "${deckDescription.trim()}"` : null,
-    `Card ${side} text: "${frontText}"`,
-  ]
-    .filter(Boolean)
-    .join('\n');
+  const { words: queryWords, quotaExceeded } = await resolveImageSearchWords(
+    cardText,
+    deckTitle,
+    deckDescription,
+    side,
+  );
 
-  const prompt = `You help pick stock photo search terms for flashcards.
-Reply with 2–3 simple English keywords for an image search that visually represents the concept below. Separate with spaces only. No explanations.
-
-${context}`;
-
-  const raw = await callGemini(prompt, 20);
-  if (raw) {
-    const cleaned = raw
-      .replace(/[^a-zA-Z0-9 ]/g, ' ')
-      .trim()
-      .split(/\s+/)
-      .slice(0, 3)
-      .join('+');
-    if (cleaned) query = cleaned;
+  if (queryWords.length === 0) {
+    return { ok: false, reason: quotaExceeded ? 'quota' : 'no_match' };
   }
 
-  // Fallback: prefer deck title (usually English) over front text (may be non-ASCII)
-  if (!query) {
-    const titleWords = deckTitle
-      .replace(/[^\x00-\x7F]/g, ' ')
-      .replace(/[^a-zA-Z0-9 ]/g, ' ')
-      .trim()
-      .split(/\s+/)
-      .filter(w => w.length > 2)
-      .slice(0, 3)
-      .join('+');
-
-    const frontWords = frontText
-      .replace(/[^\x00-\x7F]/g, ' ')
-      .replace(/[^a-zA-Z0-9 ]/g, ' ')
-      .trim()
-      .split(/\s+/)
-      .filter(w => w.length > 2)
-      .slice(0, 2)
-      .join('+');
-
-    // Use title if it has meaningful English words, otherwise fall back to front
-    query = titleWords || frontWords || 'nature';
-  }
+  const category = inferPixabayCategory(deckTitle, deckDescription, cardText);
 
   try {
-    const url = `https://pixabay.com/api/?key=${encodeURIComponent(pixabayKey)}&q=${query}&image_type=photo&safesearch=true&per_page=3&orientation=horizontal`;
-    console.log('[AI image] Pixabay query:', query);
-    const res = await fetch(url);
-    console.log('[AI image] Pixabay status:', res.status);
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      hits?: { webformatURL?: string }[];
+    const searchPlans: string[][] = [];
+    const seen = new Set<string>();
+    const addPlan = (words: string[]) => {
+      const filtered = filterSearchWords(words);
+      if (filtered.length === 0) return;
+      const key = filtered.join(' ');
+      if (seen.has(key)) return;
+      seen.add(key);
+      searchPlans.push(filtered);
     };
-    const imgUrl = data.hits?.[0]?.webformatURL ?? null;
-    console.log('[AI image] Result URL:', imgUrl);
-    return imgUrl;
+
+    addPlan(queryWords);
+    addPlan(queryWords.filter((w) => FOOD_QUERY_WORDS.has(w.toLowerCase())));
+
+    for (const words of searchPlans) {
+      const imgUrl = await fetchPixabayImage(pixabayKey, words, category);
+      if (imgUrl) return { ok: true, url: imgUrl };
+    }
+
+    return { ok: false, reason: quotaExceeded ? 'quota' : 'no_match' };
   } catch (e) {
     console.warn('[AI image] Pixabay error:', e);
-    return null;
+    return { ok: false, reason: 'no_match' };
   }
 }
 

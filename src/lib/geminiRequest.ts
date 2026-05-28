@@ -18,14 +18,14 @@ function sleep(ms: number) {
 export type GeminiTextResult =
   | { ok: true; text: string }
   | { ok: false; noApiKey: true }
-  | { ok: false; noApiKey: false; lastStatus: number | null };
+  | { ok: false; noApiKey: false; lastStatus: number | null; quotaExceeded?: boolean };
 
 /**
  * Generates plain text via Gemini REST. Retries once on 503/429 per model; then tries next model.
  */
 export async function geminiGenerateText(
   prompt: string,
-  options: { maxOutputTokens: number; temperature?: number },
+  options: { maxOutputTokens: number; temperature?: number; thinkingBudget?: number },
 ): Promise<GeminiTextResult> {
   const apiKey = getExpoGeminiApiKey();
   if (!apiKey) {
@@ -34,6 +34,15 @@ export async function geminiGenerateText(
 
   const temperature = options.temperature ?? 0.4;
   let lastStatus: number | null = null;
+  let quotaExceeded = false;
+
+  const generationConfig: Record<string, unknown> = {
+    maxOutputTokens: options.maxOutputTokens,
+    temperature,
+  };
+  if (options.thinkingBudget !== undefined) {
+    generationConfig.thinkingConfig = { thinkingBudget: options.thinkingBudget };
+  }
 
   for (const model of GEMINI_MODELS) {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -44,30 +53,32 @@ export async function geminiGenerateText(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              maxOutputTokens: options.maxOutputTokens,
-              temperature,
-            },
+            generationConfig,
           }),
         });
         lastStatus = res.status;
 
+        const data = (await res.json()) as {
+          candidates?: { content?: { parts?: { text?: string }[] } }[];
+          error?: { code?: number; message?: string; status?: string };
+        };
+
         if (!res.ok) {
-          const retryLater = res.status === 503 || res.status === 429;
+          const errMsg = data.error?.message ?? '';
+          if (res.status === 429 && /quota|limit:\s*0/i.test(errMsg)) {
+            quotaExceeded = true;
+          }
+          const retryLater = res.status === 503 || (res.status === 429 && !quotaExceeded);
           if (__DEV__) {
             console.warn(`[Gemini] ${model} → HTTP ${res.status}`);
           }
           if (retryLater && attempt === 0) {
-            await sleep(res.status === 429 ? 2800 : 1600);
+            await sleep(res.status === 429 ? 4500 : 1600);
             continue;
           }
           break;
         }
 
-        const data = (await res.json()) as {
-          candidates?: { content?: { parts?: { text?: string }[] } }[];
-          error?: { message?: string; status?: string };
-        };
         if (data.error && __DEV__) {
           console.warn('[Gemini] error message:', data.error.message ?? data.error.status);
         }
@@ -88,5 +99,5 @@ export async function geminiGenerateText(
     }
   }
 
-  return { ok: false, noApiKey: false, lastStatus };
+  return { ok: false, noApiKey: false, lastStatus, quotaExceeded: quotaExceeded || lastStatus === 429 };
 }
