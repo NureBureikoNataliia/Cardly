@@ -71,7 +71,7 @@ export async function syncStudyDailyReminder(options: {
   body: string;
 }): Promise<SyncStudyDailyReminderResult> {
   if (Platform.OS === 'web') {
-    return { ok: false, reason: 'web' };
+    return { ok: true };
   }
 
   if (isExpoGoAndroid()) {
