@@ -298,9 +298,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardTypeBasic: 'Standard',
     cardTypeCloze: 'Cloze',
     cardFormIntroBasic:
-      'Left column: what you study. Right column: the answer shown after you flip the card.',
+      'Left: what you study. Right: the answer after you flip. Fill at least one field to save.',
+    cardFormEmpty: 'Fill in at least one field to save the card.',
+    cardFormReversedPairNeedsBothSides:
+      'To create a reverse card too, fill in both the front and the back.',
     clozeIntro:
-      'Build a sentence with a gap on the left; put the hidden answer on the right.',
+      'Left: sentence with a gap. Right: hidden answer. Fill at least one field to save.',
     clozeFieldBefore: 'Text before the gap',
     clozePlaceholderBefore: 'Text before …',
     clozeGapMarker: '[…]',
@@ -326,7 +329,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     mediaAudioPlaceholder: 'Paste a link or tap Upload',
     mediaUrlInvalidFormat: 'Invalid link. Use a full URL starting with https://',
     mediaUrlUnsupported:
-      'This link is not supported. Use a direct file link (.jpg, .mp3, .mp4), Google Drive, Dropbox, or upload audio.',
+      'This link is not supported. Use a direct file (.jpg, .mp3, .mp4), YouTube/Vimeo, Google Drive, Dropbox, or upload audio.',
     uploadAudio: 'Upload',
     uploadAudioDialogTitle: 'Uploading audio',
     uploadAudioPhase_reading: 'Reading…',
@@ -350,13 +353,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardVideoError:
       'Could not load video. Use a public Google Drive/Dropbox link or a direct .mp4/.webm/.mov URL.',
     cardMediaDirectUrlHint:
-      'YouTube and Vimeo are not supported. Google Drive, Dropbox, and direct file links (.mp3, .mp4) work when the file is shared publicly.',
+      'Use a direct file link (.mp3, .mp4), YouTube/Vimeo, Google Drive, or Dropbox with public access.',
     addCardPreviewStudy: 'Preview study',
     addCardPreviewTitle: 'Study preview',
     addCardPreviewClose: 'Close preview',
     addCardPreviewPair1: 'Card 1 — forward',
     addCardPreviewPair2: 'Card 2 — reverse',
-    addCardPreviewIncomplete: 'Fill in both sides to preview.',
+    addCardPreviewIncomplete: 'Fill in at least one field to preview.',
     save: 'Save',
     saving: 'Saving...',
     // Modals
@@ -972,9 +975,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardTypeBasic: 'Стандартні',
     cardTypeCloze: 'З пропуском',
     cardFormIntroBasic:
-      'Ліва колонка — те, що вивчаєте. Права — відповідь після перевороту картки.',
+      'Ліворуч — питання, праворуч — відповідь після перевертання. Для збереження достатньо одного заповненого поля.',
+    cardFormEmpty: 'Заповніть хоча б одне поле, щоб зберегти картку.',
+    cardFormReversedPairNeedsBothSides:
+      'Щоб створити зворотну картку, заповніть і лицьову, і зворотну сторону.',
     clozeIntro:
-      'Ліворуч зберіть речення з пропуском, праворуч — приховану відповідь.',
+      'Ліворуч — речення з пропуском, праворуч — відповідь. Для збереження достатньо одного заповненого поля.',
     clozeFieldBefore: 'Текст до пропуску',
     clozePlaceholderBefore: 'Текст перед …',
     clozeGapMarker: '[…]',
@@ -1000,7 +1006,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     mediaAudioPlaceholder: 'Посилання або «Завантажити»',
     mediaUrlInvalidFormat: 'Некоректне посилання. Вкажіть повний URL з https://',
     mediaUrlUnsupported:
-      'Це посилання не підтримується. Пряме посилання на файл (.jpg, .mp3, .mp4), Google Drive, Dropbox або завантаження аудіо.',
+      'Це посилання не підтримується. Пряме посилання на файл (.jpg, .mp3, .mp4), YouTube/Vimeo, Google Drive, Dropbox або завантаження аудіо.',
     uploadAudio: 'Завантажити',
     uploadAudioDialogTitle: 'Завантаження аудіо',
     uploadAudioPhase_reading: 'Читання…',
@@ -1025,13 +1031,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardVideoError:
       'Не вдалося завантажити відео. Публічне посилання Google Drive/Dropbox або прямий .mp4/.webm/.mov.',
     cardMediaDirectUrlHint:
-      'YouTube і Vimeo не підтримуються. Працюють Google Drive, Dropbox і прямі посилання на файли (.mp3, .mp4), якщо доступ «для всіх з посиланням».',
+      'Пряме посилання на файл (.mp3, .mp4), YouTube/Vimeo, Google Drive або Dropbox з публічним доступом.',
     addCardPreviewStudy: 'Перегляд у режимі навчання',
     addCardPreviewTitle: 'Перегляд навчання',
     addCardPreviewClose: 'Закрити перегляд',
     addCardPreviewPair1: 'Картка 1 — пряма',
     addCardPreviewPair2: 'Картка 2 — зворотна',
-    addCardPreviewIncomplete: 'Заповніть обидві сторони для перегляду.',
+    addCardPreviewIncomplete: 'Заповніть хоча б одне поле для перегляду.',
     save: 'Зберегти',
     saving: 'Збереження...',
     // Modals

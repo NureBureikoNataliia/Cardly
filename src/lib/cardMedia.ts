@@ -1,5 +1,8 @@
 import type { Card, CardMedia, CardMediaSide, CardMediaType } from "@/assets/data/cards";
-import { canPlayMediaUrl } from "@/src/lib/resolveMediaPlaybackUrl";
+import {
+  canPlayMediaUrl,
+  extractVideoEmbedUrl,
+} from "@/src/lib/resolveMediaPlaybackUrl";
 import { supabase } from "@/src/lib/supabase";
 
 export type { CardMedia, CardMediaSide, CardMediaType };
@@ -92,6 +95,18 @@ export function hasMediaFormSideContent(
   return CARD_MEDIA_TYPES.some((type) => form[side].urls[type].trim().length > 0);
 }
 
+/** Non-empty URLs that pass {@link getMediaUrlValidationIssue}. */
+export function hasValidMediaFormSideContent(
+  form: CardMediaForm,
+  side: CardMediaSide,
+): boolean {
+  return CARD_MEDIA_TYPES.some((type) => {
+    const url = form[side].urls[type].trim();
+    if (!url) return false;
+    return getMediaUrlValidationIssue(url, type) === null;
+  });
+}
+
 export type MediaUrlIssueReason = "invalid_format" | "unsupported";
 
 export type MediaUrlIssue = {
@@ -119,6 +134,9 @@ export function getMediaUrlValidationIssue(
   const trimmed = url.trim();
   if (!trimmed) return null;
   if (!isValidHttpMediaUrl(trimmed)) return "invalid_format";
+  // Images: any https link without extension is OK (CDN, query strings, etc.).
+  if (mediaType === "image") return null;
+  if (mediaType === "video" && extractVideoEmbedUrl(trimmed)) return null;
   if (!canPlayMediaUrl(trimmed, mediaType)) return "unsupported";
   return null;
 }

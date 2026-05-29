@@ -41,7 +41,6 @@ import {
   clozeHiddenForEdit,
   getClozePartsFromCard,
   CLOZE_GAP_MARKER,
-  isClozeGapComplete,
   normalizeClozeHidden,
   newPairId,
   normalizeCardType,
@@ -52,9 +51,6 @@ import {
   emptyCardMediaForm,
   getCardMediaUrlIssues,
   hasMediaFormChanges,
-  hasMediaFormContent,
-  hasMediaFormSideContent,
-  isCardMediaFormUrlsValid,
   mediaUrlIssueMessageKey,
   moveMediaInForm,
   orderedMediaFromForm,
@@ -63,6 +59,12 @@ import {
   type CardMediaForm,
   type CardMediaSide,
 } from "@/src/lib/cardMedia";
+import {
+  hasAnyBasicFormContent,
+  hasAnyClozeFormContent,
+  isCardFormValid,
+  type CardFormFields,
+} from "@/src/lib/cardFormValidation";
 import { useLayoutWidth } from "@/src/hooks/useLayoutWidth";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 import { generateCardBack, generateCardImageUrl } from "@/src/lib/gemini";
@@ -89,63 +91,14 @@ function useFormSideBySide(): boolean {
   return nativeSideBySide;
 }
 
-function basicSideHasContent(
-  text: string,
-  mediaForm: CardMediaForm,
-  side: CardMediaSide,
-  includeNotesOnFront: boolean,
+function buildCardFormFields(
+  frontText: string,
+  backText: string,
   notes: string,
-): boolean {
-  if (side === "front" && includeNotesOnFront && notes.trim().length > 0) return true;
-  return text.trim().length > 0 || hasMediaFormSideContent(mediaForm, side);
-}
-
-function clozeFrontSideHasContent(
   cloze: ClozeParts,
   mediaForm: CardMediaForm,
-  notes: string,
-): boolean {
-  return (
-    cloze.before.trim().length > 0 ||
-    cloze.gapFront.trim().length > 0 ||
-    cloze.after.trim().length > 0 ||
-    notes.trim().length > 0 ||
-    hasMediaFormSideContent(mediaForm, "front")
-  );
-}
-
-function clozeBackSideHasContent(cloze: ClozeParts, mediaForm: CardMediaForm): boolean {
-  return (
-    cloze.hidden.trim().length > 0 || hasMediaFormSideContent(mediaForm, "back")
-  );
-}
-
-function isCardFormValid(
-  cardType: CardTypeName,
-  fields: {
-    frontText: string;
-    backText: string;
-    notes: string;
-    cloze: ClozeParts;
-    mediaForm: CardMediaForm;
-  },
-): boolean {
-  if (!isCardMediaFormUrlsValid(fields.mediaForm)) return false;
-  if (cardType === "cloze") {
-    return (
-      clozeFrontSideHasContent(fields.cloze, fields.mediaForm, fields.notes) &&
-      clozeBackSideHasContent(fields.cloze, fields.mediaForm)
-    );
-  }
-  return (
-    basicSideHasContent(
-      fields.frontText,
-      fields.mediaForm,
-      "front",
-      true,
-      fields.notes,
-    ) && basicSideHasContent(fields.backText, fields.mediaForm, "back", false, fields.notes)
-  );
+): CardFormFields {
+  return { frontText, backText, notes, cloze, mediaForm };
 }
 
 const addCardStudyClozeStyles = StyleSheet.create({
@@ -664,19 +617,35 @@ function CardEditorForm({
       return;
     }
 
-    const ok = isCardFormValid(cardType, {
+    const formFields = buildCardFormFields(
       frontText,
       backText,
       notes,
-      cloze: {
+      {
         before: clozeBefore,
         gapFront: clozeGapFront,
         hidden: clozeHidden,
         after: clozeAfter,
       },
       mediaForm,
-    });
-    if (!ok) return;
+    );
+    const validationOptions = {
+      requireBasicBothSides: cardType === "basic" && createReversedPair,
+    };
+    const ok = isCardFormValid(cardType, formFields, validationOptions);
+    if (!ok) {
+      if (
+        cardType === "basic" &&
+        createReversedPair &&
+        hasAnyBasicFormContent(formFields) &&
+        !isCardFormValid(cardType, formFields, { requireBasicBothSides: true })
+      ) {
+        setErrorModal(t("cardFormReversedPairNeedsBothSides"));
+      } else {
+        setErrorModal(t("cardFormEmpty"));
+      }
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -817,18 +786,6 @@ function CardEditorForm({
     }
   };
 
-  const isValid = isCardFormValid(cardType, {
-    frontText,
-    backText,
-    notes,
-    cloze: {
-      before: clozeBefore,
-      gapFront: clozeGapFront,
-      hidden: clozeHidden,
-      after: clozeAfter,
-    },
-    mediaForm,
-  });
   const hasChanges =
     cardType !== initialCardType ||
     hasMediaFormChanges(mediaForm, initialMediaForm) ||
@@ -840,6 +797,23 @@ function CardEditorForm({
     frontText !== initialFront ||
     backText !== initialBack ||
     notes !== initialNotes;
+  const formFields = buildCardFormFields(
+    frontText,
+    backText,
+    notes,
+    {
+      before: clozeBefore,
+      gapFront: clozeGapFront,
+      hidden: clozeHidden,
+      after: clozeAfter,
+    },
+    mediaForm,
+  );
+  const validationOptions = {
+    requireBasicBothSides: cardType === "basic" && createReversedPair,
+  };
+  const isValid = isCardFormValid(cardType, formFields, validationOptions);
+  const canSave = isValid && (!isEdit || hasChanges);
   const showPairStudySwitcher =
     cardType === "basic" && createReversedPair && !isEdit;
   const clozePartsPreview: ClozeParts = useMemo(
@@ -962,7 +936,7 @@ function CardEditorForm({
                         title={t("front")}
                         balanced={formSideBySide}
                       />
-                      <Field label={t("clozeFieldBefore")} required>
+                      <Field label={t("clozeFieldBefore")}>
                         <FormTextInputRow
                           icon="align-left"
                           value={clozeBefore}
@@ -1032,7 +1006,7 @@ function CardEditorForm({
                         title={t("back")}
                         balanced={formSideBySide}
                       />
-                      <Field label={t("clozeFieldHidden")} required>
+                      <Field label={t("clozeFieldHidden")}>
                         <FormTextInputRow
                           icon="target"
                           value={clozeHidden}
@@ -1301,11 +1275,11 @@ function CardEditorForm({
               <TouchableOpacity
                 style={[
                   styles.btnSave,
-                  (!isValid || isSaving) && styles.btnSaveOff,
-                  isValid && hasChanges && styles.btnSaveActive,
+                  (!canSave || isSaving) && styles.btnSaveOff,
+                  canSave && styles.btnSaveActive,
                 ]}
                 onPress={handleSave}
-                disabled={!isValid || isSaving}
+                disabled={!canSave || isSaving}
                 activeOpacity={0.85}
               >
                 {isSaving ? (
@@ -1420,8 +1394,9 @@ function CardEditorForm({
               >
                 <View style={styles.studyPreviewCardInner}>
                   {cardType === "cloze" &&
-                  clozeFrontSideHasContent(clozePartsPreview, mediaForm, notes) &&
-                  clozeBackSideHasContent(clozePartsPreview, mediaForm) ? (
+                  hasAnyClozeFormContent(
+                    buildCardFormFields("", "", notes, clozePartsPreview, mediaForm),
+                  ) ? (
                     <>
                       {!studyPreviewShowBack ? (
                         <AddCardStudyClozeFront parts={clozePartsPreview} />
