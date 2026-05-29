@@ -75,6 +75,7 @@ import {
   uploadCardAudioToStorage,
   type UploadAudioPhase,
 } from "@/src/lib/uploadCardAudio";
+import { persistExpiringImagesInMediaForm } from "@/src/lib/uploadRemoteImage";
 
 const FORM_SIDE_BY_SIDE_MIN_WIDTH = 768;
 
@@ -576,13 +577,24 @@ function CardEditorForm({
       deck.title ?? "",
       deck.description,
       "front",
+      userId
+        ? {
+            userId,
+            deckId,
+            cardId,
+            kind: "card-image",
+            side: "front",
+          }
+        : undefined,
     );
     setAiFrontImgBusy(false);
     if (result.ok) setMediaUrl("front", "image", result.url);
     else if (result.reason === "quota") setErrorModal(t("aiErrorQuota"));
     else if (result.reason === "no_match") setErrorModal(t("aiErrorNoImage"));
+    else if (result.reason === "not_authenticated") setErrorModal(t("uploadAudioNeedLogin"));
+    else if (result.reason === "upload_failed") setErrorModal(t("aiImageUploadFailed"));
     else setErrorModal(t("aiError"));
-  }, [cardType, deck, frontText, t]);
+  }, [cardId, cardType, deck, deckId, frontText, t, userId]);
 
   const handleAiBackImage = useCallback(async () => {
     if (!deck || cardType !== "basic") return;
@@ -597,13 +609,24 @@ function CardEditorForm({
       deck.title ?? "",
       deck.description,
       "back",
+      userId
+        ? {
+            userId,
+            deckId,
+            cardId,
+            kind: "card-image",
+            side: "back",
+          }
+        : undefined,
     );
     setAiBackImgBusy(false);
     if (result.ok) setMediaUrl("back", "image", result.url);
     else if (result.reason === "quota") setErrorModal(t("aiErrorQuota"));
     else if (result.reason === "no_match") setErrorModal(t("aiErrorNoImage"));
+    else if (result.reason === "not_authenticated") setErrorModal(t("uploadAudioNeedLogin"));
+    else if (result.reason === "upload_failed") setErrorModal(t("aiImageUploadFailed"));
     else setErrorModal(t("aiError"));
-  }, [backText, cardType, deck, frontText, t]);
+  }, [backText, cardId, cardType, deck, deckId, frontText, t, userId]);
 
   const handleSave = async () => {
     if (!cardId && !deckId) {
@@ -651,6 +674,30 @@ function CardEditorForm({
     setError(null);
 
     try {
+      let mediaToSave = mediaForm;
+      if (userId && deckId) {
+        const persistedMedia = await persistExpiringImagesInMediaForm(mediaForm, {
+          userId,
+          deckId,
+          cardId,
+        });
+        if (!persistedMedia.ok) {
+          const key = uploadAudioErrorKey(persistedMedia.error);
+          const byKey: Record<string, string> = {
+            too_large: t("uploadAudioTooLarge"),
+            not_authenticated: t("uploadAudioNeedLogin"),
+            bucket_missing: t("uploadAudioBucketMissing"),
+            permission: t("uploadAudioPermission"),
+          };
+          const msg = byKey[key] ?? t("aiImageUploadFailed");
+          setError(msg);
+          setIsSaving(false);
+          setErrorModal(msg);
+          return;
+        }
+        mediaToSave = persistedMedia.form;
+      }
+
       const notesVal = notes.trim() || null;
 
       const clozeParts: ClozeParts = {
@@ -689,7 +736,7 @@ function CardEditorForm({
           setErrorModal(msg);
           return;
         }
-        await replaceCardMedia(cardId, mediaForm);
+        await replaceCardMedia(cardId, mediaToSave);
         router.back();
         return;
       }
@@ -731,7 +778,7 @@ function CardEditorForm({
           setErrorModal(msg);
           return;
         }
-        await replaceCardMedia(firstRow.card_id, mediaForm);
+        await replaceCardMedia(firstRow.card_id, mediaToSave);
 
         const { data: secondRow, error: e2 } = await supabase.from("cards").insert({
           deck_id: deckId,
@@ -750,7 +797,7 @@ function CardEditorForm({
           setErrorModal(msg);
           return;
         }
-        await replaceCardMedia(secondRow.card_id, swapCardMediaFormSides(mediaForm));
+        await replaceCardMedia(secondRow.card_id, swapCardMediaFormSides(mediaToSave));
         router.back();
         return;
       }
@@ -775,7 +822,7 @@ function CardEditorForm({
         setErrorModal(msg);
         return;
       }
-      await replaceCardMedia(insertedCard.card_id, mediaForm);
+      await replaceCardMedia(insertedCard.card_id, mediaToSave);
 
       router.back();
     } catch (err) {

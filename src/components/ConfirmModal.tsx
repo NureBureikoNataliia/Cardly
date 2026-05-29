@@ -70,10 +70,15 @@ export function ConfirmModal({
           </View>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
-          <View style={styles.buttons}>
+          <View style={[styles.buttons, destructive && hasCancel && styles.buttonsStacked]}>
             {hasCancel && (
               <TouchableOpacity
-                style={[styles.button, styles.cancelButton, { backgroundColor: C.surfaceAlt }]}
+                style={[
+                  styles.button,
+                  styles.cancelButton,
+                  { backgroundColor: C.surfaceAlt },
+                  destructive && styles.buttonStacked,
+                ]}
                 onPress={onCancel}
                 activeOpacity={0.8}
               >
@@ -86,11 +91,14 @@ export function ConfirmModal({
                 styles.confirmButton,
                 destructive && styles.confirmButtonDestructive,
                 !hasCancel && styles.confirmButtonFull,
+                destructive && hasCancel && styles.buttonStacked,
               ]}
               onPress={onConfirm}
               activeOpacity={0.8}
             >
-              <Text style={styles.confirmButtonText}>{confirmText}</Text>
+              <Text style={styles.confirmButtonText} numberOfLines={2}>
+                {confirmText}
+              </Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -150,6 +158,9 @@ const styles = StyleSheet.create({
     gap: 12,
     width: "100%",
   },
+  buttonsStacked: {
+    flexDirection: "column",
+  },
   button: {
     flex: 1,
     paddingVertical: 14,
@@ -157,6 +168,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 48,
+  },
+  buttonStacked: {
+    flex: 0,
+    width: "100%",
   },
   cancelButton: {
     backgroundColor: "#f3f4f6",

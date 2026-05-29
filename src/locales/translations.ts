@@ -160,6 +160,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     aiErrorQuota:
       'Gemini API quota exceeded. Wait a few minutes. For AI image, add an English translation on the card — search may work without Gemini.',
     aiErrorNoImage: 'No matching stock photo found. Try a different word or add a URL manually.',
+    aiImageUploadFailed:
+      'Photo was found but could not be saved to storage. Check your connection and try again.',
     aiFillBackNeedFront: 'Enter the front text first, then use AI fill for the back.',
     aiFillImageNeedText: 'Enter card text (front or back) before searching for an image.',
     // Add/Edit deck
@@ -408,9 +410,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     yourDataHint: 'Request to download or edit your data.',
     request: 'Request',
     deleteAccountHintLong:
-      'We will archive your account for 30 days, then permanently delete it and all related information.',
-    deleteAccountWarning:
-      'This action does not cancel active subscriptions. Cancel them separately before account deletion.',
+      'Your account and all related data will be deleted immediately. This cannot be undone.',
     noAccount: "Don't have an account?",
     haveAccount: 'Already have an account?',
     fillAllFields: 'Please fill in all fields',
@@ -837,6 +837,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     aiErrorQuota:
       'Квота Gemini API вичерпана. Зачекайте кілька хвилин. Для AI фото додайте англійський переклад на картці — пошук може спрацювати без Gemini.',
     aiErrorNoImage: 'Не знайдено відповідного фото. Спробуйте інше слово або вставте URL вручну.',
+    aiImageUploadFailed:
+      'Фото знайдено, але не вдалося зберегти у сховище. Перевірте з’єднання та спробуйте ще раз.',
     aiFillBackNeedFront: 'Спочатку введіть текст лицьової сторони, потім натисніть AI для звороту.',
     aiFillImageNeedText: 'Спочатку введіть текст картки (лицьову або зворотню), потім підбір фото.',
     // Add/Edit deck
@@ -1086,9 +1088,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     yourDataHint: 'Запит на завантаження або редагування ваших даних.',
     request: 'Запит',
     deleteAccountHintLong:
-      'Ми заархівуємо ваш акаунт на 30 днів, після чого видалимо його назавжди та всю повʼязану інформацію.',
-    deleteAccountWarning:
-      'Ця дія не скасовує активні підписки. Скасуйте їх окремо перед видаленням акаунта.',
+      'Ваш акаунт і всі повʼязані дані будуть видалені одразу та безповоротно.',
     noAccount: 'Немає облікового запису?',
     haveAccount: 'Вже є обліковий запис?',
     fillAllFields: 'Будь ласка, заповніть усі поля',
