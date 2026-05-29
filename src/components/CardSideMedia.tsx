@@ -17,6 +17,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { WebView } from "react-native-webview";
 
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useAppColors } from "@/src/contexts/ThemeContext";
@@ -25,6 +26,7 @@ import { getCardAudioPlaybackUri } from "@/src/lib/cardAudioCache";
 import {
   canPlayMediaUrl,
   extractGoogleDriveFileId,
+  extractVideoEmbedUrl,
   googleDrivePreviewEmbedUrl,
   resolveMediaPlaybackUrl,
 } from "@/src/lib/resolveMediaPlaybackUrl";
@@ -45,6 +47,52 @@ const DEFAULT_VIDEO_HEIGHT = 180;
 
 function normalizeMediaUrl(url: string): string {
   return url.trim();
+}
+
+function CardVideoEmbed({
+  embedSrc,
+  title,
+  height,
+  boxStyle,
+}: {
+  embedSrc: string;
+  title: string;
+  height: number;
+  boxStyle: object[];
+}) {
+  if (Platform.OS === "web") {
+    return (
+      <View style={[boxStyle, { height: Math.max(height, 200) }]}>
+        {createElement("iframe", {
+          key: embedSrc,
+          src: embedSrc,
+          title,
+          allow:
+            "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
+          allowFullScreen: true,
+          style: {
+            width: "100%",
+            height: "100%",
+            border: "none",
+            borderRadius: 10,
+            display: "block",
+          },
+        })}
+      </View>
+    );
+  }
+
+  return (
+    <View style={[boxStyle, { height: Math.max(height, 200) }]}>
+      <WebView
+        source={{ uri: embedSrc }}
+        style={styles.video}
+        allowsFullscreenVideo
+        mediaPlaybackRequiresUserAction
+        javaScriptEnabled
+      />
+    </View>
+  );
 }
 
 function MediaUrlWarning({ message }: { message: string }) {
@@ -107,12 +155,24 @@ function CardVideo({
   const { t } = useLanguage();
   const [failed, setFailed] = useState(false);
   const driveId = extractGoogleDriveFileId(url);
+  const embedSrc = extractVideoEmbedUrl(url);
   const height = layout === "list" ? LIST_VIDEO_HEIGHT : DEFAULT_VIDEO_HEIGHT;
   const boxStyle = [
     styles.videoBox,
     layout === "list" && styles.videoBoxList,
     { height, backgroundColor: C.isDark ? "#0f172a" : "#111827" },
   ];
+
+  if (embedSrc) {
+    return (
+      <CardVideoEmbed
+        embedSrc={embedSrc}
+        title="Embedded video"
+        height={height}
+        boxStyle={boxStyle}
+      />
+    );
+  }
 
   if (driveId && Platform.OS === "web") {
     return (

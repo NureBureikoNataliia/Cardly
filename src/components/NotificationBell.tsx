@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
@@ -24,7 +25,24 @@ interface Invitation {
   created_at: string;
 }
 
+type NotifMeta = {
+  studyReminder?: boolean;
+  studyReminderHour?: number;
+};
+
+type BellItem =
+  | { type: 'study-reminder'; id: string }
+  | { type: 'invitation'; id: string; invitation: Invitation };
+
+function localDateKey(now: Date): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default function NotificationBell() {
+  const router = useRouter();
   const { user } = useAuth();
   const { t } = useLanguage();
   const C = useAppColors();
@@ -32,6 +50,8 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [responding, setResponding] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ id: string; ok: boolean } | null>(null);
+  const [webReminderHidden, setWebReminderHidden] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -53,6 +73,38 @@ export default function NotificationBell() {
     return () => { supabase.removeChannel(ch); };
   }, [load, user]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const timer = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !user) return;
+    const day = localDateKey(new Date(nowTick));
+    const key = `cardly_web_study_reminder_hidden_${user.id}_${day}`;
+    setWebReminderHidden(window.localStorage.getItem(key) === '1');
+  }, [nowTick, user]);
+
+  const notifPrefs = (user?.user_metadata?.notifications as NotifMeta | undefined) ?? undefined;
+  const isWebStudyReminderDue = useMemo(() => {
+    if (Platform.OS !== 'web') return false;
+    if (!user) return false;
+    if (webReminderHidden) return false;
+    if (notifPrefs?.studyReminder !== true) return false;
+    const hour = typeof notifPrefs.studyReminderHour === 'number' ? notifPrefs.studyReminderHour : 9;
+    const now = new Date(nowTick);
+    return now.getHours() >= hour;
+  }, [notifPrefs?.studyReminder, notifPrefs?.studyReminderHour, nowTick, user, webReminderHidden]);
+
+  const hideWebReminderForToday = useCallback(() => {
+    if (Platform.OS !== 'web' || !user) return;
+    const day = localDateKey(new Date(nowTick));
+    const key = `cardly_web_study_reminder_hidden_${user.id}_${day}`;
+    window.localStorage.setItem(key, '1');
+    setWebReminderHidden(true);
+  }, [nowTick, user]);
+
   const respond = async (deckId: string, accept: boolean) => {
     setResponding(deckId);
     await supabase.rpc('respond_to_invitation', { p_deck_id: deckId, p_accept: accept });
@@ -64,7 +116,16 @@ export default function NotificationBell() {
     }, 1200);
   };
 
-  const count = invitations.length;
+  const items: BellItem[] = [
+    ...(isWebStudyReminderDue ? [{ type: 'study-reminder', id: 'study-reminder' } as const] : []),
+    ...invitations.map((invitation) => ({
+      type: 'invitation' as const,
+      id: invitation.deck_id,
+      invitation,
+    })),
+  ];
+
+  const count = items.length;
 
   if (!user) return null;
 
@@ -106,7 +167,7 @@ export default function NotificationBell() {
             </View>
 
             {/* Content */}
-            {invitations.length === 0 ? (
+            {items.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <View style={styles.emptyIcon}>
                   <Feather name="bell-off" size={28} color="#D1D5DB" />
@@ -115,12 +176,51 @@ export default function NotificationBell() {
               </View>
             ) : (
               <FlatList
-                data={invitations}
-                keyExtractor={item => item.deck_id}
+                data={items}
+                keyExtractor={(item) => item.id}
                 style={styles.list}
                 showsVerticalScrollIndicator={false}
                 renderItem={({ item }) => {
-                  const isFlashing = flash?.id === item.deck_id;
+                  if (item.type === 'study-reminder') {
+                    return (
+                      <View style={[styles.card, { borderBottomColor: C.border }]}>
+                        <View style={styles.cardIconWrap}>
+                          <Feather name="clock" size={18} color="#6366f1" />
+                        </View>
+                        <View style={styles.cardBody}>
+                          <Text style={[styles.cardTitle, { color: C.text }]} numberOfLines={2}>
+                            {t('pushRepeatWordsTitle')}
+                          </Text>
+                          <Text style={styles.cardDeck} numberOfLines={2}>
+                            {t('pushRepeatWordsBody')}
+                          </Text>
+                        </View>
+                        <View style={styles.cardActions}>
+                          <TouchableOpacity
+                            style={styles.acceptBtn}
+                            onPress={() => {
+                              hideWebReminderForToday();
+                              setOpen(false);
+                              router.push('/(tabs)');
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="play" size={14} color="#fff" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.declineBtn}
+                            onPress={hideWebReminderForToday}
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="x" size={14} color="#fff" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  }
+
+                  const invitation = item.invitation;
+                  const isFlashing = flash?.id === invitation.deck_id;
                   return (
                     <View style={[styles.card, { borderBottomColor: C.border }, isFlashing && styles.cardFlash]}>
                       {/* Icon */}
@@ -142,10 +242,10 @@ export default function NotificationBell() {
                           <>
                             <Text style={[styles.cardTitle, { color: C.text }]} numberOfLines={2}>
                               {t('coauthorInviteFrom')}{' '}
-                              <Text style={[styles.cardBold, { color: C.text }]}>{item.inviter_name}</Text>
+                              <Text style={[styles.cardBold, { color: C.text }]}>{invitation.inviter_name}</Text>
                             </Text>
                             <Text style={styles.cardDeck} numberOfLines={1}>
-                              "{item.deck_title}"
+                              "{invitation.deck_title}"
                             </Text>
                           </>
                         )}
@@ -154,20 +254,20 @@ export default function NotificationBell() {
                       {/* Buttons */}
                       {!isFlashing && (
                         <View style={styles.cardActions}>
-                          {responding === item.deck_id ? (
+                          {responding === invitation.deck_id ? (
                             <ActivityIndicator size="small" color="#6366f1" />
                           ) : (
                             <>
                               <TouchableOpacity
                                 style={styles.acceptBtn}
-                                onPress={() => respond(item.deck_id, true)}
+                                onPress={() => respond(invitation.deck_id, true)}
                                 activeOpacity={0.8}
                               >
                                 <Feather name="check" size={14} color="#fff" />
                               </TouchableOpacity>
                               <TouchableOpacity
                                 style={styles.declineBtn}
-                                onPress={() => respond(item.deck_id, false)}
+                                onPress={() => respond(invitation.deck_id, false)}
                                 activeOpacity={0.8}
                               >
                                 <Feather name="x" size={14} color="#fff" />
@@ -183,7 +283,7 @@ export default function NotificationBell() {
             )}
 
             {/* Footer hint */}
-            {invitations.length > 0 && (
+            {items.some((item) => item.type === 'invitation') && (
               <View style={styles.footer}>
                 <Feather name="check-circle" size={12} color="#9CA3AF" />
                 <Text style={styles.footerText}>
