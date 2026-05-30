@@ -2,6 +2,8 @@ import Constants from 'expo-constants';
 import { Linking, Platform } from 'react-native';
 import type { NotificationTriggerInput } from 'expo-notifications';
 
+import { pushWebBellReminderItem } from '@/src/lib/webStudyReminder';
+
 export const STUDY_DAILY_NOTIFICATION_ID = 'cardly-study-daily';
 const ANDROID_STUDY_CHANNEL_ID = 'study-reminders';
 
@@ -136,10 +138,17 @@ export type SendTestPushResult = SyncStudyDailyReminderResult;
 export async function sendTestPushNotification(options: {
   title: string;
   body: string;
+  userId?: string;
 }): Promise<SendTestPushResult> {
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem('cardly_web_test_study_reminder', '1');
+      if (options.userId) {
+        pushWebBellReminderItem(options.userId, {
+          title: options.title,
+          body: options.body,
+          kind: 'test',
+        });
+      }
       window.dispatchEvent(new Event('cardly-web-reminder-refresh'));
     }
     return { ok: true };

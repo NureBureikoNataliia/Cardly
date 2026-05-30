@@ -41,7 +41,8 @@ type Props = {
 };
 
 const LIST_IMAGE_MAX_HEIGHT = 280;
-const LIST_IMAGE_MIN_HEIGHT = 56;
+const STUDY_IMAGE_MAX_HEIGHT = 360;
+const IMAGE_LOADING_HEIGHT = 72;
 const LIST_VIDEO_HEIGHT = 160;
 const DEFAULT_VIDEO_HEIGHT = 180;
 
@@ -120,10 +121,9 @@ export function CardSideMedia({ url, kind, layout = "default" }: Props) {
   const playbackUrl = resolveMediaPlaybackUrl(mediaUrl, kind);
 
   if (kind === "image") {
-    if (layout === "list") {
-      return <ListAdaptiveImage url={playbackUrl} />;
-    }
-    return <Image source={{ uri: playbackUrl }} style={styles.media} resizeMode="contain" />;
+    const maxHeight = layout === "list" ? LIST_IMAGE_MAX_HEIGHT : STUDY_IMAGE_MAX_HEIGHT;
+    const marginBottom = layout === "list" ? 8 : 12;
+    return <AdaptiveImage url={playbackUrl} maxHeight={maxHeight} marginBottom={marginBottom} />;
   }
 
   if (!canPlayMediaUrl(mediaUrl, kind)) {
@@ -460,54 +460,79 @@ function CardAudio({ url, compact }: { url: string; compact?: boolean }) {
   );
 }
 
-function ListAdaptiveImage({ url }: { url: string }) {
+function AdaptiveImage({
+  url,
+  maxHeight,
+  marginBottom,
+}: {
+  url: string;
+  maxHeight: number;
+  marginBottom: number;
+}) {
   const C = useAppColors();
   const [ratio, setRatio] = useState<number | null>(null);
-  const [width, setWidth] = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  const applyDimensions = useCallback((w: number, h: number) => {
+    if (w > 0 && h > 0) setRatio(h / w);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     Image.getSize(
       url,
       (w, h) => {
-        if (!cancelled && w > 0) setRatio(h / w);
+        if (!cancelled) applyDimensions(w, h);
       },
-      () => {
-        if (!cancelled) setRatio(3 / 4);
-      },
+      () => {},
     );
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, applyDimensions]);
 
-  const height =
-    width > 0 && ratio != null
-      ? Math.min(LIST_IMAGE_MAX_HEIGHT, Math.max(LIST_IMAGE_MIN_HEIGHT, width * ratio))
-      : LIST_IMAGE_MIN_HEIGHT;
+  const bg = C.isDark ? C.surfaceAlt : "#f3f4f6";
+
+  let imageWidth = containerWidth;
+  let imageHeight = IMAGE_LOADING_HEIGHT;
+
+  if (containerWidth > 0 && ratio != null) {
+    const naturalHeight = containerWidth * ratio;
+    if (naturalHeight > maxHeight) {
+      imageHeight = maxHeight;
+      imageWidth = maxHeight / ratio;
+    } else {
+      imageHeight = naturalHeight;
+      imageWidth = containerWidth;
+    }
+  }
 
   return (
     <View
-      style={[styles.listImageWrap, { backgroundColor: C.isDark ? C.surfaceAlt : "#f3f4f6" }]}
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      style={[styles.adaptiveImageRow, { marginBottom }]}
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
       <Image
         source={{ uri: url }}
-        style={[styles.listImage, { height, backgroundColor: C.isDark ? C.surfaceAlt : "#f3f4f6" }]}
+        style={{
+          width: containerWidth > 0 ? imageWidth : "100%",
+          height: imageHeight,
+          borderRadius: 10,
+          backgroundColor: bg,
+        }}
         resizeMode="contain"
+        onLoad={(e) => {
+          const source = e.nativeEvent.source;
+          if (source?.width && source?.height) {
+            applyDimensions(source.width, source.height);
+          }
+        }}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  media: {
-    width: "100%",
-    height: 160,
-    borderRadius: 10,
-    marginBottom: 12,
-    backgroundColor: "#f3f4f6",
-  },
   videoBox: {
     width: "100%",
     height: DEFAULT_VIDEO_HEIGHT,
@@ -579,16 +604,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  listImageWrap: {
+  adaptiveImageRow: {
     width: "100%",
-    marginBottom: 8,
-    borderRadius: 10,
-    overflow: "hidden",
-    backgroundColor: "#f3f4f6",
-  },
-  listImage: {
-    width: "100%",
-    backgroundColor: "#f3f4f6",
+    alignItems: "center",
   },
   videoBoxList: {
     height: LIST_VIDEO_HEIGHT,

@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 
 import ConfirmModal from '@/src/components/ConfirmModal';
+import { FormFlashMessage } from '@/src/components/FormFlashMessage';
 import { Text, View } from '@/src/components/Themed';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
@@ -25,6 +26,8 @@ import {
   sendTestPushNotification,
   syncStudyDailyReminder,
 } from '@/src/lib/studyReminderNotifications';
+import { recordWebReminderSchedule } from '@/src/lib/webStudyReminder';
+import { useFlashMessage } from '@/src/hooks/useFlashMessage';
 import { useLayoutWidth } from '@/src/hooks/useLayoutWidth';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
@@ -113,11 +116,20 @@ export default function SettingsScreen() {
     studyReminderHour: 9,
   };
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(defaultNotifPrefs);
-  const [savingNotif, setSavingNotif] = useState(false);
-  const [notifMsg, setNotifMsg] = useState<string | null>(null);
+  const {
+    message: notifFlash,
+    show: showNotifFlash,
+    clear: clearNotifFlash,
+  } = useFlashMessage(3000);
   const [testPushLoading, setTestPushLoading] = useState(false);
-  const [testPushMsg, setTestPushMsg] = useState<string | null>(null);
+  const { message: testPushFlash, show: showTestPushFlash } = useFlashMessage(6000);
+  const {
+    message: studyFlash,
+    show: showStudyFlash,
+    clear: clearStudyFlash,
+  } = useFlashMessage(3000);
   const notifSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const studySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notifSaveSeqRef = useRef(0);
 
   useEffect(() => {
@@ -153,15 +165,12 @@ export default function SettingsScreen() {
 
   const persistNotifPrefs = async (next: NotifPrefs) => {
     const seq = ++notifSaveSeqRef.current;
-    setSavingNotif(true);
-    setNotifMsg(null);
+    clearNotifFlash();
     const { error: e } = await updateMetadata({ notifications: next });
     if (seq !== notifSaveSeqRef.current) return;
-    setSavingNotif(false);
 
     if (e) {
-      setNotifMsg(t('notifSaveError'));
-      setTimeout(() => setNotifMsg(null), 3000);
+      showNotifFlash(t('notifSaveError'), false);
       return;
     }
 
@@ -174,37 +183,49 @@ export default function SettingsScreen() {
     if (seq !== notifSaveSeqRef.current) return;
 
     if (next.studyReminder && r.ok === false && r.reason === 'permission_denied') {
-      setNotifMsg(t('notifPermissionDenied'));
-      setTimeout(() => setNotifMsg(null), 5000);
+      showNotifFlash(t('notifPermissionDenied'), false, 5000);
       return;
     }
     if (next.studyReminder && r.ok === false && r.reason === 'expo_go') {
-      setNotifMsg(t('notifExpoGoReminderNote'));
-      setTimeout(() => setNotifMsg(null), 8000);
+      showNotifFlash(t('notifExpoGoReminderNote'), false, 8000);
       return;
     }
 
-    setNotifMsg(t('notifSaved'));
-    setTimeout(() => setNotifMsg(null), 3000);
+    if (Platform.OS === 'web' && user?.id && next.studyReminder) {
+      recordWebReminderSchedule(user.id, next.studyReminderHour, Date.now());
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('cardly-web-reminder-refresh'));
+      }
+    }
+
+    showNotifFlash(t('notifSaved'), true);
   };
 
   useEffect(() => {
     return () => {
       if (notifSaveTimerRef.current) clearTimeout(notifSaveTimerRef.current);
+      if (studySaveTimerRef.current) clearTimeout(studySaveTimerRef.current);
     };
   }, []);
 
+  const handleSrsDayStartHourChange = (hour: number) => {
+    clearStudyFlash();
+    void updateSettings({ srsDayStartHour: hour });
+    if (studySaveTimerRef.current) clearTimeout(studySaveTimerRef.current);
+    studySaveTimerRef.current = setTimeout(() => {
+      showStudyFlash(t('studySettingsSaved'), true);
+    }, 450);
+  };
+
   const handleSendTestPush = async () => {
     setTestPushLoading(true);
-    setTestPushMsg(null);
     const result = await sendTestPushNotification({
       title: t('adminTestPushTitle'),
       body: t('adminTestPushBody'),
+      userId: user?.id,
     });
     setTestPushLoading(false);
-    if (result.ok) {
-      setTestPushMsg(t('adminTestPushSent'));
-    } else {
+    if (!result.ok) {
       const reasonMsg =
         result.reason === 'permission_denied'
           ? t('notifPermissionDenied')
@@ -213,9 +234,8 @@ export default function SettingsScreen() {
             : result.reason === 'expo_go'
               ? t('notifExpoGoReminderNote')
               : t('adminTestPushFailed');
-      setTestPushMsg(reasonMsg);
+      showTestPushFlash(reasonMsg, false);
     }
-    setTimeout(() => setTestPushMsg(null), 6000);
   };
 
   useEffect(() => {
@@ -781,25 +801,11 @@ export default function SettingsScreen() {
                 <Text style={styles.primaryBtnTxt}>{t('adminSendTestPush')}</Text>
               )}
             </TouchableOpacity>
-            {testPushMsg ? (
-              <Text
-                style={[
-                  styles.notifTestMsg,
-                  { color: testPushMsg === t('adminTestPushSent') ? '#10b981' : '#ef4444' },
-                ]}
-              >
-                {testPushMsg}
-              </Text>
-            ) : null}
+            <FormFlashMessage message={testPushFlash} style={styles.notifTestMsg} />
           </RNView>
 
           {/* Status message */}
-          {savingNotif && <ActivityIndicator color="#6366f1" style={{ alignSelf: 'flex-start' }} />}
-          {notifMsg && (
-            <Text style={notifMsg === t('notifSaved') ? styles.successText : styles.errorText}>
-              {notifMsg}
-            </Text>
-          )}
+          <FormFlashMessage message={notifFlash} />
         </RNView>
       ) : (
         <RNView style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
@@ -809,11 +815,7 @@ export default function SettingsScreen() {
           <RNView style={styles.srsHourRow}>
             <TouchableOpacity
               style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
-              onPress={() =>
-                void updateSettings({
-                  srsDayStartHour: (studySettings.srsDayStartHour + 23) % 24,
-                })
-              }
+              onPress={() => handleSrsDayStartHourChange((studySettings.srsDayStartHour + 23) % 24)}
               accessibilityRole="button"
               accessibilityLabel={t('srsDayStartTitle')}
             >
@@ -824,17 +826,14 @@ export default function SettingsScreen() {
             </Text>
             <TouchableOpacity
               style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
-              onPress={() =>
-                void updateSettings({
-                  srsDayStartHour: (studySettings.srsDayStartHour + 1) % 24,
-                })
-              }
+              onPress={() => handleSrsDayStartHourChange((studySettings.srsDayStartHour + 1) % 24)}
               accessibilityRole="button"
               accessibilityLabel={t('srsDayStartTitle')}
             >
               <Feather name="plus" size={22} color={C.text} />
             </TouchableOpacity>
           </RNView>
+          <FormFlashMessage message={studyFlash} />
         </RNView>
       )}
 
@@ -1153,14 +1152,6 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
-  },
-  successText: {
-    color: '#166534',
-    fontSize: 14,
-  },
-  errorText: {
-    color: '#dc2626',
-    fontSize: 14,
   },
   fieldFeedbackError: {
     color: '#dc2626',

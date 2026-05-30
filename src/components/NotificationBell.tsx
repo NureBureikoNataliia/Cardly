@@ -27,7 +27,13 @@ interface Invitation {
 }
 
 type BellItem =
-  | { type: 'study-reminder'; id: string }
+  | {
+      type: 'study-reminder';
+      id: string;
+      title: string;
+      body: string;
+      dismissKind: 'daily' | 'queued';
+    }
   | { type: 'invitation'; id: string; invitation: Invitation };
 
 export default function NotificationBell() {
@@ -39,8 +45,13 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [responding, setResponding] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ id: string; ok: boolean } | null>(null);
-  const { isDue: showStudyReminder, hideForToday: dismissStudyReminder } =
-    useWebStudyReminderState();
+  const {
+    dailyDue,
+    dailyReminderId,
+    queuedReminders,
+    dismissDailyForToday,
+    dismissBellItem,
+  } = useWebStudyReminderState();
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -74,7 +85,24 @@ export default function NotificationBell() {
   };
 
   const items: BellItem[] = [
-    ...(showStudyReminder ? [{ type: 'study-reminder', id: 'study-reminder' } as const] : []),
+    ...(dailyDue
+      ? [
+          {
+            type: 'study-reminder' as const,
+            id: dailyReminderId,
+            title: t('pushRepeatWordsTitle'),
+            body: t('pushRepeatWordsBody'),
+            dismissKind: 'daily' as const,
+          },
+        ]
+      : []),
+    ...queuedReminders.map((reminder) => ({
+      type: 'study-reminder' as const,
+      id: reminder.id,
+      title: reminder.title,
+      body: reminder.body,
+      dismissKind: 'queued' as const,
+    })),
     ...invitations.map((invitation) => ({
       type: 'invitation' as const,
       id: invitation.deck_id,
@@ -140,6 +168,10 @@ export default function NotificationBell() {
                 showsVerticalScrollIndicator={false}
                 renderItem={({ item }) => {
                   if (item.type === 'study-reminder') {
+                    const dismissOne = () => {
+                      if (item.dismissKind === 'daily') dismissDailyForToday();
+                      else dismissBellItem(item.id);
+                    };
                     return (
                       <View style={[styles.card, { borderBottomColor: C.border }]}>
                         <View style={styles.cardIconWrap}>
@@ -147,17 +179,17 @@ export default function NotificationBell() {
                         </View>
                         <View style={styles.cardBody}>
                           <Text style={[styles.cardTitle, { color: C.text }]} numberOfLines={2}>
-                            {t('pushRepeatWordsTitle')}
+                            {item.title}
                           </Text>
                           <Text style={styles.cardDeck} numberOfLines={2}>
-                            {t('pushRepeatWordsBody')}
+                            {item.body}
                           </Text>
                         </View>
                         <View style={styles.cardActions}>
                           <TouchableOpacity
                             style={styles.acceptBtn}
                             onPress={() => {
-                              dismissStudyReminder();
+                              dismissOne();
                               setOpen(false);
                               router.push('/(tabs)');
                             }}
@@ -167,7 +199,7 @@ export default function NotificationBell() {
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.declineBtn}
-                            onPress={dismissStudyReminder}
+                            onPress={dismissOne}
                             activeOpacity={0.8}
                           >
                             <Feather name="x" size={14} color="#fff" />

@@ -32,11 +32,11 @@ import GenerateCardsModal from "@/src/components/GenerateCardsModal";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 import {
+  CLOZE_GAP_MARKER,
   getClozePartsFromCard,
-  isClozeGapComplete,
-  isReversiblePairCard,
+  isClozeLearnable,
   normalizeCardType,
-  parseCardExtra,
+  type ClozeParts,
 } from "@/src/lib/cardModel";
 import { getCardMediaForSide, normalizeCardMediaRows } from "@/src/lib/cardMedia";
 import {
@@ -560,7 +560,7 @@ export default function DeckDetailScreen() {
                   style={[
                     styles.heroCoverImage,
                     Platform.OS === "web"
-                      ? { objectFit: "cover" as const, objectPosition: "center center" }
+                      ? { objectFit: "cover" as const }
                       : null,
                   ]}
                   resizeMode="cover"
@@ -627,12 +627,11 @@ export default function DeckDetailScreen() {
 
           {/* ════════════ STATS ROW ════════════ */}
           <View style={[styles.statsRow, { backgroundColor: C.surface }]}>
-            <StatChip icon="layers" value={totalCards} label={t("totalCards")} color="#6366f1" />
+            <StatChip value={totalCards} label={t("totalCards")} color="#6366f1" />
             {user ? (
               <>
                 <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
                 <StatChip
-                  icon="clock"
                   value={dueToday}
                   label={t("dueToday")}
                   color="#d97706"
@@ -641,7 +640,6 @@ export default function DeckDetailScreen() {
                 />
                 <View style={[styles.statsDivider, { backgroundColor: C.borderLight }]} />
                 <StatChip
-                  icon="check-circle"
                   value={`${progressPct}%`}
                   label={t("learned")}
                   color="#059669"
@@ -657,19 +655,6 @@ export default function DeckDetailScreen() {
             <View style={styles.progressWrap}>
               <View style={[styles.progressTrack, { backgroundColor: C.border }]}>
                 <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
-              </View>
-              <View style={styles.progressLabelRow}>
-                <Text style={styles.progressLabel}>
-                  {progressPct}% {t("learned")}
-                </Text>
-                <Pressable
-                  onPress={() => setLearnedInfoOpen(true)}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel={t("learnedPercentInfoTitle")}
-                >
-                  <Feather name="info" size={14} color="#9ca3af" />
-                </Pressable>
               </View>
             </View>
           )}
@@ -850,7 +835,11 @@ export default function DeckDetailScreen() {
             <DeckSrsOverridesPanel
               deckId={deck.deck_id}
               overrides={deck.srs_overrides ?? null}
-              onSaved={() => void loadData()}
+              onSaved={(savedOverrides) => {
+                setDeck((prev) =>
+                  prev ? { ...prev, srs_overrides: savedOverrides } : prev,
+                );
+              }}
             />
           ) : null}
 
@@ -1172,8 +1161,13 @@ export default function DeckDetailScreen() {
 }
 
 /* ─── StatChip ─── */
-function StatChip({ icon, value, label, color, onInfoPress, infoAccessibilityLabel }: {
-  icon: keyof typeof Feather.glyphMap;
+function StatChip({
+  value,
+  label,
+  color,
+  onInfoPress,
+  infoAccessibilityLabel,
+}: {
   value: number | string;
   label: string;
   color: string;
@@ -1182,11 +1176,14 @@ function StatChip({ icon, value, label, color, onInfoPress, infoAccessibilityLab
 }) {
   return (
     <View style={styles.statChip}>
-      {onInfoPress ? (
-        <View style={styles.statChipIconAnchor}>
-          <View style={[styles.statChipIcon, { backgroundColor: `${color}18` }]}>
-            <Feather name={icon} size={15} color={color} />
-          </View>
+      <View
+        style={[
+          styles.statChipValueWrap,
+          onInfoPress ? styles.statChipValueWrapWithInfo : null,
+        ]}
+      >
+        <Text style={[styles.statChipValue, { color }]}>{value}</Text>
+        {onInfoPress ? (
           <Pressable
             style={styles.statChipInfoBtn}
             onPress={onInfoPress}
@@ -1194,15 +1191,10 @@ function StatChip({ icon, value, label, color, onInfoPress, infoAccessibilityLab
             accessibilityRole="button"
             accessibilityLabel={infoAccessibilityLabel ?? label}
           >
-            <Feather name="info" size={14} color={color} />
+            <Feather name="info" size={13} color={color} />
           </Pressable>
-        </View>
-      ) : (
-        <View style={[styles.statChipIcon, { backgroundColor: `${color}18` }]}>
-          <Feather name={icon} size={15} color={color} />
-        </View>
-      )}
-      <Text style={[styles.statChipValue, { color }]}>{value}</Text>
+        ) : null}
+      </View>
       <Text style={styles.statChipLabel}>{label}</Text>
     </View>
   );
@@ -1271,6 +1263,44 @@ function ActionBtn({
   );
 }
 
+/* ─── Cloze list preview ─── */
+function CardTileClozeFront({
+  parts,
+  gapLabel,
+}: {
+  parts: ClozeParts;
+  gapLabel: string;
+}) {
+  const C = useAppColors();
+  const gap =
+    parts.gapFront.trim().length > 0 ? (
+      <Text style={[styles.cardClozeGapHint, { color: C.textSub }]}>
+        {" "}
+        {parts.gapFront.trim()}{" "}
+      </Text>
+    ) : (
+      <Text style={[styles.cardClozeGap, { color: C.textMuted }]}> {gapLabel} </Text>
+    );
+  return (
+    <Text style={[styles.cardFront, { color: C.text }]}>
+      {parts.before}
+      {gap}
+      {parts.after}
+    </Text>
+  );
+}
+
+function CardTileClozeBack({ parts }: { parts: ClozeParts }) {
+  const C = useAppColors();
+  return (
+    <Text style={[styles.cardBack, { color: C.textSub }]}>
+      {parts.before}
+      <Text style={styles.cardClozeAnswer}>{parts.hidden}</Text>
+      {parts.after}
+    </Text>
+  );
+}
+
 /* ─── CardTile ─── */
 function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDelete, onReport, t }: {
   card: Card;
@@ -1286,21 +1316,17 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
   const C = useAppColors();
   const accentColors = ["#4255ff", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"];
   const accent = accentColors[index % accentColors.length];
-  const extra = parseCardExtra(card.card_extra);
   const ctype = normalizeCardType(card.card_type);
   const frontMedia = getCardMediaForSide(card, "front");
   const backMedia = getCardMediaForSide(card, "back");
-  const paired = isReversiblePairCard(extra);
   const clozeParts = getClozePartsFromCard(card);
-  const clozePreview =
-    ctype === "cloze" && clozeParts && isClozeGapComplete(clozeParts)
-      ? `${clozeParts.before.trimEnd()} ${clozeParts.gapFront.trim()} ${clozeParts.after.trimStart()}`.trim()
-      : null;
+  const clozeOk = ctype === "cloze" && clozeParts && isClozeLearnable(clozeParts);
+  const gapLabel = t("clozeGapMarker") || CLOZE_GAP_MARKER;
   const backDisplay =
     ctype === "cloze" && clozeParts?.hidden?.trim()
       ? clozeParts.hidden.trim()
       : card.back_text?.trim() ?? "";
-  const showBack = backDisplay.length > 0 || backMedia.length > 0;
+  const showBack = clozeOk || backDisplay.length > 0 || backMedia.length > 0;
 
   return (
     <View style={[styles.cardTile, { backgroundColor: C.surface }]}>
@@ -1309,20 +1335,6 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
         <View style={[styles.cardNumBadge, { backgroundColor: `${accent}18` }]}>
           <Text style={[styles.cardNumTxt, { color: accent }]}>{index + 1}</Text>
         </View>
-        {ctype === "cloze" ? (
-          <View style={[styles.cardKindBadge, { borderColor: `${accent}40` }]}>
-            <Text style={[styles.cardKindBadgeTxt, { color: accent }]} numberOfLines={1}>
-              {t("cardTypeCloze")}
-            </Text>
-          </View>
-        ) : null}
-        {paired ? (
-          <View style={[styles.cardKindBadge, { borderColor: `${accent}40` }]}>
-            <Text style={[styles.cardKindBadgeTxt, { color: accent }]} numberOfLines={1}>
-              {t("cardReversiblePairBadge")}
-            </Text>
-          </View>
-        ) : null}
         {createdByName ? (
           <View style={[styles.cardAuthorRow, { backgroundColor: C.surfaceAlt }]}>
             <Feather name="user" size={10} color={C.textMuted} />
@@ -1331,9 +1343,11 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
         ) : null}
       </View>
 
-      <Text style={[styles.cardFront, { color: C.text }]}>
-        {clozePreview ?? card.front_text}
-      </Text>
+      {clozeOk && clozeParts ? (
+        <CardTileClozeFront parts={clozeParts} gapLabel={gapLabel} />
+      ) : (
+        <Text style={[styles.cardFront, { color: C.text }]}>{card.front_text}</Text>
+      )}
       {frontMedia.map((item) => (
         <CardSideMedia
           key={item.media_id}
@@ -1360,7 +1374,9 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
             <View style={[styles.cardDividerLine, { backgroundColor: `${accent}30` }]} />
           </View>
 
-          {backDisplay.length > 0 ? (
+          {clozeOk && clozeParts ? (
+            <CardTileClozeBack parts={clozeParts} />
+          ) : backDisplay.length > 0 ? (
             <Text style={[styles.cardBack, { color: C.textSub }]}>{backDisplay}</Text>
           ) : null}
           {backMedia.map((item) => (
@@ -1485,37 +1501,28 @@ const styles = StyleSheet.create({
   },
   statsDivider: { width: 1, height: 40, backgroundColor: "#f0f1f5" },
   statChip: { flex: 1, alignItems: "center", gap: 4, minWidth: 0 },
-  statChipIconAnchor: {
-    flexDirection: "row",
-    alignItems: "center",
+  statChipValueWrap: {
+    position: "relative",
     alignSelf: "center",
-    gap: 4,
-    height: 32,
+    overflow: "visible",
+  },
+  statChipValueWrapWithInfo: {
+    marginTop: 4,
   },
   statChipInfoBtn: {
-    width: 20,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statChipIcon: {
-    width: 32, height: 32, borderRadius: 10,
-    alignItems: "center", justifyContent: "center",
+    position: "absolute",
+    top: -5,
+    left: "100%",
+    marginLeft: 8,
+    padding: 2,
   },
   statChipValue: { fontSize: 18, fontWeight: "800" },
   statChipLabel: { fontSize: 11, color: "#9ca3af", fontWeight: "500" },
 
   /* ── PROGRESS ── */
-  progressWrap: { marginHorizontal: 16, marginTop: 12, gap: 6 },
+  progressWrap: { marginHorizontal: 16, marginTop: 12 },
   progressTrack: { height: 6, borderRadius: 999, backgroundColor: "#e8eaee", overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 999, backgroundColor: "#059669" },
-  progressLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  progressLabel: { fontSize: 12, color: "#9ca3af" },
 
   /* ── ACTIONS ── */
   actions: { marginHorizontal: 16, marginTop: 16, gap: 10 },
@@ -1631,15 +1638,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   cardNumTxt: { fontSize: 12, fontWeight: "700" },
-  cardKindBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    borderWidth: 1,
-    maxWidth: "46%",
-  },
-  cardKindBadgeTxt: { fontSize: 10, fontWeight: "700" },
   cardAuthorRow: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "#f3f4f6", borderRadius: 8,
@@ -1650,16 +1648,19 @@ const styles = StyleSheet.create({
   cardMedia: { width: "100%", height: 100, borderRadius: 10, marginBottom: 8, backgroundColor: "#f3f4f6" },
   cardMediaAudio: { alignItems: "center", justifyContent: "center" },
 
-  cardFront: { fontSize: 17, fontWeight: "700", color: "#111827", lineHeight: 24, marginBottom: 10 },
+  cardFront: { fontSize: 17, fontWeight: "700", color: "#111827", lineHeight: 24, marginBottom: 10, textAlign: "center" },
+  cardClozeGap: { fontStyle: "italic", fontWeight: "600" },
+  cardClozeGapHint: { fontStyle: "italic", fontWeight: "500" },
+  cardClozeAnswer: { fontWeight: "800", color: "#059669" },
 
   cardDividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 12, gap: 8 },
   cardDividerLine: { flex: 1, height: 1 },
   cardDividerArrow: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
 
-  cardBack: { fontSize: 15, color: "#4b5563", lineHeight: 22, marginBottom: 10 },
+  cardBack: { fontSize: 15, color: "#4b5563", lineHeight: 22, marginBottom: 10, textAlign: "center" },
 
-  cardNotesRow: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 10 },
-  cardNotes: { flex: 1, fontSize: 13, color: "#9ca3af", fontStyle: "italic", lineHeight: 18 },
+  cardNotesRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10 },
+  cardNotes: { fontSize: 13, color: "#9ca3af", fontStyle: "italic", lineHeight: 18, textAlign: "center" },
 
   cardActionsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#f3f4f6" },
   cardActEdit: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, backgroundColor: "rgba(99,102,241,0.08)" },

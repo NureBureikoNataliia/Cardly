@@ -2,7 +2,7 @@ import type { Card } from "@/assets/data/cards";
 import { getCardMediaForSide } from "@/src/lib/cardMedia";
 import {
   getClozePartsFromCard,
-  isClozeGapComplete,
+  isClozeLearnable,
   normalizeCardType,
 } from "@/src/lib/cardModel";
 
@@ -52,13 +52,15 @@ export function estimateCardTileHeight(card: Card): number {
   const ctype = normalizeCardType(card.card_type);
   const clozeParts = getClozePartsFromCard(card);
   const frontText =
-    ctype === "cloze" && clozeParts && isClozeGapComplete(clozeParts)
-      ? `${clozeParts.before} ${clozeParts.gapFront} ${clozeParts.after}`
+    ctype === "cloze" && clozeParts && isClozeLearnable(clozeParts)
+      ? `${clozeParts.before}${clozeParts.gapFront.trim() || "…"}${clozeParts.after}`
       : (card.front_text ?? "");
   const backText =
-    ctype === "cloze" && clozeParts?.hidden?.trim()
-      ? clozeParts.hidden.trim()
-      : (card.back_text?.trim() ?? "");
+    ctype === "cloze" && clozeParts && isClozeLearnable(clozeParts)
+      ? `${clozeParts.before}${clozeParts.hidden}${clozeParts.after}`
+      : ctype === "cloze" && clozeParts?.hidden?.trim()
+        ? clozeParts.hidden.trim()
+        : (card.back_text?.trim() ?? "");
 
   const frontMedia = getCardMediaForSide(card, "front");
   const backMedia = getCardMediaForSide(card, "back");

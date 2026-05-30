@@ -320,7 +320,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardCreateReversedPair: 'Create reverse card too',
     cardCreateReversedHint: 'Adds a second card with the front and back swapped.',
     cardReversiblePairEditNote: 'This card is part of a linked pair; editing is limited on this side.',
-    cardReversiblePairBadge: 'Pair',
     mediaKindFront: 'Front media',
     mediaKindBack: 'Back media',
     mediaKindImage: 'Image',
@@ -524,6 +523,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     srsDayStartTitle: 'SRS day starts at (local time)',
     srsDayStartHint:
       'This is when your study day switches to the next one. Before this time, the app still counts it as “yesterday” for scheduling. That changes how many cards are due today and which cards are included when you study everything scheduled for today.',
+    studySettingsSaved: 'Study settings saved',
     notificationsPlaceholder: 'Notification settings will appear here.',
     notifStudyReminder: 'Daily study reminder',
     notifStudyReminderDesc: 'Remind me to study cards every day',
@@ -999,7 +999,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardCreateReversedPair: 'Також створити зворотну картку',
     cardCreateReversedHint: 'Додає другу картку з переставленими лицьовою та зворотною сторонами.',
     cardReversiblePairEditNote: 'Ця картка в парі з іншою; редагування обмежене з цього боку.',
-    cardReversiblePairBadge: 'Пара',
     mediaKindFront: 'Медіа лицьової сторони',
     mediaKindBack: 'Медіа зворотної сторони',
     mediaKindImage: 'Зображення',
@@ -1204,6 +1203,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     srsDayStartTitle: 'Початок SRS-дня (за місцевим часом)',
     srsDayStartHint:
       'Це момент, коли навчальний день переходить у наступний. До цієї години програма ще вважає це «вчора» для розкладу. Від цього залежить, скільки карток показується «на сьогодні» і що потрапляє в режим «вивчити все за сьогодні».',
+    studySettingsSaved: 'Налаштування навчання збережено',
     notificationsPlaceholder: 'Тут зʼявляться налаштування повідомлень.',
     notifStudyReminder: 'Щоденне нагадування про навчання',
     notifStudyReminderDesc: 'Нагадувати мені вчити картки щодня',

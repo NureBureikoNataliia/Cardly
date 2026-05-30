@@ -3,11 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 import {
+  clearLegacyWebTestReminderFlag,
   hideWebStudyReminderForToday,
   isWebStudyReminderDueNow,
   isWebStudyReminderHidden,
+  localDateKey,
   msUntilNextReminderCheck,
   parseStudyReminderPrefs,
+  readWebBellReminderQueue,
+  removeWebBellReminderItem,
+  type WebBellReminderItem,
 } from '@/src/lib/webStudyReminder';
 
 /**
@@ -17,12 +22,17 @@ import {
 export function useWebStudyReminder(user: User | null) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [hidden, setHidden] = useState(false);
+  const [queueTick, setQueueTick] = useState(0);
   const scheduleGenRef = useRef(0);
 
   const prefs = useMemo(
     () => parseStudyReminderPrefs(user?.user_metadata),
     [user?.user_metadata],
   );
+
+  const bumpQueue = useCallback(() => {
+    setQueueTick((v) => v + 1);
+  }, []);
 
   const refresh = useCallback(() => {
     const ts = Date.now();
@@ -31,20 +41,32 @@ export function useWebStudyReminder(user: User | null) {
       setHidden(false);
       return;
     }
-    setHidden(isWebStudyReminderHidden(user.id, ts, prefs.hour));
-  }, [prefs.hour, user]);
+    clearLegacyWebTestReminderFlag();
+    setHidden(isWebStudyReminderHidden(user.id, ts));
+    bumpQueue();
+  }, [bumpQueue, user]);
 
-  const hideForToday = useCallback(() => {
+  const dismissDailyForToday = useCallback(() => {
     if (!user) return;
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.sessionStorage.removeItem('cardly_web_test_study_reminder');
-    }
-    hideWebStudyReminderForToday(user.id, Date.now(), prefs.hour);
+    clearLegacyWebTestReminderFlag();
+    hideWebStudyReminderForToday(user.id, Date.now());
     setHidden(true);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('cardly-web-reminder-refresh'));
     }
-  }, [prefs.hour, user]);
+  }, [user]);
+
+  const dismissBellItem = useCallback(
+    (id: string) => {
+      if (!user) return;
+      removeWebBellReminderItem(user.id, id);
+      bumpQueue();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('cardly-web-reminder-refresh'));
+      }
+    },
+    [bumpQueue, user],
+  );
 
   useEffect(() => {
     refresh();
@@ -91,15 +113,28 @@ export function useWebStudyReminder(user: User | null) {
     };
   }, [prefs.enabled, prefs.hour, refresh, user?.id]);
 
-  const forceTest =
-    Platform.OS === 'web' &&
-    typeof window !== 'undefined' &&
-    window.sessionStorage.getItem('cardly_web_test_study_reminder') === '1';
-
-  const isDue =
+  const dailyDue =
     Platform.OS === 'web' &&
     Boolean(user) &&
-    (forceTest || isWebStudyReminderDueNow(nowMs, prefs, hidden));
+    isWebStudyReminderDueNow(user!.id, nowMs, prefs, hidden);
 
-  return { isDue, hideForToday, prefs, refresh };
-};
+  const queuedReminders: WebBellReminderItem[] = useMemo(() => {
+    if (Platform.OS !== 'web' || !user) return [];
+    void queueTick;
+    return readWebBellReminderQueue(user.id);
+  }, [queueTick, user]);
+
+  const dailyReminderId = user
+    ? `study-daily-${user.id}-${localDateKey(new Date(nowMs))}`
+    : 'study-daily';
+
+  return {
+    dailyDue,
+    dailyReminderId,
+    queuedReminders,
+    dismissDailyForToday,
+    dismissBellItem,
+    prefs,
+    refresh,
+  };
+}

@@ -9,8 +9,10 @@ import {
   View,
 } from "react-native";
 
+import { FormFlashMessage } from "@/src/components/FormFlashMessage";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useAppColors } from "@/src/contexts/ThemeContext";
+import { useFlashMessage } from "@/src/hooks/useFlashMessage";
 import { supabase } from "@/src/lib/supabase";
 
 type LimitKey = "new_cards_per_day" | "cards_per_day";
@@ -77,14 +79,14 @@ export default function DeckSrsOverridesPanel({
 }: {
   deckId: string;
   overrides: Record<string, unknown> | null;
-  onSaved?: () => void;
+  onSaved?: (savedOverrides: Record<string, unknown> | null) => void;
 }) {
   const C = useAppColors();
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(() => formFromOverrides(overrides));
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const { message, show: showFlash, clear: clearFlash } = useFlashMessage(3000);
 
   useEffect(() => {
     setForm(formFromOverrides(overrides));
@@ -108,7 +110,7 @@ export default function DeckSrsOverridesPanel({
 
   const handleChange = (key: LimitKey, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value.replace(/[^\d]/g, "") }));
-    setMessage(null);
+    clearFlash();
   };
 
   const savePayload = async (payload: Record<string, unknown> | null) => {
@@ -120,11 +122,16 @@ export default function DeckSrsOverridesPanel({
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new Error(t("deckLimitsNoUpdate"));
+    const saved = data.srs_overrides;
+    if (saved != null && typeof saved === "object" && !Array.isArray(saved)) {
+      return saved as Record<string, unknown>;
+    }
+    return null;
   };
 
   const handleSave = async () => {
     setIsSaving(true);
-    setMessage(null);
+    clearFlash();
     try {
       const newCardsLimit = parseLimit(form.new_cards_per_day, t("deckNewCardsLimit"));
       const totalCardsLimit = parseLimit(form.cards_per_day, t("deckDailyCardsLimit"));
@@ -132,19 +139,18 @@ export default function DeckSrsOverridesPanel({
       if (newCardsLimit != null) limits.new_cards_per_day = newCardsLimit;
       if (totalCardsLimit != null) limits.cards_per_day = totalCardsLimit;
 
-      await savePayload(mergeSrsOverridesLimits(overrides, limits));
-      setMessage({ ok: true, text: t("deckLimitsSaved") });
-      onSaved?.();
+      const saved = await savePayload(mergeSrsOverridesLimits(overrides, limits));
+      showFlash(t("deckLimitsSaved"), true);
+      onSaved?.(saved);
     } catch (err) {
       const message = err instanceof Error ? err.message : t("deckLimitsSaveError");
       const isValidationError =
         message === t("deckNewCardsLimit") || message === t("deckDailyCardsLimit");
-      setMessage({
-        ok: false,
-        text: isValidationError
-          ? `${t("deckLimitsInvalid")}: ${message}`
-          : message,
-      });
+      showFlash(
+        isValidationError ? `${t("deckLimitsInvalid")}: ${message}` : message,
+        false,
+        5000,
+      );
     } finally {
       setIsSaving(false);
     }
@@ -152,14 +158,14 @@ export default function DeckSrsOverridesPanel({
 
   const handleReset = async () => {
     setIsSaving(true);
-    setMessage(null);
+    clearFlash();
     try {
-      await savePayload(mergeSrsOverridesLimits(overrides, {}));
+      const saved = await savePayload(mergeSrsOverridesLimits(overrides, {}));
       setForm({ ...EMPTY_FORM });
-      setMessage({ ok: true, text: t("deckLimitsResetDone") });
-      onSaved?.();
+      showFlash(t("deckLimitsResetDone"), true);
+      onSaved?.(saved);
     } catch {
-      setMessage({ ok: false, text: t("deckLimitsSaveError") });
+      showFlash(t("deckLimitsSaveError"), false, 5000);
     } finally {
       setIsSaving(false);
     }
@@ -230,11 +236,7 @@ export default function DeckSrsOverridesPanel({
             ) : null}
           </View>
 
-          {message ? (
-            <Text style={[styles.message, { color: message.ok ? "#059669" : "#dc2626" }]}>
-              {message.text}
-            </Text>
-          ) : null}
+          <FormFlashMessage message={message} style={styles.flashMessage} />
 
           <View style={styles.actions}>
             <TouchableOpacity
@@ -347,9 +349,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 17,
   },
-  message: {
-    fontSize: 13,
-    fontWeight: "700",
+  flashMessage: {
     marginBottom: 12,
   },
   actions: {
