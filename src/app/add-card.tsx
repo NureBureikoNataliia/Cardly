@@ -1536,18 +1536,19 @@ export default function AddCardScreen() {
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadErrorKey, setLoadErrorKey] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<CardFormSnapshot>(emptySnapshot);
 
   useEffect(() => {
     if (!deckId) {
-      setLoadError(t("deckNotFound"));
+      setLoadErrorKey("deckNotFound");
       setIsLoading(false);
       return;
     }
 
+    let cancelled = false;
     setIsLoading(true);
-    setLoadError(null);
+    setLoadErrorKey(null);
 
     const loadDeckAndCard = async () => {
       const [
@@ -1560,8 +1561,10 @@ export default function AddCardScreen() {
           : Promise.resolve({ data: null, error: null }),
       ]);
 
+      if (cancelled) return;
+
       if (deckError || cardError) {
-        setLoadError(t("failedToLoadData"));
+        setLoadErrorKey("failedToLoadData");
       } else {
         setDeck(deckData as Deck);
         setSnapshot(buildSnapshotFromCard(cardData as Card | null));
@@ -1570,7 +1573,10 @@ export default function AddCardScreen() {
     };
 
     void loadDeckAndCard();
-  }, [deckId, cardId, t]);
+    return () => {
+      cancelled = true;
+    };
+  }, [deckId, cardId]);
 
   if (isLoading) {
     return (
@@ -1584,7 +1590,7 @@ export default function AddCardScreen() {
     return (
       <View style={[styles.loadingWrap, { backgroundColor: C.bg }]}>
         <Text style={{ color: C.textSub, marginBottom: 16 }}>
-          {loadError ?? t("deckNotFound")}
+          {loadErrorKey ? t(loadErrorKey) : t("deckNotFound")}
         </Text>
         <TouchableOpacity
           style={[styles.btnCancel, { backgroundColor: C.surface, borderColor: C.border }]}

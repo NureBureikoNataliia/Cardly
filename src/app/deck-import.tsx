@@ -64,7 +64,7 @@ export default function DeckImportScreen() {
   const [fileLabel, setFileLabel] = useState<string | null>(null);
   const [pairs, setPairs] = useState<ImportWordRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [accessError, setAccessError] = useState<string | null>(null);
+  const [accessErrorKey, setAccessErrorKey] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -78,7 +78,7 @@ export default function DeckImportScreen() {
   }, [navigation, isAddToDeck, t]);
 
   useEffect(() => {
-    setAccessError(null);
+    setAccessErrorKey(null);
     if (!deckIdParam) {
       setLoadingDeck(false);
       setDeck(null);
@@ -98,13 +98,13 @@ export default function DeckImportScreen() {
       if (cancelled) return;
       setLoadingDeck(false);
       if (error || !data) {
-        setAccessError(t("importErrorLoadDeck"));
+        setAccessErrorKey("importErrorLoadDeck");
         setDeck(null);
         return;
       }
       const d = data as Deck;
       if (d.creator_id !== user.id) {
-        setAccessError(t("importErrorOwner"));
+        setAccessErrorKey("importErrorOwner");
         setDeck(null);
         return;
       }
@@ -113,7 +113,7 @@ export default function DeckImportScreen() {
     return () => {
       cancelled = true;
     };
-  }, [deckIdParam, user?.id, t]);
+  }, [deckIdParam, user?.id]);
 
   const parsePickedFile = useCallback(
     async (uri: string, name: string, mime?: string) => {
@@ -263,10 +263,10 @@ export default function DeckImportScreen() {
     );
   }
 
-  if (isAddToDeck && deckIdParam && accessError) {
+  if (isAddToDeck && deckIdParam && accessErrorKey) {
     return (
       <View style={[styles.center, { backgroundColor: C.bg, padding: 24 }]}>
-        <Text style={{ color: C.text, textAlign: "center" }}>{accessError}</Text>
+        <Text style={{ color: C.text, textAlign: "center" }}>{t(accessErrorKey)}</Text>
         <TouchableOpacity
           style={[styles.secondaryBtnOut, { marginTop: 18, borderColor: C.tint }]}
           onPress={() => router.back()}

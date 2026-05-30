@@ -318,6 +318,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardCreateReversedPair: 'Create reverse card too',
     cardCreateReversedHint: 'Adds a second card with the front and back swapped.',
     cardReversiblePairEditNote: 'This card is part of a linked pair; editing is limited on this side.',
+    cardReversiblePairBadge: 'Pair',
     mediaKindFront: 'Front media',
     mediaKindBack: 'Back media',
     mediaKindImage: 'Image',
@@ -536,11 +537,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     notifSaved: 'Notification preferences saved',
     notifSaveError: 'Failed to save preferences',
     notifBrowserNote:
-      'Daily reminders use local notifications on iOS and Android. In the browser this option is not available yet.',
-    pushRepeatWordsTitle: 'Review your words',
-    pushRepeatWordsBody: 'Open Cardly and run a study session.',
+      'On iOS and Android you get local notifications. In the browser the reminder appears in the bell icon while the tab is open (after the time you set).',
+    pushRepeatWordsTitle: 'Time to review your cards',
+    pushRepeatWordsBody: 'A few minutes today — keep your progress going.',
     notifPermissionDenied: 'Notifications are off for Cardly. Enable them in system settings to get reminders.',
-    notifWebReminderNote: 'Daily reminders work in the iOS or Android app. The web version does not schedule them yet.',
+    notifWebReminderNote:
+      'In the browser the reminder shows in the bell while the site is open. Use the mobile app for notifications when the app is closed.',
     notifExpoGoReminderNote:
       'Daily reminders are not available in Expo Go on Android. Install a development build or test on iOS Expo Go to use reminders.',
     notifAndroidBackgroundNote:
@@ -995,6 +997,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardCreateReversedPair: 'Також створити зворотну картку',
     cardCreateReversedHint: 'Додає другу картку з переставленими лицьовою та зворотною сторонами.',
     cardReversiblePairEditNote: 'Ця картка в парі з іншою; редагування обмежене з цього боку.',
+    cardReversiblePairBadge: 'Пара',
     mediaKindFront: 'Медіа лицьової сторони',
     mediaKindBack: 'Медіа зворотної сторони',
     mediaKindImage: 'Зображення',
@@ -1214,13 +1217,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     notifSaved: 'Налаштування повідомлень збережено',
     notifSaveError: 'Не вдалося зберегти налаштування',
     notifBrowserNote:
-      'Щоденні нагадування — це локальні сповіщення в застосунку на iOS та Android. У браузері ця функція поки недоступна.',
-    pushRepeatWordsTitle: 'Повтори слова',
-    pushRepeatWordsBody: 'Відкрий Cardly і повтори картки.',
+      'На iOS і Android — локальні сповіщення. У браузері нагадування з’являється в колокольчику, поки відкрита вкладка (після встановленого часу).',
+    pushRepeatWordsTitle: 'Повтори картки',
+    pushRepeatWordsBody: 'Кілька хвилин сьогодні — і прогрес не загубиться.',
     notifPermissionDenied:
       'Сповіщення для Cardly вимкнено. Увімкніть їх у системних налаштуваннях, щоб отримувати нагадування.',
     notifWebReminderNote:
-      'Щоденні нагадування працюють у застосунку на iOS або Android. У вебверсії їх поки не планується.',
+      'У браузері нагадування показується в колокольчику, поки сайт відкритий. Для сповіщень із закритим застосунком — мобільний додаток.',
     notifExpoGoReminderNote:
       'Щоденні нагадування недоступні в Expo Go на Android. Встановіть development build або тестуйте в Expo Go на iOS.',
     notifAndroidBackgroundNote:

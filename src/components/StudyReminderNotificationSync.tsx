@@ -3,20 +3,11 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { parseStudyReminderPrefs } from '@/src/lib/webStudyReminder';
 import { syncStudyDailyReminder } from '@/src/lib/studyReminderNotifications';
 
-type NotifMeta = {
-  studyReminder?: boolean;
-  studyReminderHour?: number;
-};
-
-function runSync(
-  raw: NotifMeta | undefined,
-  t: (key: string) => string,
-) {
-  const enabled = raw?.studyReminder === true;
-  const hour =
-    typeof raw?.studyReminderHour === 'number' ? raw.studyReminderHour : 9;
+function runSync(metadata: unknown, t: (key: string) => string) {
+  const { enabled, hour } = parseStudyReminderPrefs(metadata);
 
   void syncStudyDailyReminder({
     enabled,
@@ -47,21 +38,19 @@ export function StudyReminderNotificationSync() {
       return;
     }
 
-    const raw = user.user_metadata?.notifications as NotifMeta | undefined;
-    runSync(raw, t);
-  }, [user?.id, metaKey, locale, t]);
+    runSync(user.user_metadata, t);
+  }, [user?.id, metaKey, user?.user_metadata, locale, t]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
       const prev = lastAppState.current;
       lastAppState.current = nextState;
       if (prev.match(/inactive|background/) && nextState === 'active' && user) {
-        const raw = user.user_metadata?.notifications as NotifMeta | undefined;
-        runSync(raw, t);
+        runSync(user.user_metadata, t);
       }
     });
     return () => sub.remove();
-  }, [user?.id, metaKey, locale, t]);
+  }, [user?.id, metaKey, user?.user_metadata]);
 
   return null;
 }

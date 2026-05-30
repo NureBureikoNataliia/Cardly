@@ -17,6 +17,7 @@ import { StudyReminderNotificationSync } from '@/src/components/StudyReminderNot
 import Sidebar from '@/src/components/Sidebar';
 import ThemeToggle from '@/src/components/ThemeToggle';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
+import { WebStudyReminderProvider } from '@/src/contexts/WebStudyReminderContext';
 import { LanguageProvider, useLanguage } from '@/src/contexts/LanguageContext';
 import { MobileDrawerProvider, useMobileDrawerOptional } from '@/src/contexts/MobileDrawerContext';
 import { SidebarDrawerProvider, useSidebarDrawer } from '@/src/contexts/SidebarDrawerContext';
@@ -66,8 +67,10 @@ export default function RootLayout() {
       <LanguageProvider>
         <StudySettingsProvider>
           <AuthProvider>
-            <StudyReminderNotificationSync />
-            <RootLayoutNav />
+            <WebStudyReminderProvider>
+              <StudyReminderNotificationSync />
+              <RootLayoutNav />
+            </WebStudyReminderProvider>
           </AuthProvider>
         </StudySettingsProvider>
       </LanguageProvider>

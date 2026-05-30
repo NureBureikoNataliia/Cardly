@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useAppColors } from '@/src/contexts/ThemeContext';
+import { useWebStudyReminderState } from '@/src/contexts/WebStudyReminderContext';
 
 interface Invitation {
   deck_id: string;
@@ -25,21 +26,9 @@ interface Invitation {
   created_at: string;
 }
 
-type NotifMeta = {
-  studyReminder?: boolean;
-  studyReminderHour?: number;
-};
-
 type BellItem =
   | { type: 'study-reminder'; id: string }
   | { type: 'invitation'; id: string; invitation: Invitation };
-
-function localDateKey(now: Date): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
 
 export default function NotificationBell() {
   const router = useRouter();
@@ -50,8 +39,8 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [responding, setResponding] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ id: string; ok: boolean } | null>(null);
-  const [webReminderHidden, setWebReminderHidden] = useState(false);
-  const [nowTick, setNowTick] = useState(() => Date.now());
+  const { isDue: showStudyReminder, hideForToday: dismissStudyReminder } =
+    useWebStudyReminderState();
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -73,38 +62,6 @@ export default function NotificationBell() {
     return () => { supabase.removeChannel(ch); };
   }, [load, user]);
 
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const timer = setInterval(() => setNowTick(Date.now()), 60_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !user) return;
-    const day = localDateKey(new Date(nowTick));
-    const key = `cardly_web_study_reminder_hidden_${user.id}_${day}`;
-    setWebReminderHidden(window.localStorage.getItem(key) === '1');
-  }, [nowTick, user]);
-
-  const notifPrefs = (user?.user_metadata?.notifications as NotifMeta | undefined) ?? undefined;
-  const isWebStudyReminderDue = useMemo(() => {
-    if (Platform.OS !== 'web') return false;
-    if (!user) return false;
-    if (webReminderHidden) return false;
-    if (notifPrefs?.studyReminder !== true) return false;
-    const hour = typeof notifPrefs.studyReminderHour === 'number' ? notifPrefs.studyReminderHour : 9;
-    const now = new Date(nowTick);
-    return now.getHours() >= hour;
-  }, [notifPrefs?.studyReminder, notifPrefs?.studyReminderHour, nowTick, user, webReminderHidden]);
-
-  const hideWebReminderForToday = useCallback(() => {
-    if (Platform.OS !== 'web' || !user) return;
-    const day = localDateKey(new Date(nowTick));
-    const key = `cardly_web_study_reminder_hidden_${user.id}_${day}`;
-    window.localStorage.setItem(key, '1');
-    setWebReminderHidden(true);
-  }, [nowTick, user]);
-
   const respond = async (deckId: string, accept: boolean) => {
     setResponding(deckId);
     await supabase.rpc('respond_to_invitation', { p_deck_id: deckId, p_accept: accept });
@@ -117,7 +74,7 @@ export default function NotificationBell() {
   };
 
   const items: BellItem[] = [
-    ...(isWebStudyReminderDue ? [{ type: 'study-reminder', id: 'study-reminder' } as const] : []),
+    ...(showStudyReminder ? [{ type: 'study-reminder', id: 'study-reminder' } as const] : []),
     ...invitations.map((invitation) => ({
       type: 'invitation' as const,
       id: invitation.deck_id,
@@ -178,6 +135,7 @@ export default function NotificationBell() {
               <FlatList
                 data={items}
                 keyExtractor={(item) => item.id}
+                extraData={count}
                 style={styles.list}
                 showsVerticalScrollIndicator={false}
                 renderItem={({ item }) => {
@@ -199,7 +157,7 @@ export default function NotificationBell() {
                           <TouchableOpacity
                             style={styles.acceptBtn}
                             onPress={() => {
-                              hideWebReminderForToday();
+                              dismissStudyReminder();
                               setOpen(false);
                               router.push('/(tabs)');
                             }}
@@ -209,7 +167,7 @@ export default function NotificationBell() {
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.declineBtn}
-                            onPress={hideWebReminderForToday}
+                            onPress={dismissStudyReminder}
                             activeOpacity={0.8}
                           >
                             <Feather name="x" size={14} color="#fff" />

@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -117,6 +117,8 @@ export default function SettingsScreen() {
   const [notifMsg, setNotifMsg] = useState<string | null>(null);
   const [testPushLoading, setTestPushLoading] = useState(false);
   const [testPushMsg, setTestPushMsg] = useState<string | null>(null);
+  const notifSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifSaveSeqRef = useRef(0);
 
   useEffect(() => {
     if (!user) return;
@@ -130,15 +132,31 @@ export default function SettingsScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const handleSaveNotif = async (patch: Partial<NotifPrefs>) => {
+  const handleSaveNotif = async (patch: Partial<NotifPrefs>, options?: { debounceMs?: number }) => {
     const next: NotifPrefs = {
       studyReminder: patch.studyReminder ?? notifPrefs.studyReminder,
       studyReminderHour: patch.studyReminderHour ?? notifPrefs.studyReminderHour,
     };
     setNotifPrefs(next);
+
+    const debounceMs = options?.debounceMs ?? 0;
+    if (debounceMs > 0) {
+      if (notifSaveTimerRef.current) clearTimeout(notifSaveTimerRef.current);
+      notifSaveTimerRef.current = setTimeout(() => {
+        void persistNotifPrefs(next);
+      }, debounceMs);
+      return;
+    }
+
+    await persistNotifPrefs(next);
+  };
+
+  const persistNotifPrefs = async (next: NotifPrefs) => {
+    const seq = ++notifSaveSeqRef.current;
     setSavingNotif(true);
     setNotifMsg(null);
     const { error: e } = await updateMetadata({ notifications: next });
+    if (seq !== notifSaveSeqRef.current) return;
     setSavingNotif(false);
 
     if (e) {
@@ -147,35 +165,34 @@ export default function SettingsScreen() {
       return;
     }
 
-    const needsSync =
-      patch.studyReminder !== undefined || patch.studyReminderHour !== undefined;
-    if (needsSync) {
-      const r = await syncStudyDailyReminder({
-        enabled: next.studyReminder,
-        hour: next.studyReminderHour,
-        title: t('pushRepeatWordsTitle'),
-        body: t('pushRepeatWordsBody'),
-      });
-      if (next.studyReminder && r.ok === false && r.reason === 'permission_denied') {
-        setNotifMsg(t('notifPermissionDenied'));
-        setTimeout(() => setNotifMsg(null), 5000);
-        return;
-      }
-      if (next.studyReminder && r.ok === false && r.reason === 'web') {
-        setNotifMsg(t('notifWebReminderNote'));
-        setTimeout(() => setNotifMsg(null), 5000);
-        return;
-      }
-      if (next.studyReminder && r.ok === false && r.reason === 'expo_go') {
-        setNotifMsg(t('notifExpoGoReminderNote'));
-        setTimeout(() => setNotifMsg(null), 8000);
-        return;
-      }
+    const r = await syncStudyDailyReminder({
+      enabled: next.studyReminder,
+      hour: next.studyReminderHour,
+      title: t('pushRepeatWordsTitle'),
+      body: t('pushRepeatWordsBody'),
+    });
+    if (seq !== notifSaveSeqRef.current) return;
+
+    if (next.studyReminder && r.ok === false && r.reason === 'permission_denied') {
+      setNotifMsg(t('notifPermissionDenied'));
+      setTimeout(() => setNotifMsg(null), 5000);
+      return;
+    }
+    if (next.studyReminder && r.ok === false && r.reason === 'expo_go') {
+      setNotifMsg(t('notifExpoGoReminderNote'));
+      setTimeout(() => setNotifMsg(null), 8000);
+      return;
     }
 
     setNotifMsg(t('notifSaved'));
     setTimeout(() => setNotifMsg(null), 3000);
   };
+
+  useEffect(() => {
+    return () => {
+      if (notifSaveTimerRef.current) clearTimeout(notifSaveTimerRef.current);
+    };
+  }, []);
 
   const handleSendTestPush = async () => {
     setTestPushLoading(true);
@@ -713,7 +730,12 @@ export default function SettingsScreen() {
               <RNView style={[styles.srsHourRow, compactAccount && styles.srsHourRowCompact]}>
                 <TouchableOpacity
                   style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
-                  onPress={() => handleSaveNotif({ studyReminderHour: (notifPrefs.studyReminderHour + 23) % 24 })}
+                  onPress={() =>
+                    handleSaveNotif(
+                      { studyReminderHour: (notifPrefs.studyReminderHour + 23) % 24 },
+                      { debounceMs: 450 },
+                    )
+                  }
                 >
                   <Feather name="minus" size={20} color={C.text} />
                 </TouchableOpacity>
@@ -722,7 +744,12 @@ export default function SettingsScreen() {
                 </Text>
                 <TouchableOpacity
                   style={[styles.srsHourButton, { backgroundColor: C.surface, borderColor: C.border }]}
-                  onPress={() => handleSaveNotif({ studyReminderHour: (notifPrefs.studyReminderHour + 1) % 24 })}
+                  onPress={() =>
+                    handleSaveNotif(
+                      { studyReminderHour: (notifPrefs.studyReminderHour + 1) % 24 },
+                      { debounceMs: 450 },
+                    )
+                  }
                 >
                   <Feather name="plus" size={20} color={C.text} />
                 </TouchableOpacity>

@@ -138,7 +138,11 @@ export async function sendTestPushNotification(options: {
   body: string;
 }): Promise<SendTestPushResult> {
   if (Platform.OS === 'web') {
-    return { ok: false, reason: 'web' };
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('cardly_web_test_study_reminder', '1');
+      window.dispatchEvent(new Event('cardly-web-reminder-refresh'));
+    }
+    return { ok: true };
   }
 
   if (isExpoGoAndroid()) {

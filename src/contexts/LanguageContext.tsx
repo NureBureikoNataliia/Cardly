@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Locale, translations } from '@/src/locales/translations';
@@ -29,16 +29,19 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(STORAGE_KEY, newLocale);
   }, []);
 
-  const t = useCallback(
-    (key: string): string => {
-      const dict = translations[locale];
-      return dict[key] ?? translations.en[key] ?? key;
-    },
-    [locale]
-  );
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+
+  /** Stable reference — reads current locale via ref so effects keyed on `t` do not re-run on language change. */
+  const t = useCallback((key: string): string => {
+    const dict = translations[localeRef.current];
+    return dict[key] ?? translations.en[key] ?? key;
+  }, []);
+
+  const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);
 
   return (
-    <LanguageContext.Provider value={{ locale, setLocale, t }}>
+    <LanguageContext.Provider value={value}>
       {children}
     </LanguageContext.Provider>
   );
