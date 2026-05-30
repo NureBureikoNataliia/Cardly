@@ -1,4 +1,15 @@
+import Constants from "expo-constants";
+
 import type { MediaKind } from "@/src/lib/cardModel";
+
+/** YouTube requires a valid https origin / Referer in WebViews (Error 153 without it). */
+export function getAppEmbedOrigin(): string {
+  const pkg =
+    Constants.expoConfig?.android?.package ??
+    Constants.expoConfig?.ios?.bundleIdentifier ??
+    "com.cardly.app";
+  return `https://${pkg}`;
+}
 
 /** Hosts that only work via embed player, not as direct file URLs in expo-av. */
 const EMBED_ONLY_HOSTS = ["youtube.com", "youtu.be", "m.youtube.com", "vimeo.com", "player.vimeo.com"];
@@ -23,6 +34,27 @@ export function googleDrivePreviewEmbedUrl(fileId: string): string {
   return `https://drive.google.com/file/d/${fileId}/preview`;
 }
 
+/** Direct image view URL for React Native `Image` (share links often fail). */
+export function googleDriveImageViewUrl(fileId: string): string {
+  return `https://drive.google.com/uc?export=view&id=${fileId}`;
+}
+
+export function googleDriveImageThumbnailUrl(fileId: string): string {
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
+}
+
+export function googleDriveImageLh3Url(fileId: string): string {
+  return `https://lh3.googleusercontent.com/d/${fileId}=w2000`;
+}
+
+export function googleDriveImageCandidateUrls(fileId: string): string[] {
+  return [
+    googleDriveImageViewUrl(fileId),
+    googleDriveImageThumbnailUrl(fileId),
+    googleDriveImageLh3Url(fileId),
+  ];
+}
+
 const YOUTUBE_ID = /[a-zA-Z0-9_-]{11}/;
 
 export function extractYouTubeVideoId(url: string): string | null {
@@ -41,9 +73,15 @@ export function extractYouTubeVideoId(url: string): string | null {
 }
 
 export function youtubeEmbedUrl(videoId: string): string {
-  return YOUTUBE_ID.test(videoId)
-    ? `https://www.youtube-nocookie.com/embed/${videoId}`
-    : "";
+  if (!YOUTUBE_ID.test(videoId)) return "";
+  const origin = getAppEmbedOrigin();
+  const params = new URLSearchParams({
+    playsinline: "1",
+    rel: "0",
+    modestbranding: "1",
+    origin,
+  });
+  return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
 }
 
 export function extractVimeoVideoId(url: string): string | null {
@@ -54,7 +92,9 @@ export function extractVimeoVideoId(url: string): string | null {
 }
 
 export function vimeoEmbedUrl(videoId: string): string {
-  return /^\d+$/.test(videoId) ? `https://player.vimeo.com/video/${videoId}` : "";
+  if (!/^\d+$/.test(videoId)) return "";
+  const params = new URLSearchParams({ title: "0", byline: "0", portrait: "0" });
+  return `https://player.vimeo.com/video/${videoId}?${params.toString()}`;
 }
 
 export function extractVideoEmbedUrl(url: string): string | null {
@@ -68,6 +108,8 @@ export function extractVideoEmbedUrl(url: string): string | null {
 function isSupabaseStorageUrl(url: string): boolean {
   return /supabase\.co\/storage\/v1\/object\/(public|sign)\//i.test(url);
 }
+
+export { isSupabaseStorageUrl };
 
 function hasDirectExtension(url: string, kind: MediaKind): boolean {
   const lower = url.toLowerCase();
@@ -111,11 +153,34 @@ export function canPlayMediaUrl(url: string, kind: MediaKind): boolean {
   return hasDirectExtension(trimmed, kind);
 }
 
+/** Apex ↔ www — CDN hotlink rules often differ (e.g. BunnyCDN 403 on www only). */
+export function hostnameWwwVariants(url: string): string[] {
+  try {
+    const parsed = new URL(url.trim());
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(host)) return [];
+    if (host.split(".").length < 2) return [];
+    if (host.endsWith(".supabase.co") || host.endsWith(".supabase.in")) return [];
+    if (isSupabaseStorageUrl(url)) return [];
+
+    const variant = new URL(parsed.toString());
+    if (host.startsWith("www.")) {
+      variant.hostname = host.slice(4);
+    } else {
+      variant.hostname = `www.${host}`;
+    }
+    return variant.hostname === host ? [] : [variant.toString()];
+  } catch {
+    return [];
+  }
+}
+
 export function resolveMediaPlaybackUrl(url: string, kind: MediaKind): string {
   const trimmed = url.trim();
   const driveId = extractGoogleDriveFileId(trimmed);
-  if (driveId && kind === "audio") {
-    return googleDriveAudioStreamUrls(driveId)[0];
+  if (driveId) {
+    if (kind === "audio") return googleDriveAudioStreamUrls(driveId)[0];
+    if (kind === "image") return googleDriveImageViewUrl(driveId);
   }
 
   if (trimmed.includes("dropbox.com")) {
@@ -128,4 +193,66 @@ export function resolveMediaPlaybackUrl(url: string, kind: MediaKind): string {
   }
 
   return trimmed;
+}
+
+/** Ordered URLs to try when loading a card image (redirects / Drive / Dropbox). */
+export function resolveImageCandidateUrls(url: string): string[] {
+  const trimmed = url.trim();
+  if (!trimmed) return [];
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (candidate: string) => {
+    const u = candidate.trim();
+    if (!u || seen.has(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+
+  add(trimmed);
+
+  if (isSupabaseStorageUrl(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      const path = parsed.pathname;
+      if (path.includes("/object/sign/")) {
+        parsed.pathname = path.replace("/object/sign/", "/object/public/");
+        parsed.search = "";
+        add(parsed.toString());
+      }
+    } catch {
+      /* keep original URL only */
+    }
+    return out;
+  }
+
+  for (const variant of hostnameWwwVariants(trimmed)) {
+    add(variant);
+  }
+
+  const driveId = extractGoogleDriveFileId(trimmed);
+  if (driveId) {
+    for (const u of googleDriveImageCandidateUrls(driveId)) add(u);
+  }
+
+  if (trimmed.toLowerCase().includes("dropbox.com")) {
+    add(resolveMediaPlaybackUrl(trimmed, "image"));
+  }
+
+  return out;
+}
+
+/** HTML wrapper so native WebView sends Referer (fixes YouTube Error 153). */
+export function buildEmbedPlayerHtml(embedSrc: string): string {
+  const safeSrc = embedSrc.replace(/"/g, "&quot;");
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000;overflow:hidden}
+iframe{border:0;width:100%;height:100%}</style>
+</head><body>
+<iframe src="${safeSrc}" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture;web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+</body></html>`;
 }

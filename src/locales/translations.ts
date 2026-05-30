@@ -354,6 +354,8 @@ export const translations: Record<Locale, Record<string, string>> = {
       'Could not play audio. Upload a file from your device, or use a public link (Google Drive, Dropbox, or a direct .mp3/.m4a URL).',
     cardVideoError:
       'Could not load video. Use a public Google Drive/Dropbox link or a direct .mp4/.webm/.mov URL.',
+    cardImageError:
+      'Could not load image. Upload from your device, or use a public link (Supabase, Google Drive, or a direct .jpg/.png URL).',
     cardMediaDirectUrlHint:
       'Use a direct file link (.mp3, .mp4), YouTube/Vimeo, Google Drive, or Dropbox with public access.',
     addCardPreviewStudy: 'Preview study',
@@ -1034,6 +1036,8 @@ export const translations: Record<Locale, Record<string, string>> = {
       'Не вдалося відтворити аудіо. Завантажте файл з пристрою або вкажіть публічне посилання (Google Drive, Dropbox, прямий .mp3/.m4a).',
     cardVideoError:
       'Не вдалося завантажити відео. Публічне посилання Google Drive/Dropbox або прямий .mp4/.webm/.mov.',
+    cardImageError:
+      'Не вдалося завантажити зображення. Завантажте з пристрою або вкажіть публічне посилання (Supabase, Google Drive, прямий .jpg/.png).',
     cardMediaDirectUrlHint:
       'Пряме посилання на файл (.mp3, .mp4), YouTube/Vimeo, Google Drive або Dropbox з публічним доступом.',
     addCardPreviewStudy: 'Перегляд у режимі навчання',

@@ -4,6 +4,7 @@ import {
   createElement,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -23,11 +24,15 @@ import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 import type { MediaKind } from "@/src/lib/cardModel";
 import { getCardAudioPlaybackUri } from "@/src/lib/cardAudioCache";
+import { downloadImageToCache } from "@/src/lib/cardImageCache";
 import {
+  buildEmbedPlayerHtml,
   canPlayMediaUrl,
   extractGoogleDriveFileId,
   extractVideoEmbedUrl,
+  getAppEmbedOrigin,
   googleDrivePreviewEmbedUrl,
+  resolveImageCandidateUrls,
   resolveMediaPlaybackUrl,
 } from "@/src/lib/resolveMediaPlaybackUrl";
 
@@ -86,22 +91,29 @@ function CardVideoEmbed({
   return (
     <View style={[boxStyle, { height: Math.max(height, 200) }]}>
       <WebView
-        source={{ uri: embedSrc }}
+        source={{
+          html: buildEmbedPlayerHtml(embedSrc),
+          baseUrl: getAppEmbedOrigin(),
+        }}
         style={styles.video}
         allowsFullscreenVideo
-        mediaPlaybackRequiresUserAction
+        allowsInlineMediaPlayback
         javaScriptEnabled
+        domStorageEnabled
+        mediaPlaybackRequiresUserAction={false}
+        originWhitelist={["*"]}
       />
     </View>
   );
 }
 
-function MediaUrlWarning({ message }: { message: string }) {
+function MediaUrlWarning({ message, style }: { message: string; style?: object }) {
   const C = useAppColors();
   return (
     <View
       style={[
         styles.warnBox,
+        style,
         {
           backgroundColor: C.isDark ? "rgba(239,68,68,0.12)" : "#fef2f2",
           borderColor: C.isDark ? "rgba(239,68,68,0.35)" : "#fecaca",
@@ -109,7 +121,9 @@ function MediaUrlWarning({ message }: { message: string }) {
       ]}
     >
       <Feather name="alert-circle" size={16} color="#ef4444" />
-      <Text style={[styles.warnTxt, { color: C.isDark ? "#fca5a5" : "#b91c1c" }]}>{message}</Text>
+      <Text style={[styles.warnTxt, styles.warnTxtCentered, { color: C.isDark ? "#fca5a5" : "#b91c1c" }]}>
+        {message}
+      </Text>
     </View>
   );
 }
@@ -123,7 +137,7 @@ export function CardSideMedia({ url, kind, layout = "default" }: Props) {
   if (kind === "image") {
     const maxHeight = layout === "list" ? LIST_IMAGE_MAX_HEIGHT : STUDY_IMAGE_MAX_HEIGHT;
     const marginBottom = layout === "list" ? 8 : 12;
-    return <AdaptiveImage url={playbackUrl} maxHeight={maxHeight} marginBottom={marginBottom} />;
+    return <AdaptiveImage url={mediaUrl} maxHeight={maxHeight} marginBottom={marginBottom} />;
   }
 
   if (!canPlayMediaUrl(mediaUrl, kind)) {
@@ -174,23 +188,14 @@ function CardVideo({
     );
   }
 
-  if (driveId && Platform.OS === "web") {
+  if (driveId) {
     return (
-      <View style={[boxStyle, { height: Math.max(height, 200) }]}>
-        {createElement("iframe", {
-          key: driveId,
-          src: googleDrivePreviewEmbedUrl(driveId),
-          title: "Google Drive video",
-          allow: "autoplay; fullscreen",
-          style: {
-            width: "100%",
-            height: "100%",
-            border: "none",
-            borderRadius: 10,
-            display: "block",
-          },
-        })}
-      </View>
+      <CardVideoEmbed
+        embedSrc={googleDrivePreviewEmbedUrl(driveId)}
+        title="Google Drive video"
+        height={height}
+        boxStyle={boxStyle}
+      />
     );
   }
 
@@ -461,7 +466,7 @@ function CardAudio({ url, compact }: { url: string; compact?: boolean }) {
 }
 
 function AdaptiveImage({
-  url,
+  url: sourceUrl,
   maxHeight,
   marginBottom,
 }: {
@@ -469,18 +474,38 @@ function AdaptiveImage({
   maxHeight: number;
   marginBottom: number;
 }) {
+  const { t } = useLanguage();
   const C = useAppColors();
+  const candidates = useMemo(() => resolveImageCandidateUrls(sourceUrl), [sourceUrl]);
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const [cachedUri, setCachedUri] = useState<string | null>(null);
+  const [cacheAttempted, setCacheAttempted] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [ratio, setRatio] = useState<number | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+  const cacheGenRef = useRef(0);
+
+  const remoteUrl = candidates[candidateIndex] ?? sourceUrl.trim();
+  const displayUri = cachedUri ?? remoteUrl;
 
   const applyDimensions = useCallback((w: number, h: number) => {
     if (w > 0 && h > 0) setRatio(h / w);
   }, []);
 
   useEffect(() => {
+    setCandidateIndex(0);
+    setCachedUri(null);
+    setCacheAttempted(false);
+    setFailed(false);
+    setRatio(null);
+    cacheGenRef.current += 1;
+  }, [sourceUrl]);
+
+  useEffect(() => {
+    if (!displayUri || cachedUri) return;
     let cancelled = false;
     Image.getSize(
-      url,
+      displayUri,
       (w, h) => {
         if (!cancelled) applyDimensions(w, h);
       },
@@ -489,7 +514,33 @@ function AdaptiveImage({
     return () => {
       cancelled = true;
     };
-  }, [url, applyDimensions]);
+  }, [displayUri, cachedUri, applyDimensions]);
+
+  const tryNextSource = useCallback(async () => {
+    if (candidateIndex + 1 < candidates.length) {
+      setCandidateIndex((i) => i + 1);
+      setRatio(null);
+      return;
+    }
+
+    if (!cacheAttempted && Platform.OS !== "web") {
+      setCacheAttempted(true);
+      const gen = ++cacheGenRef.current;
+      const local = await downloadImageToCache(sourceUrl);
+      if (gen !== cacheGenRef.current) return;
+      if (local) {
+        setCachedUri(local);
+        setRatio(null);
+        return;
+      }
+    }
+
+    setFailed(true);
+  }, [cacheAttempted, candidateIndex, candidates.length, remoteUrl]);
+
+  if (failed) {
+    return <MediaUrlWarning message={t("cardImageError")} style={{ marginBottom }} />;
+  }
 
   const bg = C.isDark ? C.surfaceAlt : "#f3f4f6";
 
@@ -513,7 +564,8 @@ function AdaptiveImage({
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
       <Image
-        source={{ uri: url }}
+        key={displayUri}
+        source={{ uri: displayUri }}
         style={{
           width: containerWidth > 0 ? imageWidth : "100%",
           height: imageHeight,
@@ -526,6 +578,9 @@ function AdaptiveImage({
           if (source?.width && source?.height) {
             applyDimensions(source.width, source.height);
           }
+        }}
+        onError={() => {
+          void tryNextSource();
         }}
       />
     </View>
@@ -603,6 +658,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     lineHeight: 18,
+  },
+  warnTxtCentered: {
+    textAlign: "center",
   },
   adaptiveImageRow: {
     width: "100%",

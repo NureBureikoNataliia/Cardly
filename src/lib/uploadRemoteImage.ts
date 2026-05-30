@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 
 import type { CardMediaForm, CardMediaSide } from "@/src/lib/cardMedia";
+import { resolveImageCandidateUrls } from "@/src/lib/resolveMediaPlaybackUrl";
 import { CARD_MEDIA_BUCKET } from "@/src/lib/uploadCardAudio";
 import { supabase } from "@/src/lib/supabase";
 
@@ -62,47 +63,55 @@ export async function persistRemoteImageToStorage(params: {
   }
 
   try {
-    const res = await fetch(remoteUrl);
-    if (!res.ok) {
-      return { ok: false, error: `fetch_failed:${res.status}` };
+    const candidates = resolveImageCandidateUrls(remoteUrl);
+    let lastError = "fetch_failed";
+
+    for (const candidate of candidates) {
+      const res = await fetch(candidate);
+      if (!res.ok) {
+        lastError = `fetch_failed:${res.status}`;
+        continue;
+      }
+
+      const data = await res.arrayBuffer();
+      if (data.byteLength > REMOTE_IMAGE_MAX_BYTES) {
+        return { ok: false, error: "too_large" };
+      }
+
+      const contentType = guessImageContentType(candidate, res.headers.get("content-type"));
+      const body = Platform.OS === "web" ? new Blob([data], { type: contentType }) : data;
+
+      const { error: uploadError } = await supabase.storage
+        .from(CARD_MEDIA_BUCKET)
+        .upload(params.storagePath, body, {
+          contentType,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        return { ok: false, error: uploadError.message };
+      }
+
+      const { data: urlData } = supabase.storage
+        .from(CARD_MEDIA_BUCKET)
+        .getPublicUrl(params.storagePath);
+      const publicUrl = urlData.publicUrl?.trim();
+      if (!publicUrl) {
+        return { ok: false, error: "no_public_url" };
+      }
+
+      return { ok: true, publicUrl, storagePath: params.storagePath };
     }
 
-    const data = await res.arrayBuffer();
-    if (data.byteLength > REMOTE_IMAGE_MAX_BYTES) {
-      return { ok: false, error: "too_large" };
-    }
-
-    const contentType = guessImageContentType(remoteUrl, res.headers.get("content-type"));
-    const body = Platform.OS === "web" ? new Blob([data], { type: contentType }) : data;
-
-    const { error: uploadError } = await supabase.storage
-      .from(CARD_MEDIA_BUCKET)
-      .upload(params.storagePath, body, {
-        contentType,
-        upsert: true,
-      });
-
-    if (uploadError) {
-      return { ok: false, error: uploadError.message };
-    }
-
-    const { data: urlData } = supabase.storage
-      .from(CARD_MEDIA_BUCKET)
-      .getPublicUrl(params.storagePath);
-    const publicUrl = urlData.publicUrl?.trim();
-    if (!publicUrl) {
-      return { ok: false, error: "no_public_url" };
-    }
-
-    return { ok: true, publicUrl, storagePath: params.storagePath };
+    return { ok: false, error: lastError };
   } catch (e) {
     const message = e instanceof Error ? e.message : "upload_failed";
     return { ok: false, error: message };
   }
 }
 
-/** Re-upload expiring Pixabay image URLs in a card media form before save. */
-export async function persistExpiringImagesInMediaForm(
+/** Pixabay links expire (~24h) — persist on card save if still temporary. */
+export async function persistRemoteImagesInMediaForm(
   form: CardMediaForm,
   params: { userId: string; deckId: string; cardId?: string | null },
 ): Promise<{ ok: true; form: CardMediaForm } | { ok: false; error: string }> {
@@ -129,6 +138,14 @@ export async function persistExpiringImagesInMediaForm(
   }
 
   return { ok: true, form: next };
+}
+
+/** @deprecated Use {@link persistRemoteImagesInMediaForm} */
+export async function persistExpiringImagesInMediaForm(
+  form: CardMediaForm,
+  params: { userId: string; deckId: string; cardId?: string | null },
+): Promise<{ ok: true; form: CardMediaForm } | { ok: false; error: string }> {
+  return persistRemoteImagesInMediaForm(form, params);
 }
 
 export async function persistDeckCoverUrlIfNeeded(params: {

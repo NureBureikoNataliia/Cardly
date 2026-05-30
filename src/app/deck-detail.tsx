@@ -1176,14 +1176,10 @@ function StatChip({
 }) {
   return (
     <View style={styles.statChip}>
-      <View
-        style={[
-          styles.statChipValueWrap,
-          onInfoPress ? styles.statChipValueWrapWithInfo : null,
-        ]}
-      >
-        <Text style={[styles.statChipValue, { color }]}>{value}</Text>
-        {onInfoPress ? (
+      {onInfoPress ? (
+        <View style={styles.statChipValueRow}>
+          <View style={styles.statChipInfoSpacer} />
+          <Text style={[styles.statChipValue, { color }]}>{value}</Text>
           <Pressable
             style={styles.statChipInfoBtn}
             onPress={onInfoPress}
@@ -1193,9 +1189,13 @@ function StatChip({
           >
             <Feather name="info" size={13} color={color} />
           </Pressable>
-        ) : null}
-      </View>
-      <Text style={styles.statChipLabel}>{label}</Text>
+        </View>
+      ) : (
+        <Text style={[styles.statChipValue, { color }]}>{value}</Text>
+      )}
+      <Text style={styles.statChipLabel} numberOfLines={2}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -1500,24 +1500,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
   },
   statsDivider: { width: 1, height: 40, backgroundColor: "#f0f1f5" },
-  statChip: { flex: 1, alignItems: "center", gap: 4, minWidth: 0 },
-  statChipValueWrap: {
-    position: "relative",
-    alignSelf: "center",
-    overflow: "visible",
+  statChip: { flex: 1, alignItems: "center", gap: 4, minWidth: 0, paddingHorizontal: 2 },
+  statChipValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
   },
-  statChipValueWrapWithInfo: {
-    marginTop: 4,
+  statChipInfoSpacer: {
+    width: 17,
+    height: 17,
   },
   statChipInfoBtn: {
-    position: "absolute",
-    top: -5,
-    left: "100%",
-    marginLeft: 8,
-    padding: 2,
+    width: 17,
+    height: 17,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  statChipValue: { fontSize: 18, fontWeight: "800" },
-  statChipLabel: { fontSize: 11, color: "#9ca3af", fontWeight: "500" },
+  statChipValue: { fontSize: 18, fontWeight: "800", textAlign: "center" },
+  statChipLabel: { fontSize: 11, color: "#9ca3af", fontWeight: "500", textAlign: "center" },
 
   /* ── PROGRESS ── */
   progressWrap: { marginHorizontal: 16, marginTop: 12 },
