@@ -301,9 +301,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardTypeCloze: 'Cloze',
     cardFormIntroBasic:
       'Left: what you study. Right: the answer after you flip. Fill at least one field to save.',
-    cardFormEmpty: 'Fill in at least one field to save the card.',
+    cardFormEmpty: 'Each side needs text or media. Notes alone are not enough.',
     cardFormReversedPairNeedsBothSides:
-      'To create a reverse card too, fill in both the front and the back.',
+      'To create a reverse card too, both sides need text or media.',
     clozeIntro:
       'Left: sentence with a gap. Right: hidden answer. Fill at least one field to save.',
     clozeFieldBefore: 'Text before the gap',
@@ -982,9 +982,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardTypeCloze: 'З пропуском',
     cardFormIntroBasic:
       'Ліворуч — питання, праворуч — відповідь після перевертання. Для збереження достатньо одного заповненого поля.',
-    cardFormEmpty: 'Заповніть хоча б одне поле, щоб зберегти картку.',
+    cardFormEmpty: 'На кожній стороні потрібен текст або медіа. Самих нотаток недостатньо.',
     cardFormReversedPairNeedsBothSides:
-      'Щоб створити зворотну картку, заповніть і лицьову, і зворотну сторону.',
+      'Щоб створити зворотну картку, на обох сторонах має бути текст або медіа.',
     clozeIntro:
       'Ліворуч — речення з пропуском, праворуч — відповідь. Для збереження достатньо одного заповненого поля.',
     clozeFieldBefore: 'Текст до пропуску',

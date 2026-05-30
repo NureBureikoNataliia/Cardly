@@ -60,6 +60,7 @@ import {
   type CardMediaSide,
 } from "@/src/lib/cardMedia";
 import {
+  basicCardSideHasContent,
   hasAnyBasicFormContent,
   hasAnyClozeFormContent,
   isCardFormValid,
@@ -652,21 +653,25 @@ function CardEditorForm({
       },
       mediaForm,
     );
-    const validationOptions = {
-      requireBasicBothSides: cardType === "basic" && createReversedPair,
-    };
-    const ok = isCardFormValid(cardType, formFields, validationOptions);
+    const ok = isCardFormValid(cardType, formFields);
     if (!ok) {
-      if (
-        cardType === "basic" &&
-        createReversedPair &&
-        hasAnyBasicFormContent(formFields) &&
-        !isCardFormValid(cardType, formFields, { requireBasicBothSides: true })
-      ) {
-        setErrorModal(t("cardFormReversedPairNeedsBothSides"));
-      } else {
-        setErrorModal(t("cardFormEmpty"));
+      if (cardType === "basic" && createReversedPair && hasAnyBasicFormContent(formFields)) {
+        const frontFilled = basicCardSideHasContent(
+          formFields.frontText,
+          formFields.mediaForm,
+          "front",
+        );
+        const backFilled = basicCardSideHasContent(
+          formFields.backText,
+          formFields.mediaForm,
+          "back",
+        );
+        if (!frontFilled || !backFilled) {
+          setErrorModal(t("cardFormReversedPairNeedsBothSides"));
+          return;
+        }
       }
+      setErrorModal(t("cardFormEmpty"));
       return;
     }
 
@@ -856,10 +861,7 @@ function CardEditorForm({
     },
     mediaForm,
   );
-  const validationOptions = {
-    requireBasicBothSides: cardType === "basic" && createReversedPair,
-  };
-  const isValid = isCardFormValid(cardType, formFields, validationOptions);
+  const isValid = isCardFormValid(cardType, formFields);
   const canSave = isValid && (!isEdit || hasChanges);
   const showPairStudySwitcher =
     cardType === "basic" && createReversedPair && !isEdit;

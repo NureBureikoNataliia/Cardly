@@ -14,19 +14,12 @@ export type CardFormFields = {
   mediaForm: CardMediaForm;
 };
 
-export type CardFormValidationOptions = {
-  /** Reversed pair: require text on both basic sides (not media-only). */
-  requireBasicBothSides?: boolean;
-};
-
-function basicSideHasContent(
+/** Text or valid media on one basic-card side (notes do not count). */
+export function basicCardSideHasContent(
   text: string,
   mediaForm: CardMediaForm,
   side: CardMediaSide,
-  includeNotesOnFront: boolean,
-  notes: string,
 ): boolean {
-  if (side === "front" && includeNotesOnFront && notes.trim().length > 0) return true;
   return text.trim().length > 0 || hasValidMediaFormSideContent(mediaForm, side);
 }
 
@@ -54,7 +47,6 @@ export function hasAnyBasicFormContent(fields: CardFormFields): boolean {
   return (
     fields.frontText.trim().length > 0 ||
     fields.backText.trim().length > 0 ||
-    fields.notes.trim().length > 0 ||
     hasMediaFormContent(fields.mediaForm)
   );
 }
@@ -66,11 +58,7 @@ export function hasAnyClozeFormContent(fields: CardFormFields): boolean {
   );
 }
 
-export function isCardFormValid(
-  cardType: CardTypeName,
-  fields: CardFormFields,
-  options?: CardFormValidationOptions,
-): boolean {
+export function isCardFormValid(cardType: CardTypeName, fields: CardFormFields): boolean {
   if (!isCardMediaFormUrlsValid(fields.mediaForm)) return false;
 
   if (cardType === "cloze") {
@@ -80,17 +68,8 @@ export function isCardFormValid(
     );
   }
 
-  if (options?.requireBasicBothSides) {
-    return fields.frontText.trim().length > 0 && fields.backText.trim().length > 0;
-  }
-
   return (
-    basicSideHasContent(
-      fields.frontText,
-      fields.mediaForm,
-      "front",
-      true,
-      fields.notes,
-    ) && basicSideHasContent(fields.backText, fields.mediaForm, "back", false, fields.notes)
+    basicCardSideHasContent(fields.frontText, fields.mediaForm, "front") &&
+    basicCardSideHasContent(fields.backText, fields.mediaForm, "back")
   );
 }
