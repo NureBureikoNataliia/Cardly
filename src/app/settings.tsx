@@ -354,8 +354,8 @@ export default function SettingsScreen() {
     ><View style={styles.content}>
       <Text style={styles.title}>{t('account')}</Text>
 
-      <View style={[styles.topMenuCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-        <Text style={styles.topMenuTitle}>{t('settings')}</Text>
+      <RNView style={[styles.topMenuCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+        <Text style={[styles.topMenuTitle, { color: C.text }]}>{t('settings')}</Text>
         <Text style={[styles.topMenuSubtitle, { color: C.textSub }]}>{t('settingsMenuSubtitle')}</Text>
         <RNView style={styles.topMenuTabs}>
           {(['account', 'notifications', 'learning'] as const).map((sec) => {
@@ -366,22 +366,28 @@ export default function SettingsScreen() {
                 style={[
                   styles.topMenuTab,
                   { backgroundColor: C.surface, borderColor: C.border },
-                  isActive && { backgroundColor: C.isDark ? C.tint : '#111827', borderColor: C.isDark ? C.tint : '#111827' },
+                  isActive && { backgroundColor: C.aiButtonFill, borderColor: C.aiButtonFill },
                 ]}
                 onPress={() => setActiveSection(sec)}
               >
-                <Text style={[styles.topMenuTabText, isActive && styles.topMenuTabTextActive]}>
+                <Text
+                  style={[
+                    styles.topMenuTabText,
+                    { color: isActive ? '#fff' : C.textSub },
+                    isActive && styles.topMenuTabTextActive,
+                  ]}
+                >
                   {sec === 'account' ? t('accountSettingsTab') : sec === 'notifications' ? t('notificationsTab') : t('learningTab')}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </RNView>
-      </View>
+      </RNView>
 
       {activeSection === 'account' ? (
-      <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
-        <Text style={[styles.sectionHeader, compactAccount && styles.sectionHeaderCompact]}>
+      <RNView style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
+        <Text style={[styles.sectionHeader, { color: C.text }, compactAccount && styles.sectionHeaderCompact]}>
           {t('account')}
         </Text>
 
@@ -454,7 +460,7 @@ export default function SettingsScreen() {
         {!editingField && renderFieldFeedback('avatar')}
 
           <RNView style={[styles.securitySection, { borderTopColor: C.border }]}>
-          <Text style={[styles.securityTitle, compactAccount && styles.securityTitleCompact]}>
+          <Text style={[styles.securityTitle, { color: C.textSub }, compactAccount && styles.securityTitleCompact]}>
             {t('accountSecurity')}
           </Text>
 
@@ -522,10 +528,10 @@ export default function SettingsScreen() {
             ) : (
               <TouchableOpacity
                 style={[
-                  styles.buttonOutline,
+                  styles.buttonApp,
                   styles.infoRowAction,
-                  compactAccount && styles.buttonOutlineCompact,
-                  { backgroundColor: C.surface, borderColor: C.border },
+                  compactAccount && styles.buttonAppCompact,
+                  { backgroundColor: C.aiAccentBg, borderColor: C.aiAccentBorder },
                 ]}
                 onPress={() => {
                   resetFieldFromUser('username');
@@ -535,7 +541,7 @@ export default function SettingsScreen() {
                 }}
                 disabled={deletingAccount}
               >
-                <Text style={[styles.buttonOutlineText, { color: C.text }]}>{t('change')}</Text>
+                <Text style={[styles.buttonAppText, { color: C.tint }]}>{t('change')}</Text>
               </TouchableOpacity>
             )}
           </RNView>
@@ -607,10 +613,10 @@ export default function SettingsScreen() {
             ) : (
               <TouchableOpacity
                 style={[
-                  styles.buttonOutline,
+                  styles.buttonApp,
                   styles.infoRowAction,
-                  compactAccount && styles.buttonOutlineCompact,
-                  { backgroundColor: C.surface, borderColor: C.border },
+                  compactAccount && styles.buttonAppCompact,
+                  { backgroundColor: C.aiAccentBg, borderColor: C.aiAccentBorder },
                 ]}
                 onPress={() => {
                   resetFieldFromUser('email');
@@ -620,7 +626,7 @@ export default function SettingsScreen() {
                 }}
                 disabled={deletingAccount}
               >
-                <Text style={[styles.buttonOutlineText, { color: C.text }]}>{t('change')}</Text>
+                <Text style={[styles.buttonAppText, { color: C.tint }]}>{t('change')}</Text>
               </TouchableOpacity>
             )}
           </RNView>
@@ -633,15 +639,7 @@ export default function SettingsScreen() {
             </RNView>
           </RNView>
 
-          <RNView
-            style={[
-              styles.deleteInlineBlock,
-              {
-                borderTopColor: C.border,
-                backgroundColor: C.isDark ? 'rgba(239, 68, 68, 0.06)' : 'rgba(254, 242, 242, 0.65)',
-              },
-            ]}
-          >
+          <RNView style={[styles.deleteInlineBlock, { borderTopColor: C.border }]}>
             <RNView style={[styles.infoRow, styles.infoRowAlignTop]}>
               <RNView style={styles.infoRowText}>
                 <Text style={[styles.infoLabel, { color: C.text }]}>{t('deleteAccount')}</Text>
@@ -649,57 +647,40 @@ export default function SettingsScreen() {
               </RNView>
               <TouchableOpacity
                 style={[
-                  styles.deleteButtonInline,
+                  styles.buttonDangerOutline,
                   styles.infoRowActionShrink,
-                  compactAccount && styles.deleteButtonInlineCompact,
+                  compactAccount && styles.buttonAppCompact,
                   deletingAccount && styles.buttonDisabled,
                   {
-                    backgroundColor: '#dc2626',
-                    borderColor: C.isDark ? '#f87171' : '#b91c1c',
+                    borderColor: C.isDark ? 'rgba(248,113,113,0.5)' : '#fecaca',
+                    backgroundColor: C.isDark ? 'rgba(239,68,68,0.12)' : '#fef2f2',
                   },
                 ]}
                 onPress={() => setDeleteModalVisible(true)}
                 disabled={deletingAccount}
               >
-                <Text style={styles.deleteButtonInlineText}>{t('delete')}</Text>
+                <Text style={[styles.buttonDangerOutlineText, { color: C.isDark ? '#fca5a5' : '#dc2626' }]}>
+                  {t('delete')}
+                </Text>
               </TouchableOpacity>
-            </RNView>
-            <RNView
-              style={[
-                styles.deleteWarningBox,
-                {
-                  backgroundColor: C.isDark ? 'rgba(239, 68, 68, 0.18)' : '#fef2f2',
-                  borderColor: C.isDark ? 'rgba(248, 113, 113, 0.4)' : '#fecaca',
-                },
-              ]}
-            >
-              <Feather
-                name="alert-triangle"
-                size={16}
-                color={C.isDark ? '#fca5a5' : '#dc2626'}
-                style={styles.deleteWarningIcon}
-              />
-              <Text
-                style={[
-                  styles.deleteWarningText,
-                  { color: C.isDark ? '#fecaca' : '#b91c1c' },
-                ]}
-              >
-                {t('deleteAccountWarning')}
-              </Text>
             </RNView>
             {renderFieldFeedback('delete')}
           </RNView>
         </RNView>
-      </View>
+      </RNView>
       ) : activeSection === 'notifications' ? (
-        <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
-          <Text style={styles.sectionHeader}>{t('notificationsTab')}</Text>
+        <RNView style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.sectionHeader, { color: C.text }]}>{t('notificationsTab')}</Text>
 
           {/* Browser note */}
-          <RNView style={styles.notifNote}>
-            <Feather name="info" size={14} color="#6366f1" />
-            <Text style={styles.notifNoteTxt}>{t('notifBrowserNote')}</Text>
+          <RNView
+            style={[
+              styles.notifNote,
+              { backgroundColor: C.aiAccentBg, borderColor: C.aiAccentBorder },
+            ]}
+          >
+            <Feather name="info" size={14} color={C.tint} />
+            <Text style={[styles.notifNoteTxt, { color: C.textSub }]}>{t('notifBrowserNote')}</Text>
           </RNView>
 
           {/* Study reminder */}
@@ -786,7 +767,7 @@ export default function SettingsScreen() {
             </RNView>
             <TouchableOpacity
               style={[
-                styles.notifTestBtn,
+                styles.primaryBtn,
                 { backgroundColor: C.aiButtonFill },
                 testPushLoading && styles.buttonDisabled,
               ]}
@@ -797,7 +778,7 @@ export default function SettingsScreen() {
               {testPushLoading ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.notifTestBtnTxt}>{t('adminSendTestPush')}</Text>
+                <Text style={styles.primaryBtnTxt}>{t('adminSendTestPush')}</Text>
               )}
             </TouchableOpacity>
             {testPushMsg ? (
@@ -819,10 +800,10 @@ export default function SettingsScreen() {
               {notifMsg}
             </Text>
           )}
-        </View>
+        </RNView>
       ) : (
-        <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
-          <Text style={styles.sectionHeader}>{t('studySettings')}</Text>
+        <RNView style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.sectionHeader, { color: C.text }]}>{t('studySettings')}</Text>
           <Text style={styles.fieldLabel}>{t('srsDayStartTitle')}</Text>
           <Text style={styles.infoSubText}>{t('srsDayStartHint')}</Text>
           <RNView style={styles.srsHourRow}>
@@ -854,7 +835,7 @@ export default function SettingsScreen() {
               <Feather name="plus" size={22} color={C.text} />
             </TouchableOpacity>
           </RNView>
-        </View>
+        </RNView>
       )}
 
       <ConfirmModal
@@ -871,6 +852,17 @@ export default function SettingsScreen() {
     </View></ScrollView>
   );
 }
+
+const flatSurface = Platform.select({
+  web: { boxShadow: 'none' as const },
+  default: {
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -891,19 +883,21 @@ const styles = StyleSheet.create({
   },
   topMenuCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#eceff3',
-    gap: 12,
+    gap: 10,
+    overflow: 'hidden',
+    ...flatSurface,
   },
   topMenuTitle: {
-    fontSize: 34,
+    fontSize: 22,
     fontWeight: '700',
   },
   topMenuSubtitle: {
-    fontSize: 16,
-    marginTop: -6,
+    fontSize: 14,
+    lineHeight: 20,
   },
   topMenuTabs: {
     flexDirection: 'row',
@@ -913,17 +907,17 @@ const styles = StyleSheet.create({
   topMenuTab: {
     borderWidth: 1,
     borderColor: '#d1d5db',
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     backgroundColor: '#fff',
   },
   topMenuTabActive: {
-    backgroundColor: '#111827',
-    borderColor: '#111827',
+    backgroundColor: '#4255ff',
+    borderColor: '#4255ff',
   },
   topMenuTabText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   topMenuTabTextActive: {
@@ -934,18 +928,20 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    gap: 18,
+    borderRadius: 14,
+    padding: 16,
+    gap: 14,
     borderWidth: 1,
     borderColor: '#eceff3',
+    overflow: 'hidden',
+    ...flatSurface,
   },
   sectionHeader: {
-    fontSize: 34,
+    fontSize: 18,
     fontWeight: '700',
   },
   sectionHeaderCompact: {
-    fontSize: 26,
+    fontSize: 17,
   },
   accountTopRow: {
     flexDirection: 'row',
@@ -955,15 +951,15 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   avatar: {
-    width: 116,
-    height: 116,
-    borderRadius: 58,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     backgroundColor: '#e5e7eb',
   },
   avatarFallback: {
-    width: 116,
-    height: 116,
-    borderRadius: 58,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     backgroundColor: '#65a30d',
     alignItems: 'center',
     justifyContent: 'center',
@@ -983,25 +979,27 @@ const styles = StyleSheet.create({
   },
   avatarFallbackText: {
     color: '#fff',
-    fontSize: 56,
-    fontWeight: '500',
+    fontSize: 40,
+    fontWeight: '600',
   },
   editBlock: {
     gap: 8,
   },
   securitySection: {
-    marginTop: 8,
-    gap: 20,
-    borderTopWidth: 1,
+    marginTop: 4,
+    gap: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#e5e7eb',
-    paddingTop: 18,
+    paddingTop: 14,
   },
   securityTitle: {
-    fontSize: 32,
+    fontSize: 13,
     fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   securityTitleCompact: {
-    fontSize: 22,
+    fontSize: 13,
   },
   infoRow: {
     flexDirection: 'row',
@@ -1034,11 +1032,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   infoLabel: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
   },
   infoValue: {
-    fontSize: 16,
+    fontSize: 15,
   },
   infoSubText: {
     fontSize: 14,
@@ -1069,18 +1067,31 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'stretch',
   },
-  buttonOutline: {
+  buttonApp: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 999,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     flexShrink: 0,
   },
-  buttonOutlineCompact: {
+  buttonAppCompact: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  buttonAppText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  buttonDangerOutline: {
+    borderWidth: 1,
+    borderRadius: 10,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 8,
+    flexShrink: 0,
+  },
+  buttonDangerOutlineText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   buttonSecondaryFlex: {
     flex: 1,
@@ -1091,10 +1102,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-  },
-  buttonOutlineText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
   buttonGhost: {
     paddingHorizontal: 8,
@@ -1125,47 +1132,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   deleteInlineBlock: {
-    gap: 12,
-    marginTop: 8,
-    paddingTop: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 4,
-    paddingBottom: 4,
-  },
-  deleteButtonInline: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  deleteButtonInlineCompact: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  deleteButtonInlineText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  deleteWarningBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
+    marginTop: 4,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  deleteWarningIcon: {
-    marginTop: 2,
-    flexShrink: 0,
+  primaryBtn: {
+    alignSelf: 'stretch',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
-  deleteWarningText: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
+  primaryBtnTxt: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -1191,11 +1175,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   notifNote: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    backgroundColor: '#EEF2FF', borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
     padding: 12,
   },
-  notifNoteTxt: { flex: 1, fontSize: 13, color: '#4338ca', lineHeight: 18 },
+  notifNoteTxt: { flex: 1, fontSize: 13, lineHeight: 18 },
   notifRow: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', gap: 12,
@@ -1203,20 +1190,16 @@ const styles = StyleSheet.create({
   },
   notifRowLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 },
   notifIconWrap: {
-    width: 46, height: 46, borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: '#EEF2FF',
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   notifRowText: { flex: 1, gap: 5 },
   notifDivider: { height: 1, backgroundColor: '#f3f4f6' },
   notifTestSection: { gap: 12, paddingVertical: 4 },
-  notifTestBtn: {
-    alignSelf: 'flex-start',
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 12,
-  },
-  notifTestBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '600' },
   notifTestMsg: { fontSize: 13, lineHeight: 18 },
   notifTimeRow: { paddingLeft: 60, gap: 8 },
   notifTimeRowCompact: {

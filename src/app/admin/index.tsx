@@ -21,6 +21,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { supabase } from '@/src/lib/supabase';
 import { useAppColors } from '@/src/contexts/ThemeContext';
+import { getComplaintIssueLabelKey } from '@/src/constants/deckComplaints';
 
 /* ─── Types ─── */
 type Stats = {
@@ -600,7 +601,9 @@ export default function AdminPanelScreen() {
                       <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
                         <View style={styles.cardHead}>
                           <View style={[styles.issueBadge, C.isDark && { backgroundColor: 'rgba(217,119,6,0.15)', borderColor: '#92400e' }]}>
-                            <Text style={[styles.issueTxt, C.isDark && { color: '#fbbf24' }]}>{row.issue_key}</Text>
+                            <Text style={[styles.issueTxt, C.isDark && { color: '#fbbf24' }]}>
+                            {t(getComplaintIssueLabelKey(row.issue_key))}
+                          </Text>
                           </View>
                           <Text style={[styles.cardDate, { color: C.textMuted }]}>
                             {new Date(row.created_at).toLocaleDateString()}
@@ -650,7 +653,7 @@ export default function AdminPanelScreen() {
                             activeOpacity={0.8}
                           >
                             <Feather name="trash-2" size={14} color="#fff" />
-                            <Text style={styles.btnDangerTxt}>{t('adminDeleteCard')}</Text>
+                            <Text style={styles.btnDangerTxt}>{t('delete')}</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -664,7 +667,9 @@ export default function AdminPanelScreen() {
                       <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
                         <View style={styles.cardHead}>
                           <View style={[styles.issueBadge, C.isDark && { backgroundColor: 'rgba(217,119,6,0.15)', borderColor: '#92400e' }]}>
-                            <Text style={[styles.issueTxt, C.isDark && { color: '#fbbf24' }]}>{row.issue_key}</Text>
+                            <Text style={[styles.issueTxt, C.isDark && { color: '#fbbf24' }]}>
+                            {t(getComplaintIssueLabelKey(row.issue_key))}
+                          </Text>
                           </View>
                           <Text style={[styles.cardDate, { color: C.textMuted }]}>
                             {new Date(row.created_at).toLocaleDateString()}
@@ -715,7 +720,7 @@ export default function AdminPanelScreen() {
                             activeOpacity={0.8}
                           >
                             <Feather name="trash-2" size={14} color="#fff" />
-                            <Text style={styles.btnDangerTxt}>{t('adminDeleteComment')}</Text>
+                            <Text style={styles.btnDangerTxt}>{t('delete')}</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -729,7 +734,9 @@ export default function AdminPanelScreen() {
                       {/* Card header */}
                       <View style={styles.cardHead}>
                         <View style={[styles.issueBadge, C.isDark && { backgroundColor: 'rgba(217,119,6,0.15)', borderColor: '#92400e' }]}>
-                          <Text style={[styles.issueTxt, C.isDark && { color: '#fbbf24' }]}>{row.issue_key}</Text>
+                          <Text style={[styles.issueTxt, C.isDark && { color: '#fbbf24' }]}>
+                            {t(getComplaintIssueLabelKey(row.issue_key))}
+                          </Text>
                         </View>
                         <Text style={[styles.cardDate, { color: C.textMuted }]}>
                           {new Date(row.created_at).toLocaleDateString()}
@@ -781,7 +788,7 @@ export default function AdminPanelScreen() {
                           activeOpacity={0.8}
                         >
                           <Feather name="trash-2" size={14} color="#fff" />
-                          <Text style={styles.btnDangerTxt}>{t('adminDeleteDeck')}</Text>
+                          <Text style={styles.btnDangerTxt}>{t('delete')}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -1012,7 +1019,7 @@ export default function AdminPanelScreen() {
         visible={Boolean(deckToDelete)}
         title={t('adminDeleteDeck')}
         message={t('adminDeleteDeckConfirm')}
-        confirmText={t('adminDeleteDeck')}
+        confirmText={t('delete')}
         cancelText={t('cancel')}
         destructive
         icon="trash-2"
@@ -1054,7 +1061,7 @@ export default function AdminPanelScreen() {
         visible={Boolean(commentComplaintReviewToDelete)}
         title={t('adminDeleteComment')}
         message={t('adminDeleteCommentConfirm')}
-        confirmText={t('adminDeleteComment')}
+        confirmText={t('delete')}
         cancelText={t('cancel')}
         destructive
         icon="trash-2"
@@ -1065,7 +1072,7 @@ export default function AdminPanelScreen() {
         visible={Boolean(cardToDelete)}
         title={t('adminDeleteCard')}
         message={t('adminDeleteCardConfirm')}
-        confirmText={t('adminDeleteCard')}
+        confirmText={t('delete')}
         cancelText={t('cancel')}
         destructive
         icon="trash-2"
@@ -1282,7 +1289,13 @@ const styles = StyleSheet.create({
   aiLabel: { fontSize: 11, fontWeight: '700', color: '#6366f1', textTransform: 'uppercase' },
   aiTxt: { fontSize: 13, color: '#475569', lineHeight: 18 },
 
-  cardActions: { flexDirection: 'row', gap: 8, marginTop: 4, justifyContent: 'flex-end' },
+  cardActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+    justifyContent: 'flex-end',
+  },
   btnDismiss: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0',

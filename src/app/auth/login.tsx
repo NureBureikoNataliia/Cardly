@@ -45,7 +45,7 @@ export default function LoginScreen() {
       setError(mapAuthErrorMessage(error, t));
       setLoading(false);
     } else {
-      router.replace((adminFlag ? '/admin' : '/(tabs)') as never);
+      router.replace('/(tabs)'as never);
     }
   };
 

@@ -25,6 +25,8 @@ import { useAppColors } from '@/src/contexts/ThemeContext';
 import { useLayoutWidth } from '@/src/hooks/useLayoutWidth';
 import { generateDeckDescription, generateCardImageUrl } from '@/src/lib/gemini';
 import { keyboardAvoidingBehavior } from '@/src/lib/keyboardAvoiding';
+import { persistDeckCoverUrlIfNeeded } from '@/src/lib/uploadRemoteImage';
+import { uploadAudioErrorKey } from '@/src/lib/uploadCardAudio';
 
 export default function AddDeckScreen() {
   const router = useRouter();
@@ -90,13 +92,35 @@ export default function AddDeckScreen() {
     setIsSaving(true);
     setError(null);
 
+    let coverToSave = coverUrl.trim() || null;
+    if (coverToSave) {
+      const persisted = await persistDeckCoverUrlIfNeeded({
+        coverUrl: coverToSave,
+        userId: user.id,
+        deckId,
+      });
+      if (!persisted.ok) {
+        const key = uploadAudioErrorKey(persisted.error);
+        const byKey: Record<string, string> = {
+          too_large: t('uploadAudioTooLarge'),
+          not_authenticated: t('uploadAudioNeedLogin'),
+          bucket_missing: t('uploadAudioBucketMissing'),
+          permission: t('uploadAudioPermission'),
+        };
+        setError(byKey[key] ?? t('aiImageUploadFailed'));
+        setIsSaving(false);
+        return;
+      }
+      coverToSave = persisted.url || null;
+    }
+
     if (isEdit && deckId) {
       const { error: e } = await supabase
         .from('decks')
         .update({
           title: title.trim(),
           description: description.trim() || null,
-          cover_image_url: coverUrl.trim() || null,
+          cover_image_url: coverToSave,
           is_public: isPublic,
         })
         .eq('deck_id', deckId)
@@ -109,7 +133,7 @@ export default function AddDeckScreen() {
           creator_id: user.id,
           title: title.trim(),
           description: description.trim() || null,
-          cover_image_url: coverUrl.trim() || null,
+          cover_image_url: coverToSave,
           is_public: isPublic,
         })
         .select('*')
@@ -261,7 +285,19 @@ export default function AddDeckScreen() {
                     onPress={async () => {
                       if (!title.trim()) return;
                       setIsAiCover(true);
-                      const result = await generateCardImageUrl(title.trim(), title.trim(), description || null, 'front');
+                      const result = await generateCardImageUrl(
+                        title.trim(),
+                        title.trim(),
+                        description || null,
+                        'front',
+                        user
+                          ? {
+                              userId: user.id,
+                              deckId,
+                              kind: 'deck-cover',
+                            }
+                          : undefined,
+                      );
                       setIsAiCover(false);
                       if (result.ok) {
                         setCoverUrl(result.url);
@@ -270,6 +306,10 @@ export default function AddDeckScreen() {
                         setError(t('aiErrorQuota'));
                       } else if (result.reason === 'no_match') {
                         setError(t('aiErrorNoImage'));
+                      } else if (result.reason === 'not_authenticated') {
+                        setError(t('uploadAudioNeedLogin'));
+                      } else if (result.reason === 'upload_failed') {
+                        setError(t('aiImageUploadFailed'));
                       }
                     }}
                   >

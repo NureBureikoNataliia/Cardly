@@ -4,6 +4,11 @@
  */
 
 import { geminiGenerateText } from '@/src/lib/geminiRequest';
+import {
+  buildCardImageStoragePath,
+  buildDeckCoverStoragePath,
+  persistRemoteImageToStorage,
+} from '@/src/lib/uploadRemoteImage';
 
 type GeminiCallResult = { text: string | null; quotaExceeded: boolean };
 
@@ -323,13 +328,50 @@ Rules:
 
 export type ImageGenResult =
   | { ok: true; url: string }
-  | { ok: false; reason: 'quota' | 'no_match' | 'no_pixabay_key' };
+  | {
+      ok: false;
+      reason: 'quota' | 'no_match' | 'no_pixabay_key' | 'upload_failed' | 'not_authenticated';
+    };
+
+export type ImagePersistContext = {
+  userId: string;
+  deckId?: string | null;
+  cardId?: string | null;
+  kind: 'deck-cover' | 'card-image';
+  side?: 'front' | 'back';
+};
+
+async function persistPixabayUrl(
+  remoteUrl: string,
+  persist: ImagePersistContext,
+): Promise<ImageGenResult> {
+  const storagePath =
+    persist.kind === 'deck-cover'
+      ? buildDeckCoverStoragePath(persist.userId, persist.deckId)
+      : buildCardImageStoragePath(
+          persist.userId,
+          persist.deckId ?? 'pending',
+          persist.cardId,
+          persist.side ?? 'front',
+        );
+
+  const stored = await persistRemoteImageToStorage({ remoteUrl, storagePath });
+  if (!stored.ok) {
+    if (stored.error === 'not_authenticated') {
+      return { ok: false, reason: 'not_authenticated' };
+    }
+    console.warn('[AI image] Storage upload failed:', stored.error);
+    return { ok: false, reason: 'upload_failed' };
+  }
+  return { ok: true, url: stored.publicUrl };
+}
 
 export async function generateCardImageUrl(
   frontText: string,
   deckTitle: string,
   deckDescription?: string | null,
   side: 'front' | 'back' = 'front',
+  persist?: ImagePersistContext,
 ): Promise<ImageGenResult> {
   const pixabayKey = process.env.EXPO_PUBLIC_PIXABAY_API_KEY?.trim();
   if (!pixabayKey) return { ok: false, reason: 'no_pixabay_key' };
@@ -367,7 +409,10 @@ export async function generateCardImageUrl(
 
     for (const words of searchPlans) {
       const imgUrl = await fetchPixabayImage(pixabayKey, words, category);
-      if (imgUrl) return { ok: true, url: imgUrl };
+      if (imgUrl) {
+        if (persist) return persistPixabayUrl(imgUrl, persist);
+        return { ok: true, url: imgUrl };
+      }
     }
 
     return { ok: false, reason: quotaExceeded ? 'quota' : 'no_match' };

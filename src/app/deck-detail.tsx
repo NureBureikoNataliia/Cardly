@@ -535,7 +535,7 @@ export default function DeckDetailScreen() {
       <ScrollView
         ref={scrollViewRef}
         style={[styles.root, { backgroundColor: C.bg }]}
-        contentContainerStyle={[styles.contentOuter, { width: pageWidth }]}
+        contentContainerStyle={styles.contentOuter}
         onScroll={(e) => { if (deckId) scrollPositions[deckId] = e.nativeEvent.contentOffset.y; }}
         scrollEventThrottle={100}
         showsVerticalScrollIndicator={Platform.OS === 'web'}
@@ -1401,7 +1401,7 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
 /* ═══════════════════ STYLES ═══════════════════ */
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  contentOuter: { alignSelf: "stretch", paddingBottom: 40 },
+  contentOuter: { alignSelf: "stretch", alignItems: "center", paddingBottom: 40 },
   pageWrap: { alignSelf: "center", paddingHorizontal: 0 },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
