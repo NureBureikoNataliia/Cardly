@@ -23,6 +23,7 @@ import { WebView } from "react-native-webview";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 import type { MediaKind } from "@/src/lib/cardModel";
+import { mediaLoadErrorMessageKey } from "@/src/lib/cardMedia";
 import { getCardAudioPlaybackUri } from "@/src/lib/cardAudioCache";
 import { downloadImageToCache } from "@/src/lib/cardImageCache";
 import {
@@ -43,6 +44,8 @@ type Props = {
   kind: MediaKind;
   /** `list` — height follows media/content (deck card list). */
   layout?: Layout;
+  /** Study preview in add-card — keeps video controls tappable on mobile. */
+  preview?: boolean;
 };
 
 const LIST_IMAGE_MAX_HEIGHT = 280;
@@ -128,7 +131,7 @@ function MediaUrlWarning({ message, style }: { message: string; style?: object }
   );
 }
 
-export function CardSideMedia({ url, kind, layout = "default" }: Props) {
+export function CardSideMedia({ url, kind, layout = "default", preview = false }: Props) {
   const mediaUrl = normalizeMediaUrl(url);
   if (!mediaUrl) return null;
 
@@ -141,29 +144,33 @@ export function CardSideMedia({ url, kind, layout = "default" }: Props) {
   }
 
   if (!canPlayMediaUrl(mediaUrl, kind)) {
-    return <MediaUrlUnsupported />;
+    return <MediaUrlUnsupported url={mediaUrl} kind={kind} />;
   }
 
   if (kind === "video") {
-    return <CardVideo url={mediaUrl} playbackUrl={playbackUrl} layout={layout} />;
+    return (
+      <CardVideo url={mediaUrl} playbackUrl={playbackUrl} layout={layout} preview={preview} />
+    );
   }
 
   return <CardAudio url={mediaUrl} compact={layout === "list"} />;
 }
 
-function MediaUrlUnsupported() {
+function MediaUrlUnsupported({ url, kind }: { url: string; kind: MediaKind }) {
   const { t } = useLanguage();
-  return <MediaUrlWarning message={t("cardMediaDirectUrlHint")} />;
+  return <MediaUrlWarning message={t(mediaLoadErrorMessageKey(url, kind))} />;
 }
 
 function CardVideo({
   url,
   playbackUrl,
   layout,
+  preview = false,
 }: {
   url: string;
   playbackUrl: string;
   layout: Layout;
+  preview?: boolean;
 }) {
   const C = useAppColors();
   const { t } = useLanguage();
@@ -171,36 +178,42 @@ function CardVideo({
   const driveId = extractGoogleDriveFileId(url);
   const embedSrc = extractVideoEmbedUrl(url);
   const height = layout === "list" ? LIST_VIDEO_HEIGHT : DEFAULT_VIDEO_HEIGHT;
+  const minEmbedHeight = preview && Platform.OS !== "web" ? Math.max(height, 220) : height;
   const boxStyle = [
     styles.videoBox,
     layout === "list" && styles.videoBoxList,
-    { height, backgroundColor: C.isDark ? "#0f172a" : "#111827" },
+    { height: minEmbedHeight, backgroundColor: C.isDark ? "#0f172a" : "#111827" },
   ];
+  const touchCapture = preview && Platform.OS !== "web" ? styles.videoTouchCapture : undefined;
 
   if (embedSrc) {
     return (
-      <CardVideoEmbed
-        embedSrc={embedSrc}
-        title="Embedded video"
-        height={height}
-        boxStyle={boxStyle}
-      />
+      <View style={touchCapture}>
+        <CardVideoEmbed
+          embedSrc={embedSrc}
+          title="Embedded video"
+          height={minEmbedHeight}
+          boxStyle={boxStyle}
+        />
+      </View>
     );
   }
 
   if (driveId) {
     return (
-      <CardVideoEmbed
-        embedSrc={googleDrivePreviewEmbedUrl(driveId)}
-        title="Google Drive video"
-        height={height}
-        boxStyle={boxStyle}
-      />
+      <View style={touchCapture}>
+        <CardVideoEmbed
+          embedSrc={googleDrivePreviewEmbedUrl(driveId)}
+          title="Google Drive video"
+          height={minEmbedHeight}
+          boxStyle={boxStyle}
+        />
+      </View>
     );
   }
 
   if (failed) {
-    return <MediaUrlWarning message={t("cardVideoError")} />;
+    return <MediaUrlWarning message={t(mediaLoadErrorMessageKey(url, "video"))} />;
   }
 
   if (Platform.OS === "web") {
@@ -226,13 +239,14 @@ function CardVideo({
   }
 
   return (
-    <View style={boxStyle}>
+    <View style={[boxStyle, touchCapture]} onStartShouldSetResponder={() => true}>
       <Video
         key={playbackUrl}
         source={{ uri: playbackUrl }}
         style={styles.video}
         useNativeControls
         resizeMode={ResizeMode.CONTAIN}
+        shouldPlay={false}
         onError={() => setFailed(true)}
       />
     </View>
@@ -335,7 +349,7 @@ function AudioMeta({ state, compact }: { state: AudioUiState; compact?: boolean 
         : state === "playing"
           ? t("cardAudioPlaying")
           : state === "error"
-            ? t("cardAudioError")
+            ? t("cardAudioLoadError")
             : t("cardAudioTap");
 
   return (
@@ -441,7 +455,7 @@ function CardAudio({ url, compact }: { url: string; compact?: boolean }) {
   }, [state, playbackUri]);
 
   if (state === "error") {
-    return <MediaUrlWarning message={t("cardAudioError")} />;
+    return <MediaUrlWarning message={t(mediaLoadErrorMessageKey(url, "audio"))} />;
   }
 
   if (!playbackUri || state === "preparing") {
@@ -539,7 +553,12 @@ function AdaptiveImage({
   }, [cacheAttempted, candidateIndex, candidates.length, remoteUrl]);
 
   if (failed) {
-    return <MediaUrlWarning message={t("cardImageError")} style={{ marginBottom }} />;
+    return (
+      <MediaUrlWarning
+        message={t(mediaLoadErrorMessageKey(sourceUrl, "image"))}
+        style={{ marginBottom }}
+      />
+    );
   }
 
   const bg = C.isDark ? C.surfaceAlt : "#f3f4f6";
@@ -595,6 +614,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     overflow: "hidden",
     backgroundColor: "#111827",
+  },
+  videoTouchCapture: {
+    width: "100%",
+    zIndex: 2,
   },
   video: {
     width: "100%",

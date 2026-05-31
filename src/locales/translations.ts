@@ -329,9 +329,27 @@ export const translations: Record<Locale, Record<string, string>> = {
     mediaMoveUp: 'Move media up',
     mediaMoveDown: 'Move media down',
     mediaAudioPlaceholder: 'Paste a link or tap Upload',
-    mediaUrlInvalidFormat: 'Invalid link. Use a full URL starting with https://',
-    mediaUrlUnsupported:
-      'This link is not supported. Use a direct file (.jpg, .mp3, .mp4), YouTube/Vimeo, Google Drive, Dropbox, or upload audio.',
+    mediaUrlImageInvalidFormat: 'Enter a full image link starting with https://',
+    mediaUrlAudioInvalidFormat: 'Enter a full audio link starting with https://',
+    mediaUrlVideoInvalidFormat: 'Enter a full video link starting with https://',
+    mediaUrlImageUnsupported:
+      'This link does not work as an image. Use a direct .jpg or .png link, or generate an image with AI.',
+    mediaUrlAudioUnsupported:
+      'This link does not work as audio. Upload a file or use a direct .mp3/.m4a link.',
+    mediaUrlVideoUnsupported:
+      'This link does not work as video. Use YouTube/Vimeo or a direct .mp4 link.',
+    mediaUrlWrong_image_to_video:
+      'You pasted a video link in the Image field. Move it to the Video field.',
+    mediaUrlWrong_image_to_audio:
+      'You pasted an audio link in the Image field. Move it to the Audio field.',
+    mediaUrlWrong_video_to_image:
+      'You pasted an image link in the Video field. Move it to the Image field.',
+    mediaUrlWrong_video_to_audio:
+      'You pasted an audio link in the Video field. Move it to the Audio field.',
+    mediaUrlWrong_audio_to_image:
+      'You pasted an image link in the Audio field. Move it to the Image field.',
+    mediaUrlWrong_audio_to_video:
+      'You pasted a video link in the Audio field. Move it to the Video field.',
     uploadAudio: 'Upload',
     uploadAudioDialogTitle: 'Uploading audio',
     uploadAudioPhase_reading: 'Reading…',
@@ -341,23 +359,23 @@ export const translations: Record<Locale, Record<string, string>> = {
     uploadAudioTooLarge: 'Audio file is too large (max 20 MB).',
     uploadAudioNeedLogin: 'Sign in to upload audio files.',
     uploadAudioBucketMissing:
-      'Storage is not set up yet. In Supabase SQL Editor, run supabase/migrations/add_card_media_storage.sql (see docs/SUPABASE_MANUAL_STEPS.md §9).',
+      'Audio upload is not available right now. Paste a link to your audio file instead.',
     uploadAudioPermission:
-      'Upload denied. Sign in again or check Storage policies for bucket card-media.',
+      'Could not upload audio. Sign in again and try once more.',
     uploadAudioMimeType: 'This file type is not accepted. Use MP3, M4A, WAV, or OGG.',
     uploadAudioReadFailed: 'Could not read the file from your device. Try another file or browser.',
     cardAudioTap: 'Tap to play audio',
     cardAudioPreparing: 'Preparing audio…',
     cardAudioLoading: 'Loading audio…',
     cardAudioPlaying: 'Playing…',
-    cardAudioError:
-      'Could not play audio. Upload a file from your device, or use a public link (Google Drive, Dropbox, or a direct .mp3/.m4a URL).',
-    cardVideoError:
-      'Could not load video. Use a public Google Drive/Dropbox link or a direct .mp4/.webm/.mov URL.',
-    cardImageError:
-      'Could not load image. Upload from your device, or use a public link (Supabase, Google Drive, or a direct .jpg/.png URL).',
+    cardAudioLoadError:
+      'Could not play this audio. Check the link and make sure it is in the Audio field.',
+    cardVideoLoadError:
+      'Could not play this video. Check the link and make sure it is in the Video field.',
+    cardImageLoadError:
+      'Could not load this image. Check the link opens in a browser and is in the Image field.',
     cardMediaDirectUrlHint:
-      'Use a direct file link (.mp3, .mp4), YouTube/Vimeo, Google Drive, or Dropbox with public access.',
+      'This link cannot be shown in this field. Check that you used the right media type.',
     addCardPreviewStudy: 'Preview study',
     addCardPreviewTitle: 'Study preview',
     addCardPreviewClose: 'Close preview',
@@ -1010,9 +1028,27 @@ export const translations: Record<Locale, Record<string, string>> = {
     mediaMoveUp: 'Підняти медіа',
     mediaMoveDown: 'Опустити медіа',
     mediaAudioPlaceholder: 'Посилання або «Завантажити»',
-    mediaUrlInvalidFormat: 'Некоректне посилання. Вкажіть повний URL з https://',
-    mediaUrlUnsupported:
-      'Це посилання не підтримується. Пряме посилання на файл (.jpg, .mp3, .mp4), YouTube/Vimeo, Google Drive, Dropbox або завантаження аудіо.',
+    mediaUrlImageInvalidFormat: 'Вкажіть повне посилання на зображення з https://',
+    mediaUrlAudioInvalidFormat: 'Вкажіть повне посилання на аудіо з https://',
+    mediaUrlVideoInvalidFormat: 'Вкажіть повне посилання на відео з https://',
+    mediaUrlImageUnsupported:
+      'Це посилання не підходить для зображення. Пряме .jpg/.png або згенеруйте зображення через AI.',
+    mediaUrlAudioUnsupported:
+      'Це посилання не підходить для аудіо. Завантажте файл або прямий .mp3/.m4a.',
+    mediaUrlVideoUnsupported:
+      'Це посилання не підходить для відео. YouTube/Vimeo або прямий .mp4.',
+    mediaUrlWrong_image_to_video:
+      'У полі «Зображення» вставлено посилання на відео. Перенесіть його в поле «Відео».',
+    mediaUrlWrong_image_to_audio:
+      'У полі «Зображення» вставлено посилання на аудіо. Перенесіть його в поле «Аудіо».',
+    mediaUrlWrong_video_to_image:
+      'У полі «Відео» вставлено посилання на зображення. Перенесіть його в поле «Зображення».',
+    mediaUrlWrong_video_to_audio:
+      'У полі «Відео» вставлено посилання на аудіо. Перенесіть його в поле «Аудіо».',
+    mediaUrlWrong_audio_to_image:
+      'У полі «Аудіо» вставлено посилання на зображення. Перенесіть його в поле «Зображення».',
+    mediaUrlWrong_audio_to_video:
+      'У полі «Аудіо» вставлено посилання на відео. Перенесіть його в поле «Відео».',
     uploadAudio: 'Завантажити',
     uploadAudioDialogTitle: 'Завантаження аудіо',
     uploadAudioPhase_reading: 'Читання…',
@@ -1022,9 +1058,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     uploadAudioTooLarge: 'Файл занадто великий (макс. 20 МБ).',
     uploadAudioNeedLogin: 'Увійдіть, щоб завантажувати аудіофайли.',
     uploadAudioBucketMissing:
-      'Сховище ще не налаштоване. У Supabase SQL Editor виконайте supabase/migrations/add_card_media_storage.sql (див. docs/SUPABASE_MANUAL_STEPS.md, §9).',
+      'Завантаження аудіо зараз недоступне. Вставте посилання на аудіофайл.',
     uploadAudioPermission:
-      'Завантаження заборонено. Увійдіть знову або перевірте політики Storage для bucket card-media.',
+      'Не вдалося завантажити аудіо. Увійдіть знову та спробуйте ще раз.',
     uploadAudioMimeType: 'Тип файлу не підтримується. Спробуйте MP3, M4A, WAV або OGG.',
     uploadAudioReadFailed:
       'Не вдалося прочитати файл з пристрою. Спробуйте інший файл або браузер.',
@@ -1032,14 +1068,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardAudioPreparing: 'Підготовка аудіо…',
     cardAudioLoading: 'Завантаження аудіо…',
     cardAudioPlaying: 'Відтворення…',
-    cardAudioError:
-      'Не вдалося відтворити аудіо. Завантажте файл з пристрою або вкажіть публічне посилання (Google Drive, Dropbox, прямий .mp3/.m4a).',
-    cardVideoError:
-      'Не вдалося завантажити відео. Публічне посилання Google Drive/Dropbox або прямий .mp4/.webm/.mov.',
-    cardImageError:
-      'Не вдалося завантажити зображення. Завантажте з пристрою або вкажіть публічне посилання (Supabase, Google Drive, прямий .jpg/.png).',
+    cardAudioLoadError:
+      'Не вдалося відтворити аудіо. Перевірте посилання — воно має бути в полі «Аудіо».',
+    cardVideoLoadError:
+      'Не вдалося відтворити відео. Перевірте посилання — воно має бути в полі «Відео».',
+    cardImageLoadError:
+      'Не вдалося завантажити зображення. Перевірте посилання в браузері — воно має бути в полі «Зображення».',
     cardMediaDirectUrlHint:
-      'Пряме посилання на файл (.mp3, .mp4), YouTube/Vimeo, Google Drive або Dropbox з публічним доступом.',
+      'Це посилання не показується в цьому полі. Перевірте тип медіа.',
     addCardPreviewStudy: 'Перегляд у режимі навчання',
     addCardPreviewTitle: 'Перегляд навчання',
     addCardPreviewClose: 'Закрити перегляд',

@@ -2,6 +2,7 @@ import type { Card, CardMedia, CardMediaSide, CardMediaType } from "@/assets/dat
 import {
   canPlayMediaUrl,
   extractVideoEmbedUrl,
+  isSupabaseStorageUrl,
 } from "@/src/lib/resolveMediaPlaybackUrl";
 import { supabase } from "@/src/lib/supabase";
 
@@ -107,13 +108,15 @@ export function hasValidMediaFormSideContent(
   });
 }
 
-export type MediaUrlIssueReason = "invalid_format" | "unsupported";
+export type MediaUrlIssueReason = "invalid_format" | "unsupported" | "wrong_field";
 
 export type MediaUrlIssue = {
   side: CardMediaSide;
   mediaType: CardMediaType;
   url: string;
   reason: MediaUrlIssueReason;
+  /** When reason is `wrong_field` — which field the URL likely belongs in. */
+  suggestedKind?: CardMediaType;
 };
 
 export function isValidHttpMediaUrl(url: string): boolean {
@@ -127,18 +130,74 @@ export function isValidHttpMediaUrl(url: string): boolean {
   }
 }
 
+/** Best-effort guess from URL shape (YouTube → video, .mp3 → audio, etc.). `null` if unclear. */
+export function detectMediaUrlKind(url: string): CardMediaType | null {
+  const trimmed = url.trim();
+  if (!trimmed || !isValidHttpMediaUrl(trimmed)) return null;
+
+  if (extractVideoEmbedUrl(trimmed)) return "video";
+  if (/youtube\.com|youtu\.be|vimeo\.com/i.test(trimmed)) return "video";
+
+  const lower = trimmed.toLowerCase();
+  const path = lower.split("?")[0] ?? "";
+
+  if (/\.(mp3|m4a|wav|ogg|aac|flac|opus)(\?|$)/i.test(path)) return "audio";
+  if (/\.(mp4|mov|m4v|avi|mkv)(\?|$)/i.test(path)) return "video";
+  if (/[?&](format|type|ext)=([^&#]*\.)?(mp4|webm|mov|m4v|mkv)/i.test(lower)) return "video";
+  if (/\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i.test(path)) return "image";
+
+  if (isSupabaseStorageUrl(trimmed)) {
+    if (/\/images\//i.test(trimmed) || /\/covers\//i.test(trimmed)) return "image";
+    if (/-audio\./i.test(trimmed)) return "audio";
+  }
+
+  return null;
+}
+
+export function getMediaUrlKindMismatch(
+  url: string,
+  expected: CardMediaType,
+): CardMediaType | null {
+  const detected = detectMediaUrlKind(url);
+  if (!detected || detected === expected) return null;
+  return detected;
+}
+
+function analyzeMediaUrl(url: string, mediaType: CardMediaType): Omit<MediaUrlIssue, "side"> | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (!isValidHttpMediaUrl(trimmed)) {
+    return { mediaType, url: trimmed, reason: "invalid_format" };
+  }
+
+  const suggestedKind = getMediaUrlKindMismatch(trimmed, mediaType);
+  if (suggestedKind) {
+    return { mediaType, url: trimmed, reason: "wrong_field", suggestedKind };
+  }
+
+  if (mediaType === "image") return null;
+  if (mediaType === "video" && extractVideoEmbedUrl(trimmed)) return null;
+  if (!canPlayMediaUrl(trimmed, mediaType)) {
+    return { mediaType, url: trimmed, reason: "unsupported" };
+  }
+  return null;
+}
+
 export function getMediaUrlValidationIssue(
   url: string,
   mediaType: CardMediaType,
 ): MediaUrlIssueReason | null {
-  const trimmed = url.trim();
-  if (!trimmed) return null;
-  if (!isValidHttpMediaUrl(trimmed)) return "invalid_format";
-  // Images: any https link without extension is OK (CDN, query strings, etc.).
-  if (mediaType === "image") return null;
-  if (mediaType === "video" && extractVideoEmbedUrl(trimmed)) return null;
-  if (!canPlayMediaUrl(trimmed, mediaType)) return "unsupported";
-  return null;
+  return analyzeMediaUrl(url, mediaType)?.reason ?? null;
+}
+
+export function getMediaUrlIssueForField(
+  url: string,
+  mediaType: CardMediaType,
+  side: CardMediaSide,
+): MediaUrlIssue | null {
+  const analyzed = analyzeMediaUrl(url, mediaType);
+  if (!analyzed) return null;
+  return { side, ...analyzed };
 }
 
 export function getCardMediaUrlIssues(form: CardMediaForm): MediaUrlIssue[] {
@@ -146,8 +205,8 @@ export function getCardMediaUrlIssues(form: CardMediaForm): MediaUrlIssue[] {
   for (const side of ["front", "back"] as const) {
     for (const mediaType of CARD_MEDIA_TYPES) {
       const url = form[side].urls[mediaType].trim();
-      const reason = getMediaUrlValidationIssue(url, mediaType);
-      if (reason) issues.push({ side, mediaType, url, reason });
+      const analyzed = analyzeMediaUrl(url, mediaType);
+      if (analyzed) issues.push({ side, ...analyzed });
     }
   }
   return issues;
@@ -157,10 +216,41 @@ export function isCardMediaFormUrlsValid(form: CardMediaForm): boolean {
   return getCardMediaUrlIssues(form).length === 0;
 }
 
+export function mediaUrlWrongFieldMessageKey(
+  currentField: CardMediaType,
+  suggestedKind: CardMediaType,
+): string {
+  return `mediaUrlWrong_${currentField}_to_${suggestedKind}`;
+}
+
+export function mediaUrlInvalidFormatMessageKey(field: CardMediaType): string {
+  if (field === "image") return "mediaUrlImageInvalidFormat";
+  if (field === "audio") return "mediaUrlAudioInvalidFormat";
+  return "mediaUrlVideoInvalidFormat";
+}
+
+export function mediaUrlUnsupportedMessageKey(field: CardMediaType): string {
+  if (field === "image") return "mediaUrlImageUnsupported";
+  if (field === "audio") return "mediaUrlAudioUnsupported";
+  return "mediaUrlVideoUnsupported";
+}
+
 export function mediaUrlIssueMessageKey(issue: MediaUrlIssue): string {
-  return issue.reason === "invalid_format"
-    ? "mediaUrlInvalidFormat"
-    : "mediaUrlUnsupported";
+  if (issue.reason === "wrong_field" && issue.suggestedKind) {
+    return mediaUrlWrongFieldMessageKey(issue.mediaType, issue.suggestedKind);
+  }
+  if (issue.reason === "invalid_format") {
+    return mediaUrlInvalidFormatMessageKey(issue.mediaType);
+  }
+  return mediaUrlUnsupportedMessageKey(issue.mediaType);
+}
+
+export function mediaLoadErrorMessageKey(url: string, kind: CardMediaType): string {
+  const mismatch = getMediaUrlKindMismatch(url, kind);
+  if (mismatch) return mediaUrlWrongFieldMessageKey(kind, mismatch);
+  if (kind === "image") return "cardImageLoadError";
+  if (kind === "audio") return "cardAudioLoadError";
+  return "cardVideoLoadError";
 }
 
 export function mediaFormToInsertRows(

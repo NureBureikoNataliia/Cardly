@@ -7,7 +7,7 @@ import type { TextStyle } from "react-native";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 import type { CardMediaForm, CardMediaSide, CardMediaType } from "@/src/lib/cardMedia";
 import {
-  getMediaUrlValidationIssue,
+  getMediaUrlIssueForField,
   mediaUrlIssueMessageKey,
   type MediaUrlIssue,
 } from "@/src/lib/cardMedia";
@@ -144,14 +144,11 @@ export const CardMediaFormFields = memo(function CardMediaFormFields({
       {sideForm.order.map((kind, index) => {
         const focusKey = `${side}-${kind}`;
         const url = sideForm.urls[kind];
-        const validationReason = getMediaUrlValidationIssue(url, kind);
+        const fieldIssue = getMediaUrlIssueForField(url, kind, side);
         const showValidation =
-          url.trim().length > 0 &&
-          validationReason !== null &&
-          blurredFields.has(focusKey);
-        const issue: MediaUrlIssue | null = showValidation
-          ? { side, mediaType: kind, url: url.trim(), reason: validationReason }
-          : null;
+          fieldIssue !== null &&
+          (fieldIssue.reason === "wrong_field" || blurredFields.has(focusKey));
+        const issue: MediaUrlIssue | null = showValidation ? fieldIssue : null;
         const canMoveUp = index > 0;
         const canMoveDown = index < sideForm.order.length - 1;
         return (
