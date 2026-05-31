@@ -304,6 +304,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardFormEmpty: 'Each side needs text or media. Notes alone are not enough.',
     cardFormReversedPairNeedsBothSides:
       'To create a reverse card too, both sides need text or media.',
+    cardFormClozeNeedsCore:
+      'Cloze cards need the hidden answer or text before/after the gap. A hint, notes, or media alone are not enough.',
     clozeIntro:
       'Left: sentence with a gap. Right: hidden answer. Fill at least one field to save.',
     clozeFieldBefore: 'Text before the gap',
@@ -1003,6 +1005,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardFormEmpty: 'На кожній стороні потрібен текст або медіа. Самих нотаток недостатньо.',
     cardFormReversedPairNeedsBothSides:
       'Щоб створити зворотну картку, на обох сторонах має бути текст або медіа.',
+    cardFormClozeNeedsCore:
+      'У картці з пропуском потрібна прихована відповідь або текст до/після пропуску. Однієї підказки, нотаток чи медіа недостатньо.',
     clozeIntro:
       'Ліворуч — речення з пропуском, праворуч — відповідь. Для збереження достатньо одного заповненого поля.',
     clozeFieldBefore: 'Текст до пропуску',

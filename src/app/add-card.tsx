@@ -64,6 +64,7 @@ import {
   hasAnyBasicFormContent,
   hasAnyClozeFormContent,
   isCardFormValid,
+  isClozeCoreContentValid,
   type CardFormFields,
 } from "@/src/lib/cardFormValidation";
 import { useLayoutWidth } from "@/src/hooks/useLayoutWidth";
@@ -629,6 +630,22 @@ function CardEditorForm({
     else setErrorModal(t("aiError"));
   }, [backText, cardId, cardType, deck, deckId, frontText, t, userId]);
 
+  const handleCardTypeChange = (nextType: CardTypeName) => {
+    if (nextType === cardType) return;
+    if (nextType === "cloze") {
+      const coreEmpty =
+        !clozeBefore.trim() && !clozeHidden.trim() && !clozeAfter.trim();
+      if (coreEmpty) {
+        if (frontText.trim()) setClozeBefore(frontText);
+        if (backText.trim()) setClozeHidden(backText);
+      }
+    }
+    if (nextType !== "basic") {
+      setCreateReversedPair(false);
+    }
+    setCardType(nextType);
+  };
+
   const handleSave = async () => {
     if (!cardId && !deckId) {
       setError(t("deckNotFound"));
@@ -655,6 +672,13 @@ function CardEditorForm({
     );
     const ok = isCardFormValid(cardType, formFields);
     if (!ok) {
+      if (
+        cardType === "cloze" &&
+        !isClozeCoreContentValid(formFields.cloze)
+      ) {
+        setErrorModal(t("cardFormClozeNeedsCore"));
+        return;
+      }
       if (cardType === "basic" && createReversedPair && hasAnyBasicFormContent(formFields)) {
         const frontFilled = basicCardSideHasContent(
           formFields.frontText,
@@ -716,6 +740,68 @@ function CardEditorForm({
       const outBack = cardType === "cloze" ? "" : backText.trim();
 
       if (cardId) {
+        if (cardType === "basic" && createReversedPair && !pairMeta.pairId) {
+          if (!deckId) {
+            setError(t("deckNotFound"));
+            setIsSaving(false);
+            return;
+          }
+          const pairId = newPairId();
+          const forwardExtra: CardExtra = { pairId, pairRole: "forward" };
+          const { error: upsertError } = await supabase
+            .from("cards")
+            .update({
+              card_type: cardType,
+              card_extra: forwardExtra,
+              front_text: outFront,
+              back_text: outBack,
+              notes: notesVal,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("card_id", cardId);
+
+          if (upsertError) {
+            const msg = upsertError.message || t("failedToSaveCard");
+            setError(msg);
+            setIsSaving(false);
+            setErrorModal(msg);
+            return;
+          }
+          await replaceCardMedia(cardId, mediaToSave);
+
+          const { data: secondRow, error: e2 } = await supabase
+            .from("cards")
+            .insert({
+              deck_id: deckId,
+              card_type: "basic",
+              card_extra: { pairId, pairRole: "reverse" },
+              front_text: outBack,
+              back_text: outFront,
+              notes: notesVal,
+              created_by: userId,
+            })
+            .select("card_id")
+            .single();
+
+          if (e2 || !secondRow?.card_id) {
+            await supabase
+              .from("cards")
+              .update({
+                card_extra: {},
+                updated_at: new Date().toISOString(),
+              })
+              .eq("card_id", cardId);
+            const msg = e2?.message || t("failedToSaveCard");
+            setError(msg);
+            setIsSaving(false);
+            setErrorModal(msg);
+            return;
+          }
+          await replaceCardMedia(secondRow.card_id, swapCardMediaFormSides(mediaToSave));
+          router.back();
+          return;
+        }
+
         const extraPayload: CardExtra = {
           ...(pairMeta.pairId
             ? { pairId: pairMeta.pairId, pairRole: pairMeta.pairRole }
@@ -863,8 +949,7 @@ function CardEditorForm({
   );
   const isValid = isCardFormValid(cardType, formFields);
   const canSave = isValid && (!isEdit || hasChanges);
-  const showPairStudySwitcher =
-    cardType === "basic" && createReversedPair && !isEdit;
+  const showPairStudySwitcher = cardType === "basic" && createReversedPair;
   const clozePartsPreview: ClozeParts = useMemo(
     () => ({
       before: clozeBefore,
@@ -933,7 +1018,7 @@ function CardEditorForm({
                   ).map(([id, lk]) => (
                     <Pressable
                       key={id}
-                      onPress={() => setCardType(id)}
+                      onPress={() => handleCardTypeChange(id)}
                       style={[
                         styles.typeChip,
                         { backgroundColor: C.inputBg, borderColor: C.inputBorder },
@@ -1238,7 +1323,7 @@ function CardEditorForm({
                       />
                     </View>
                   </View>
-                  {!isEdit ? (
+                  {!pairMeta.pairId ? (
                     <Pressable
                       style={styles.revToggle}
                       onPress={() => setCreateReversedPair((v) => !v)}
@@ -1258,7 +1343,7 @@ function CardEditorForm({
                       </View>
                     </Pressable>
                   ) : null}
-                  {isEdit && pairMeta.pairId ? (
+                  {pairMeta.pairId ? (
                     <Text style={[styles.revEditHint, { color: C.textSub }]}>
                       {t("cardReversiblePairEditNote")}
                     </Text>

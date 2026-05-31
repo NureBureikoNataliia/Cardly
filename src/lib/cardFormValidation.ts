@@ -43,6 +43,15 @@ function clozeBackSideHasContent(cloze: ClozeParts, mediaForm: CardMediaForm): b
   );
 }
 
+/** Cloze needs hidden answer or sentence text before/after the gap (hint/notes/media alone are not enough). */
+export function isClozeCoreContentValid(cloze: ClozeParts): boolean {
+  return (
+    cloze.hidden.trim().length > 0 ||
+    cloze.before.trim().length > 0 ||
+    cloze.after.trim().length > 0
+  );
+}
+
 export function hasAnyBasicFormContent(fields: CardFormFields): boolean {
   return (
     fields.frontText.trim().length > 0 ||
@@ -63,6 +72,7 @@ export function isCardFormValid(cardType: CardTypeName, fields: CardFormFields):
 
   if (cardType === "cloze") {
     return (
+      isClozeCoreContentValid(fields.cloze) &&
       clozeFrontSideHasContent(fields.cloze, fields.mediaForm, fields.notes) &&
       clozeBackSideHasContent(fields.cloze, fields.mediaForm)
     );
