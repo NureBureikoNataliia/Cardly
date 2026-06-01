@@ -1,75 +1,88 @@
 /**
- * Optional Gemini summary for deck complaint moderation.
- * Set EXPO_PUBLIC_GEMINI_API_KEY in .env (see .env.example).
- * If missing or the request fails, the report is still saved without a summary.
+ * Gemini helpers for admin moderation (translate quoted user content).
+ * Set EXPO_PUBLIC_GEMINI_API_KEY or deploy translate-moderation edge function with GEMINI_API_KEY.
  */
 
 import { geminiGenerateText } from '@/src/lib/geminiRequest';
+import { supabase } from '@/src/lib/supabase';
+import type { Locale } from '@/src/locales/translations';
 
-export async function summarizeComplaintForModeration(input: {
-  deckTitle: string;
-  issueKey: string;
-  issueLabel: string;
-  details: string | null;
-}): Promise<string | null> {
-  const userText = [
-    `Deck title: ${input.deckTitle}`,
-    `Report category (code): ${input.issueKey}`,
-    `Report category (label): ${input.issueLabel}`,
-    `User details: ${input.details?.trim() || '(none provided)'}`,
-  ].join('\n');
-
-  const prompt = `You help moderators review reports about user-created flashcard decks on a learning app.
-Read the report below and respond with a concise neutral summary (2–4 sentences): what the reporter is alleging and any notable details. Do not invent facts. If details are empty, say so briefly.
-
-${userText}`;
-
-  const result = await geminiGenerateText(prompt, {
-    maxOutputTokens: 400,
-    temperature: 0.2,
-  });
-  if (!result.ok) {
-    return null;
-  }
-  const trimmed = result.text.trim();
-  if (!trimmed) return null;
-  return trimmed.length > 4000 ? trimmed.slice(0, 4000) : trimmed;
+function looksCyrillic(text: string): boolean {
+  return /[\u0400-\u04FF]/.test(text);
 }
 
-/** Summary for reports about a review comment (pack_comments). */
-export async function summarizeReviewComplaintForModeration(input: {
-  deckTitle: string;
-  commentExcerpt: string;
-  issueKey: string;
-  issueLabel: string;
-  details: string | null;
-}): Promise<string | null> {
-  const excerpt =
-    input.commentExcerpt.trim().length > 500
-      ? `${input.commentExcerpt.trim().slice(0, 500)}…`
-      : input.commentExcerpt.trim();
-
-  const userText = [
-    `Deck title: ${input.deckTitle}`,
-    `Review/comment excerpt: ${excerpt || '(empty)'}`,
-    `Report category (code): ${input.issueKey}`,
-    `Report category (label): ${input.issueLabel}`,
-    `Reporter additional details: ${input.details?.trim() || '(none provided)'}`,
-  ].join('\n');
-
-  const prompt = `You help moderators review reports about a user-written review comment on a shared flashcard deck.
-Summarize in 2–4 neutral sentences what the reporter is alleging about the quoted review. Do not invent facts.
-
-${userText}`;
-
-  const gen = await geminiGenerateText(prompt, {
-    maxOutputTokens: 400,
-    temperature: 0.2,
+async function translateViaEdgeFunction(text: string): Promise<string | null> {
+  const { data, error } = await supabase.functions.invoke('translate-moderation', {
+    body: { texts: [text] },
   });
-  if (!gen.ok) {
-    return null;
+  if (error) return null;
+  const list = (data as { translations?: string[] } | null)?.translations;
+  const out = list?.[0]?.trim();
+  return out && out.length > 0 ? out : null;
+}
+
+/** Translate moderator-facing snippets when admin UI is Ukrainian. */
+export async function translateModerationDisplayText(
+  text: string,
+  locale: Locale,
+): Promise<string> {
+  const trimmed = text.trim();
+  if (!trimmed || locale === 'en' || looksCyrillic(trimmed)) {
+    return text;
   }
-  const t2 = gen.text.trim();
-  if (!t2) return null;
-  return t2.length > 4000 ? t2.slice(0, 4000) : t2;
+
+  const fromEdge = await translateViaEdgeFunction(trimmed);
+  if (fromEdge && fromEdge !== trimmed) {
+    return fromEdge;
+  }
+
+  const result = await geminiGenerateText(
+    `Translate the following moderation text to Ukrainian. Keep deck titles, usernames, and proper nouns unchanged. Output only the translation, no quotes or preamble.\n\n${trimmed}`,
+    { maxOutputTokens: 500, temperature: 0.1, thinkingBudget: 0 },
+  );
+  if (!result.ok || !result.text.trim()) {
+    return text;
+  }
+  const client = result.text.trim();
+  return client !== trimmed ? client : text;
+}
+
+/** Batch translate for admin complaint list (server Gemini key). */
+export async function translateModerationDisplayTexts(
+  texts: string[],
+  locale: Locale,
+): Promise<string[]> {
+  const trimmed = texts.map((t) => t.trim());
+  if (locale === 'en') return trimmed;
+
+  const needIdx: number[] = [];
+  const out = [...trimmed];
+  for (let i = 0; i < trimmed.length; i++) {
+    if (!trimmed[i] || looksCyrillic(trimmed[i])) continue;
+    needIdx.push(i);
+  }
+  if (needIdx.length === 0) return out;
+
+  const payload = needIdx.map((i) => trimmed[i]);
+  const { data, error } = await supabase.functions.invoke('translate-moderation', {
+    body: { texts: payload },
+  });
+
+  if (!error) {
+    const list = (data as { translations?: string[] } | null)?.translations;
+    if (list && list.length === needIdx.length) {
+      needIdx.forEach((idx, j) => {
+        const t = list[j]?.trim();
+        if (t && t !== trimmed[idx]) out[idx] = t;
+      });
+      return out;
+    }
+  }
+
+  await Promise.all(
+    needIdx.map(async (idx) => {
+      out[idx] = await translateModerationDisplayText(trimmed[idx], locale);
+    }),
+  );
+  return out;
 }

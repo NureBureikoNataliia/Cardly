@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -22,6 +22,10 @@ import { useLanguage } from '@/src/contexts/LanguageContext';
 import { supabase } from '@/src/lib/supabase';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import { getComplaintIssueLabelKey } from '@/src/constants/deckComplaints';
+import {
+  moderationDisplayText,
+  useModerationDisplayTranslations,
+} from '@/src/lib/useModerationDisplayTranslations';
 
 /* ─── Types ─── */
 type Stats = {
@@ -66,6 +70,7 @@ type CommentComplaint = {
   gemini_summary: string | null;
   comment_id: string;
   comment_content: string;
+  comment_content_uk: string | null;
   comment_author_id: string;
   deck_id: string;
   deck_title: string;
@@ -112,7 +117,7 @@ type SupportMessage = {
 export default function AdminPanelScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const { user, loading: authLoading, isAdmin } = useAuth();
   const C = useAppColors();
   const { width: screenWidth } = useWindowDimensions();
@@ -190,6 +195,38 @@ export default function AdminPanelScreen() {
   }, [authLoading, isAdmin, load]);
 
   const onRefresh = () => { setRefreshing(true); load(); };
+
+  const moderationTranslateEntries = useMemo(() => {
+    const items: { key: string; text: string }[] = [];
+    const add = (key: string, text: string | null | undefined) => {
+      if (text?.trim()) items.push({ key, text });
+    };
+    for (const row of complaints) {
+      add(`deck-dt-${row.id}`, row.details);
+    }
+    for (const row of cardComplaints) {
+      add(`card-dt-${row.id}`, row.details);
+    }
+    for (const row of commentComplaints) {
+      if (!row.comment_content_uk?.trim()) {
+        add(`rev-cc-${row.id}`, row.comment_content);
+      }
+      add(`rev-dt-${row.id}`, row.details);
+    }
+    return items;
+  }, [complaints, cardComplaints, commentComplaints]);
+
+  const { map: modDisplay, pending: modTranslatePending, failed: modTranslateFailed } =
+    useModerationDisplayTranslations(locale, moderationTranslateEntries);
+  const md = (key: string, fallback: string) =>
+    moderationDisplayText(modDisplay, key, fallback, locale);
+
+  const quotedReviewText = (row: CommentComplaint) => {
+    if (locale === 'uk' && row.comment_content_uk?.trim()) {
+      return row.comment_content_uk.trim();
+    }
+    return md(`rev-cc-${row.id}`, row.comment_content);
+  };
 
   /* ── Actions ── */
   const handleDeleteComment = async () => {
@@ -629,13 +666,10 @@ export default function AdminPanelScreen() {
                         <Text style={[styles.metaTxt, { color: C.textSub }]}>
                           {t('adminReporter')}: <Text style={styles.metaBold}>{row.reporter_name}</Text>
                         </Text>
-                        {row.details ? <Text style={[styles.bodyTxt, { color: C.text }]}>{row.details}</Text> : null}
-                        {row.gemini_summary ? (
-                          <View style={[styles.aiBox, { backgroundColor: C.isDark ? '#1a2740' : '#f8faff' }]}>
-                            <Feather name="cpu" size={12} color="#6366f1" />
-                            <Text style={styles.aiLabel}>{t('adminGeminiSummary')}</Text>
-                            <Text style={[styles.aiTxt, { color: C.textSub }]}>{row.gemini_summary}</Text>
-                          </View>
+                        {row.details ? (
+                          <Text style={[styles.bodyTxt, { color: C.text }]}>
+                            {md(`card-dt-${row.id}`, row.details)}
+                          </Text>
                         ) : null}
 
                         <View style={styles.cardActions}>
@@ -676,9 +710,44 @@ export default function AdminPanelScreen() {
                           </Text>
                         </View>
 
-                        <View style={[styles.cardWordBox, { backgroundColor: C.isDark ? 'rgba(52,211,153,0.08)' : '#ecfdf5', borderColor: C.isDark ? 'rgba(52,211,153,0.25)' : '#a7f3d0' }]}>
-                          <Feather name="message-circle" size={13} color="#059669" />
-                          <Text style={[styles.cardWordTxt, { color: '#047857' }]}>{row.comment_content}</Text>
+                        <View
+                          style={[
+                            styles.quoteBox,
+                            {
+                              backgroundColor: C.isDark ? 'rgba(52,211,153,0.08)' : '#ecfdf5',
+                              borderColor: C.isDark ? 'rgba(52,211,153,0.25)' : '#a7f3d0',
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.quoteLabel, { color: '#047857' }]}>
+                            {t('adminQuotedReview')}
+                          </Text>
+                          {modTranslatePending &&
+                          locale === 'uk' &&
+                          !row.comment_content_uk?.trim() &&
+                          !modDisplay[`rev-cc-${row.id}`] ? (
+                            <Text style={[styles.quotePending, { color: C.textMuted }]}>
+                              {t('adminTranslationPending')}
+                            </Text>
+                          ) : (
+                            <Text style={[styles.quoteText, { color: '#047857' }]}>
+                              {quotedReviewText(row)}
+                            </Text>
+                          )}
+                          {locale === 'uk' &&
+                          !row.comment_content_uk?.trim() &&
+                          modTranslateFailed &&
+                          quotedReviewText(row) === row.comment_content ? (
+                            <Text style={[styles.quoteTranslateHint, { color: C.textMuted }]}>
+                              {t('adminTranslationUnavailable')}
+                            </Text>
+                          ) : null}
+                          {locale === 'uk' &&
+                          quotedReviewText(row) !== row.comment_content ? (
+                            <Text style={[styles.originalHint, { color: C.textMuted }]}>
+                              {t('adminOriginalText')}: {row.comment_content}
+                            </Text>
+                          ) : null}
                         </View>
 
                         <Pressable
@@ -696,13 +765,10 @@ export default function AdminPanelScreen() {
                         <Text style={[styles.metaTxt, { color: C.textSub }]}>
                           {t('adminReviewCommentAuthor')}: <Text style={styles.metaBold}>{row.comment_author_name}</Text>
                         </Text>
-                        {row.details ? <Text style={[styles.bodyTxt, { color: C.text }]}>{row.details}</Text> : null}
-                        {row.gemini_summary ? (
-                          <View style={[styles.aiBox, { backgroundColor: C.isDark ? '#1a2740' : '#f8faff' }]}>
-                            <Feather name="cpu" size={12} color="#6366f1" />
-                            <Text style={styles.aiLabel}>{t('adminGeminiSummary')}</Text>
-                            <Text style={[styles.aiTxt, { color: C.textSub }]}>{row.gemini_summary}</Text>
-                          </View>
+                        {row.details ? (
+                          <Text style={[styles.bodyTxt, { color: C.text }]}>
+                            {md(`rev-dt-${row.id}`, row.details)}
+                          </Text>
                         ) : null}
 
                         <View style={styles.cardActions}>
@@ -760,16 +826,9 @@ export default function AdminPanelScreen() {
 
                       {/* Details */}
                       {row.details ? (
-                        <Text style={[styles.bodyTxt, { color: C.text }]}>{row.details}</Text>
-                      ) : null}
-
-                      {/* AI summary */}
-                      {row.gemini_summary ? (
-                        <View style={[styles.aiBox, { backgroundColor: C.isDark ? '#1a2740' : '#f8faff' }]}>
-                          <Feather name="cpu" size={12} color="#6366f1" />
-                          <Text style={styles.aiLabel}>{t('adminGeminiSummary')}</Text>
-                          <Text style={[styles.aiTxt, { color: C.textSub }]}>{row.gemini_summary}</Text>
-                        </View>
+                        <Text style={[styles.bodyTxt, { color: C.text }]}>
+                          {md(`deck-dt-${row.id}`, row.details)}
+                        </Text>
                       ) : null}
 
                       {/* Actions */}
@@ -1271,23 +1330,54 @@ const styles = StyleSheet.create({
   filterChipTxt: { fontSize: 13 },
 
   cardWordBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderWidth: 1, borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 7,
-    alignSelf: 'flex-start', maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
   },
-  cardWordTxt: { fontSize: 13, fontWeight: '600', flex: 1 },
+  quoteBox: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignSelf: 'stretch',
+    maxWidth: '100%',
+  },
+  quoteLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  quoteText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  quotePending: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  quoteTranslateHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  originalHint: { fontSize: 12, lineHeight: 17, fontStyle: 'italic', marginTop: 2 },
+  cardWordTxt: { fontSize: 13, fontWeight: '600', flex: 1, flexShrink: 1 },
 
   metaTxt: { fontSize: 13, color: '#6b7280' },
   metaBold: { fontWeight: '600' },
   bodyTxt: { fontSize: 14, lineHeight: 20 },
-
-  aiBox: {
-    backgroundColor: '#f8faff', borderRadius: 10, padding: 12,
-    borderLeftWidth: 3, borderLeftColor: '#6366f1', gap: 4,
-  },
-  aiLabel: { fontSize: 11, fontWeight: '700', color: '#6366f1', textTransform: 'uppercase' },
-  aiTxt: { fontSize: 13, color: '#475569', lineHeight: 18 },
 
   cardActions: {
     flexDirection: 'row',

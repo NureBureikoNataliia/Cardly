@@ -20,7 +20,7 @@ import {
 } from '@/src/constants/deckComplaints';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useAppColors } from '@/src/contexts/ThemeContext';
-import { summarizeReviewComplaintForModeration } from '@/src/lib/geminiComplaint';
+import { translateModerationDisplayText } from '@/src/lib/geminiComplaint';
 import { supabase } from '@/src/lib/supabase';
 import { Text } from './Themed';
 
@@ -89,21 +89,14 @@ export function CommentComplaintModal({
     setError(null);
     setSubmitting(true);
     const trimmed = details.trim();
-    const issueLabel = t(ISSUE_LABEL_KEYS[issueKey]);
-    const gemini_summary = await summarizeReviewComplaintForModeration({
-      deckTitle: deck.title ?? '',
-      commentExcerpt: comment.content,
-      issueKey,
-      issueLabel,
-      details: trimmed.length > 0 ? trimmed : null,
-    });
+    const comment_content_uk = await translateModerationDisplayText(comment.content, 'uk');
     const { error: insertError } = await supabase.from('pack_comment_complaints').insert({
       comment_id: comment.id,
       deck_id: deck.deck_id,
       reporter_id: reporterId,
       issue_key: issueKey,
       details: trimmed.length > 0 ? trimmed : null,
-      ...(gemini_summary != null ? { gemini_summary } : {}),
+      ...(comment_content_uk.trim() ? { comment_content_uk: comment_content_uk.trim() } : {}),
     });
     setSubmitting(false);
     if (insertError) {

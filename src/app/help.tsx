@@ -51,10 +51,10 @@ export default function HelpScreen() {
   const [isSending, setIsSending] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  const MESSAGE_TYPES: { key: MessageType; label: string; icon: keyof typeof Feather.glyphMap; color: string }[] = [
-    { key: 'bug',        label: t('helpContactTypeBug'),        icon: 'alert-circle',  color: '#ef4444' },
-    { key: 'suggestion', label: t('helpContactTypeSuggestion'), icon: 'lightbulb',     color: '#f59e0b' },
-    { key: 'complaint',  label: t('helpContactTypeComplaint'),  icon: 'alert-triangle', color: '#6366f1' },
+  const MESSAGE_TYPES: { key: MessageType; label: string; icon: keyof typeof Feather.glyphMap }[] = [
+    { key: 'bug',        label: t('helpContactTypeBug'),        icon: 'alert-circle' },
+    { key: 'suggestion', label: t('helpContactTypeSuggestion'), icon: 'lightbulb' },
+    { key: 'complaint',  label: t('helpContactTypeComplaint'),  icon: 'alert-triangle' },
   ];
 
   const handleSend = async () => {
@@ -132,13 +132,18 @@ export default function HelpScreen() {
                   key={mt.key}
                   style={[
                     styles.typeChip,
-                    { borderColor: active ? mt.color : C.border, backgroundColor: active ? (C.isDark ? `${mt.color}22` : `${mt.color}11`) : C.inputBg },
+                    {
+                      borderColor: active ? C.tint : C.border,
+                      backgroundColor: active
+                        ? (C.isDark ? 'rgba(165,180,252,0.18)' : 'rgba(99,102,241,0.1)')
+                        : C.inputBg,
+                    },
                   ]}
                   onPress={() => setMsgType(mt.key)}
                   activeOpacity={0.8}
                 >
-                  <Feather name={mt.icon} size={13} color={active ? mt.color : C.textMuted} />
-                  <Text style={[styles.typeChipTxt, { color: active ? mt.color : C.textMuted }]} numberOfLines={2}>
+                  <Feather name={mt.icon} size={13} color={active ? C.tint : C.textMuted} />
+                  <Text style={[styles.typeChipTxt, { color: active ? C.tint : C.textMuted }]} numberOfLines={2}>
                     {mt.label}
                   </Text>
                 </TouchableOpacity>

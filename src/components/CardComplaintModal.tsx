@@ -19,7 +19,6 @@ import {
 } from '@/src/constants/deckComplaints';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useAppColors } from '@/src/contexts/ThemeContext';
-import { summarizeComplaintForModeration } from '@/src/lib/geminiComplaint';
 import { supabase } from '@/src/lib/supabase';
 import { Text } from './Themed';
 
@@ -79,13 +78,6 @@ export function CardComplaintModal({
     setSubmitting(true);
 
     const trimmed = details.trim();
-    const issueLabel = t(ISSUE_LABEL_KEYS[issueKey]);
-    const gemini_summary = await summarizeComplaintForModeration({
-      deckTitle: cardFront ?? '',
-      issueKey,
-      issueLabel,
-      details: trimmed.length > 0 ? trimmed : null,
-    });
 
     const { error: insertError } = await supabase.from('card_complaints').insert({
       card_id: cardId,
@@ -93,7 +85,6 @@ export function CardComplaintModal({
       reporter_id: reporterId,
       issue_key: issueKey,
       details: trimmed.length > 0 ? trimmed : null,
-      ...(gemini_summary != null ? { gemini_summary } : {}),
     });
 
     setSubmitting(false);
