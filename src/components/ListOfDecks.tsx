@@ -121,8 +121,8 @@ function DeckCardInner({
           )}
         </View>
         <View style={[styles.cardContent, isGrid && styles.cardContentGrid]}>
-          <View style={styles.cardIcon}>
-            <Feather name="layers" size={20} color="#4255ff" />
+          <View style={[styles.cardIcon, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : 'rgba(66,85,255,0.12)' }]}>
+            <Feather name="layers" size={20} color={C.isDark ? '#7b82c4' : '#4255ff'} />
           </View>
           <View style={[styles.cardBody, isGrid && styles.cardBodyGrid]}>
             <View style={isGrid ? styles.titleSlot : undefined}>

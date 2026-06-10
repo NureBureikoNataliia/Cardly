@@ -372,15 +372,15 @@ export default function MainScreen() {
       {decks.length > 0 && (
         <>
           <TouchableOpacity
-            style={[styles.importFab, { backgroundColor: colorScheme === 'dark' ? '#1d2a3a' : '#fff', borderColor: colorScheme === 'dark' ? '#6366f1' : '#4255ff' }]}
+            style={[styles.importFab, { backgroundColor: colorScheme === 'dark' ? '#1e2235' : '#fff', borderColor: colorScheme === 'dark' ? '#3d3f6e' : '#4255ff' }]}
             onPress={() => router.push('/deck-import')}
             accessibilityRole="button"
             accessibilityLabel={t('importDeckFab')}
           >
-            <Feather name="upload" size={22} color={colorScheme === 'dark' ? '#a5b4fc' : '#4255ff'} />
+            <Feather name="upload" size={22} color={colorScheme === 'dark' ? '#7b82c4' : '#4255ff'} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.fab}
+            style={[styles.fab, colorScheme === 'dark' && styles.fabDark]}
             onPress={() => router.push('/add-deck')}
             accessibilityRole="button"
             accessibilityLabel={t('addDeck')}
@@ -621,5 +621,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
+  },
+  fabDark: {
+    backgroundColor: '#3b3e7a',
+    shadowColor: '#3b3e7a',
+    shadowOpacity: 0.4,
   },
 });

@@ -621,8 +621,8 @@ function DeckStatCard({
       {deck.cover_image_url ? (
         <Image source={{ uri: deck.cover_image_url }} style={styles.deckCover} />
       ) : (
-        <View style={[styles.deckCover, styles.deckCoverFallback]}>
-          <Feather name="layers" size={22} color="#a5b4fc" />
+        <View style={[styles.deckCover, styles.deckCoverFallback, { backgroundColor: C.isDark ? '#1e2235' : '#EEF2FF' }]}>
+          <Feather name="layers" size={22} color={C.isDark ? '#5a5f8a' : '#a5b4fc'} />
         </View>
       )}
       <View style={styles.deckInfo}>
@@ -1057,10 +1057,11 @@ const styles = StyleSheet.create({
   cardInfoRow: { width: '100%', alignItems: 'flex-end', minHeight: 18 },
 
   /* ── Period cards ── */
-  periodRow: { flexDirection: 'row', gap: 10 },
+  periodRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
   periodCard: {
     flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 10,
-    alignItems: 'center', borderTopWidth: 3,
+    alignItems: 'center', justifyContent: 'center', borderTopWidth: 3,
+    height: 140, // fixed height for uniform cards
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
   },
@@ -1216,7 +1217,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
   deckCover:        { width: 60, height: 60, borderRadius: 10 },
-  deckCoverFallback:{ backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center' },
+  deckCoverFallback:{ justifyContent: 'center', alignItems: 'center' },
   deckInfo:         { flex: 1, gap: 4 },
   deckTitle:        { fontSize: 14, fontWeight: '700' },
   deckMeta:         { fontSize: 12, color: '#6b7280' },

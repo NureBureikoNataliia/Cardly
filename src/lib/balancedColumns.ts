@@ -8,7 +8,8 @@ import {
 
 export type ColumnEntry<T> = { item: T; index: number };
 
-/** Greedy column balance: each item goes into the shortest column. */
+/** Simple alternating column distribution: odd items go left, even items go right.
+ *  This keeps cards in natural visual order and avoids misalignment. */
 export function splitIntoBalancedColumns<T>(
   items: T[],
   columnCount: number,
@@ -18,14 +19,9 @@ export function splitIntoBalancedColumns<T>(
     return [items.map((item, index) => ({ item, index }))];
   }
   const cols: ColumnEntry<T>[][] = Array.from({ length: columnCount }, () => []);
-  const heights = Array<number>(columnCount).fill(0);
   items.forEach((item, index) => {
-    let col = 0;
-    for (let c = 1; c < columnCount; c++) {
-      if (heights[c] < heights[col]) col = c;
-    }
+    const col = index % columnCount;
     cols[col].push({ item, index });
-    heights[col] += estimateHeight(item, index);
   });
   return cols;
 }
