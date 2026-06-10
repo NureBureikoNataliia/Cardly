@@ -706,8 +706,8 @@ export default function SettingsScreen() {
           {/* Study reminder */}
           <RNView style={styles.notifRow}>
             <RNView style={styles.notifRowLeft}>
-              <RNView style={styles.notifIconWrap}>
-                <Feather name="bell" size={18} color="#6366f1" />
+              <RNView style={[styles.notifIconWrap, { backgroundColor: C.iconBg }]}>
+                <Feather name="bell" size={18} color={C.iconTint} />
               </RNView>
               <RNView style={styles.notifRowText}>
                 <Text style={styles.infoLabel}>{t('notifStudyReminder')}</Text>
@@ -777,8 +777,8 @@ export default function SettingsScreen() {
           {/* Test notification */}
           <RNView style={styles.notifTestSection}>
             <RNView style={styles.notifRowLeft}>
-              <RNView style={[styles.notifIconWrap, { backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF' }]}>
-                <Feather name="send" size={18} color={C.tint} />
+              <RNView style={[styles.notifIconWrap, { backgroundColor: C.iconBg }]}>
+                <Feather name="send" size={18} color={C.iconTint} />
               </RNView>
               <RNView style={styles.notifRowText}>
                 <Text style={[styles.infoLabel, { color: C.text }]}>{t('adminSendTestPush')}</Text>

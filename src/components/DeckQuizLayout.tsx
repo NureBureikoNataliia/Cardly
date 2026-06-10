@@ -66,14 +66,14 @@ export function DeckQuizScreenShell({
   );
 
   return (
-    <View style={[styles.screen, { backgroundColor: C.background }]}>
+    <View style={[styles.screen, { backgroundColor: C.bg }]}>
       {body}
       {footer ? (
         <View
           style={[
             styles.footer,
             {
-              backgroundColor: C.background,
+              backgroundColor: C.bg,
               borderTopColor: C.borderLight,
               paddingBottom: Math.max(insets.bottom, 12),
             },
@@ -135,7 +135,7 @@ export function DeckQuizLoading({ message }: DeckQuizLoadingProps) {
   const contentWidth = useQuizContentWidth();
 
   return (
-    <View style={[styles.screen, styles.loadingScreen, { backgroundColor: C.background }]}>
+    <View style={[styles.screen, styles.loadingScreen, { backgroundColor: C.bg }]}>
       <View style={[styles.column, { width: contentWidth }]}>
         <ActivityIndicator size="large" color={C.tint} />
         {message ? (

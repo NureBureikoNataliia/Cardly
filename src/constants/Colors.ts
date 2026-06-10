@@ -1,5 +1,5 @@
 const tintColorLight = '#4255ff';
-const tintColorDark = '#a5b4fc';
+const tintColorDark = '#a7b6f7';
 
 export default {
   light: {
@@ -15,8 +15,8 @@ export default {
     tabIconSelected: tintColorLight,
   },
   dark: {
-    text: '#eef2ff',
-    background: '#141c2e',
+    text: '#edf4fe',
+    background: '#151c2e',
     surface: '#1d2a3a',
     /** Top navigation header — slightly lighter than surface */
     header: '#243040',
@@ -25,3 +25,4 @@ export default {
     tabIconSelected: tintColorDark,
   },
 };
+

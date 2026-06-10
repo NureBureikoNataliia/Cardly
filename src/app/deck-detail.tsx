@@ -732,10 +732,10 @@ export default function DeckDetailScreen() {
                 <ActionBtn
                   icon="zap"
                   label={t("aiGenerateCards")}
-                  bg={C.isDark ? C.surface : C.aiAccentBg}
+                  bg={C.surface}
                   textColor={C.tint}
                   border
-                  borderColor={C.aiAccentBorder}
+                  borderColor="rgba(99,102,241,0.25)"
                   onPress={() => setShowGenerateModal(true)}
                   flex={!compactSecondaryActions}
                   compactLayout={compactSecondaryActions}
@@ -779,10 +779,10 @@ export default function DeckDetailScreen() {
               <ActionBtn
                 icon="refresh-cw"
                 label={isUpdating ? `${t("saving")}...` : t("updateFromOriginal")}
-                bg={C.isDark ? C.surface : C.aiAccentBg}
+                bg={C.surface}
                 textColor={C.tint}
                 border
-                borderColor={C.aiAccentBorder}
+                borderColor="rgba(99,102,241,0.25)"
                 onPress={handleUpdateFromOriginal}
                 disabled={isUpdating}
                 fullWidth

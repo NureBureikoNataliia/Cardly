@@ -117,7 +117,7 @@ export default function NotificationBell() {
   return (
     <View style={styles.wrap}>
       <TouchableOpacity style={styles.btn} onPress={() => setOpen(v => !v)} activeOpacity={0.7}>
-        <Feather name="bell" size={20} color={C.tint} />
+        <Feather name="bell" size={20} color={C.iconTint} />
         {count > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{count > 9 ? '9+' : String(count)}</Text>
@@ -174,8 +174,8 @@ export default function NotificationBell() {
                     };
                     return (
                       <View style={[styles.card, { borderBottomColor: C.border }]}>
-                        <View style={styles.cardIconWrap}>
-                          <Feather name="clock" size={18} color="#6366f1" />
+                        <View style={[styles.cardIconWrap, { backgroundColor: C.iconBg }]}>
+                          <Feather name="clock" size={18} color={C.iconTint} />
                         </View>
                         <View style={styles.cardBody}>
                           <Text style={[styles.cardTitle, { color: C.text }]} numberOfLines={2}>
@@ -214,11 +214,11 @@ export default function NotificationBell() {
                   return (
                     <View style={[styles.card, { borderBottomColor: C.border }, isFlashing && styles.cardFlash]}>
                       {/* Icon */}
-                      <View style={[styles.cardIconWrap, isFlashing && (flash?.ok ? styles.cardIconOk : styles.cardIconNo)]}>
+                      <View style={[styles.cardIconWrap, { backgroundColor: C.iconBg }, isFlashing && (flash?.ok ? styles.cardIconOk : styles.cardIconNo)]}>
                         <Feather
                           name={isFlashing ? (flash?.ok ? 'check' : 'x') : 'users'}
                           size={18}
-                          color={isFlashing ? '#fff' : '#6366f1'}
+                          color={isFlashing ? '#fff' : C.iconTint}
                         />
                       </View>
 

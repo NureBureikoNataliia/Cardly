@@ -53,10 +53,10 @@ export function useAppColors() {
   return {
     cs,
     isDark,
-    bg:           isDark ? '#141c2e' : '#f3f4f6',
+    bg:           isDark ? '#151c2e' : '#f3f4f6',
     surface:      isDark ? '#1d2a3a' : '#ffffff',
     surfaceAlt:   isDark ? '#243547' : '#f7f8fb',
-    text:         isDark ? '#eef2ff' : '#111827',
+    text:         isDark ? '#edf4fe' : '#111827',
     /** Secondary copy — brighter in dark mode for WCAG-friendly contrast on navy surfaces */
     textSub:      isDark ? '#c8d0e0' : '#6b7280',
     textMuted:    isDark ? '#9fb0c8' : '#9ca3af',
@@ -65,7 +65,9 @@ export function useAppColors() {
     inputBg:      isDark ? '#243547' : '#f7f8fb',
     inputBorder:  isDark ? '#2d3f55' : '#e8eaee',
     placeholder:  isDark ? '#6b7280' : '#c4cbd8',
-    tint:         isDark ? '#a5b4fc' : '#4255ff',
+    tint:         isDark ? '#6366f1' : '#4255ff',
+    iconTint:     isDark ? '#a7b6f7' : '#4255ff',
+    iconBg:       isDark ? '#eef2fe' : '#EEF2FF',
     /** Outlined AI chips (deck actions, add-card labels) */
     aiAccentBg:     isDark ? 'rgba(99,102,241,0.22)' : '#eef0ff',
     aiAccentBorder: isDark ? 'rgba(165,180,252,0.5)' : 'rgba(99,102,241,0.28)',
