@@ -15,6 +15,7 @@ import { useColorScheme } from '@/src/components/useColorScheme';
 import Colors from '@/src/constants/Colors';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { useAppColors } from '@/src/contexts/ThemeContext';
 
 type SortKey =
   | 'newest'
@@ -30,6 +31,7 @@ export default function MainScreen() {
   const { user, loading: authLoading } = useAuth();
   const { t } = useLanguage();
   const colorScheme = useColorScheme();
+  const C = useAppColors();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [collaboratedDeckIds, setCollaboratedDeckIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -299,21 +301,18 @@ export default function MainScreen() {
               <RNView style={styles.controlsContainer}>
                 <RNView style={[
                   styles.searchContainer,
-                  {
-                    backgroundColor: colorScheme === 'dark' ? '#374151' : '#f7f8fb',
-                    borderColor: colorScheme === 'dark' ? '#4b5563' : '#e8eaee',
-                  },
-                  searchFocused && (colorScheme === 'dark'
-                    ? { borderColor: '#6366f1', backgroundColor: '#1f2937' }
+                  { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                  searchFocused && (C.isDark
+                    ? { borderColor: '#6366f1', backgroundColor: C.surface }
                     : styles.searchContainerFocused),
                 ]}>
-                  <Feather name="search" size={16} color={searchFocused ? Colors[colorScheme].tint : '#b0b8c8'} />
+                  <Feather name="search" size={16} color={searchFocused ? C.tint : '#b0b8c8'} />
                   <TextInput
-                    style={[styles.searchInput, { color: Colors[colorScheme].text }]}
+                    style={[styles.searchInput, { color: C.text }]}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                     placeholder={t('searchDecks')}
-                    placeholderTextColor={colorScheme === 'dark' ? '#6b7280' : '#c4cbd8'}
+                    placeholderTextColor={C.placeholder}
                     onFocus={() => setSearchFocused(true)}
                     onBlur={() => setSearchFocused(false)}
                   />
@@ -332,12 +331,23 @@ export default function MainScreen() {
                         key={key}
                         style={[
                           styles.chip,
-                          { backgroundColor: Colors[colorScheme].surface, borderColor: colorScheme === 'dark' ? '#4b5563' : '#e5e7eb' },
-                          sortBy === key && styles.chipActive,
+                          { backgroundColor: C.surface, borderColor: C.border },
+                          sortBy === key && {
+                            borderColor: C.tint,
+                            backgroundColor: C.isDark ? 'rgba(165,180,252,0.15)' : 'rgba(66,85,255,0.12)',
+                          },
                         ]}
                         onPress={() => setSortBy(key)}
                       >
-                        <Text style={[styles.chipText, sortBy === key && styles.chipTextActive]}>{label}</Text>
+                        <Text
+                          style={[
+                            styles.chipText,
+                            { color: C.textSub },
+                            sortBy === key && { color: C.tint, fontWeight: '600' },
+                          ]}
+                        >
+                          {label}
+                        </Text>
                       </Pressable>
                     ))}
                   </RNView>
@@ -351,12 +361,21 @@ export default function MainScreen() {
                         key={f}
                         style={[
                           styles.chip,
-                          { backgroundColor: Colors[colorScheme].surface, borderColor: colorScheme === 'dark' ? '#4b5563' : '#e5e7eb' },
-                          visibilityFilter === f && styles.chipActive,
+                          { backgroundColor: C.surface, borderColor: C.border },
+                          visibilityFilter === f && {
+                            borderColor: C.tint,
+                            backgroundColor: C.isDark ? 'rgba(165,180,252,0.15)' : 'rgba(66,85,255,0.12)',
+                          },
                         ]}
                         onPress={() => setVisibilityFilter(f)}
                       >
-                        <Text style={[styles.chipText, visibilityFilter === f && styles.chipTextActive]}>
+                        <Text
+                          style={[
+                            styles.chipText,
+                            { color: C.textSub },
+                            visibilityFilter === f && { color: C.tint, fontWeight: '600' },
+                          ]}
+                        >
                           {t(f)}
                         </Text>
                       </Pressable>

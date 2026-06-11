@@ -18,6 +18,7 @@ import { AuthTopActions } from '@/src/components/AuthTopActions';
 import { PasswordField } from '@/src/components/PasswordField';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import { authFormStyles, authInputStyle } from '@/src/components/authFormStyles';
+import { mapAuthErrorMessage } from '@/src/lib/mapAuthError';
 import { keyboardAvoidingBehavior } from '@/src/lib/keyboardAvoiding';
 
 export default function LoginScreen() {
@@ -42,10 +43,11 @@ export default function LoginScreen() {
     const { error, isAdmin: adminFlag } = await signIn(email, password);
 
     if (error) {
-      setError(mapAuthErrorMessage(error, t));
+      const message = mapAuthErrorMessage(error, t);
+      setError(message || t('authInvalidCredentials'));
       setLoading(false);
     } else {
-      router.replace('/(tabs)'as never);
+      router.replace('/(tabs)' as never);
     }
   };
 
@@ -100,10 +102,10 @@ export default function LoginScreen() {
               editable={!loading}
             />
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            <View style={styles.errorHolder}>{error ? <Text style={styles.errorText}>{error}</Text> : null}</View>
 
             <TouchableOpacity
-              style={[authFormStyles.button, styles.button, loading && styles.buttonDisabled]}
+              style={[authFormStyles.button, styles.button, { backgroundColor: C.tint }, loading && styles.buttonDisabled]}
               onPress={handleLogin}
               disabled={loading}
             >
@@ -129,7 +131,7 @@ export default function LoginScreen() {
             <View style={styles.footer}>
               <Text style={[styles.footerText, { color: C.textSub }]}>{t('noAccount')} </Text>
               <TouchableOpacity onPress={() => router.push('/auth/signup' as never)}>
-                <Text style={styles.linkText}>{t('signUp')}</Text>
+                <Text style={[styles.linkText, { color: C.tint }]}>{t('signUp')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -150,7 +152,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
   },
   scrollContent: {
     flexGrow: 1,
@@ -160,12 +161,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 20,
+    maxWidth: 520,
+    alignSelf: 'center',
+    width: '100%',
   },
   form: {
     width: '100%',
   },
   button: {
-    backgroundColor: '#3b82f6',
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -176,15 +179,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   googleButtonText: {
-    color: '#1e293b',
     fontSize: 16,
     fontWeight: '600',
   },
   errorText: {
     color: '#ef4444',
     fontSize: 14,
-    marginBottom: 16,
+    marginBottom: 0,
     textAlign: 'center',
+  },
+  errorHolder: {
+    minHeight: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 8,
   },
   footer: {
     flexDirection: 'row',
@@ -192,11 +201,9 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   footerText: {
-    color: '#64748b',
     fontSize: 14,
   },
   linkText: {
-    color: '#3b82f6',
     fontSize: 14,
     fontWeight: '600',
   },

@@ -55,7 +55,8 @@ export default function SignUpScreen() {
     const { error } = await signUp(email, password, username.trim());
 
     if (error) {
-      setError(mapAuthErrorMessage(error, t));
+      const message = mapAuthErrorMessage(error, t);
+      setError(message || t('authErrorGeneric'));
       setLoading(false);
     } else {
       router.replace('/(tabs)');
@@ -116,10 +117,10 @@ export default function SignUpScreen() {
               editable={!loading}
             />
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            <View style={styles.errorHolder}>{error ? <Text style={styles.errorText}>{error}</Text> : null}</View>
 
             <TouchableOpacity
-              style={[authFormStyles.button, styles.button, loading && styles.buttonDisabled]}
+              style={[authFormStyles.button, styles.button, { backgroundColor: C.tint }, loading && styles.buttonDisabled]}
               onPress={handleSignUp}
               disabled={loading}
             >
@@ -133,7 +134,7 @@ export default function SignUpScreen() {
             <View style={styles.footer}>
               <Text style={[styles.footerText, { color: C.textSub }]}>{t('haveAccount')} </Text>
               <TouchableOpacity onPress={() => router.push('/auth/login')}>
-                <Text style={styles.linkText}>{t('signIn')}</Text>
+                <Text style={[styles.linkText, { color: C.tint }]}>{t('signIn')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -154,7 +155,6 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
   },
   scrollContent: {
     flexGrow: 1,
@@ -164,12 +164,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 20,
+    maxWidth: 520,
+    alignSelf: 'center',
+    width: '100%',
   },
   form: {
     width: '100%',
   },
   button: {
-    backgroundColor: '#3b82f6',
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -182,8 +184,15 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#ef4444',
     fontSize: 14,
-    marginBottom: 16,
+    marginBottom: 0,
     textAlign: 'center',
+  },
+  errorHolder: {
+    minHeight: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 8,
   },
   footer: {
     flexDirection: 'row',
@@ -191,11 +200,9 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   footerText: {
-    color: '#64748b',
     fontSize: 14,
   },
   linkText: {
-    color: '#3b82f6',
     fontSize: 14,
     fontWeight: '600',
   },

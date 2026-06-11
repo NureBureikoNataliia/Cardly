@@ -44,11 +44,13 @@ export function PasswordField({
         style={[
           styles.input,
           { color: C.text },
-          Platform.OS === 'web' && C.isDark
+          Platform.OS === 'web'
             ? ({
-                backgroundColor: 'transparent',
-                boxShadow: `0 0 0 1000px ${C.inputBg} inset`,
-                WebkitTextFillColor: C.text,
+                outlineStyle: 'none',
+                outlineWidth: 0,
+                ...(C.isDark
+                  ? ({ backgroundColor: 'transparent', boxShadow: `0 0 0 1000px ${C.inputBg} inset`, WebkitTextFillColor: C.text } as TextStyle)
+                  : ({} as TextStyle)),
               } as TextStyle)
             : null,
           inputStyle,

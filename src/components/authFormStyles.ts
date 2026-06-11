@@ -19,12 +19,11 @@ export function authInputStyle(C: C): TextStyle {
     ...(Platform.OS === 'web'
       ? ({
           outlineStyle: 'none',
+          outlineWidth: 0,
+          // Keep dark autofill fix but don't introduce visible outline
           ...(C.isDark
-            ? {
-                boxShadow: `0 0 0 1000px ${C.inputBg} inset`,
-                WebkitTextFillColor: C.text,
-              }
-            : {}),
+            ? ({ boxShadow: `0 0 0 1000px ${C.inputBg} inset`, WebkitTextFillColor: C.text } as TextStyle)
+            : ({} as TextStyle)),
         } as TextStyle)
       : {}),
   };
