@@ -16,6 +16,10 @@ interface AuthContextType {
   /** Supabase Google OAuth (configured in Dashboard → Auth → Providers). */
   signInWithGoogle: () => Promise<{ error: any; isAdmin?: boolean }>;
   signUp: (email: string, password: string, username: string) => Promise<{ error: any }>;
+  /** Request password reset email */
+  resetPassword: (email: string) => Promise<{ error: any }>;
+  /** Update password with new value (for password reset flow or authenticated user) */
+  updatePassword: (newPassword: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -118,6 +122,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   };
 
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: Platform.OS === 'web' 
+        ? `${window.location.origin}/auth/reset-password`
+        : 'cardly://auth/reset-password',
+    });
+    return { error };
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    return { error };
+  };
+
   const signOut = async () => {
     setIsAdmin(false);
     await supabase.auth.signOut();
@@ -133,6 +153,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signInWithGoogle,
         signUp,
+        resetPassword,
+        updatePassword,
         signOut,
       }}
     >

@@ -65,6 +65,10 @@ export default function LoginScreen() {
     }
   };
 
+  const handleForgotPassword = () => {
+    router.push('/auth/forgot-password' as never);
+  };
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: C.bg }]}
@@ -126,6 +130,12 @@ export default function LoginScreen() {
               disabled={loading}
             >
               <Text style={[styles.googleButtonText, { color: C.text }]}>{t('googleSignIn')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleForgotPassword} style={{ marginTop: 16, paddingVertical: 8 }}>
+              <Text style={[styles.linkText, { color: C.tint, textAlign: 'center', fontSize: 14 }]}>
+                {t('forgotPassword')}
+              </Text>
             </TouchableOpacity>
 
             <View style={styles.footer}>

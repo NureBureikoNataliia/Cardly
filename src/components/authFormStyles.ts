@@ -1,8 +1,8 @@
 import { Platform, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 
-import type { useAppColors } from '@/src/contexts/ThemeContext';
+import type { AppColors } from '@/src/contexts/ThemeContext';
 
-type C = ReturnType<typeof useAppColors>;
+type C = AppColors;
 
 /** Compact auth field sizing + dark web autofill override. */
 export function authInputStyle(C: C): TextStyle {

@@ -27,8 +27,7 @@ import {
   parseImportFromTxtText,
   parseImportFromXlsxArrayBuffer,
   type ImportWordRow,
-} from "@/src/lib/deckImportParse";
-import { keyboardAvoidingBehavior } from "@/src/lib/keyboardAvoiding";
+} from "@/src/lib/deckImportParse";import { readUriAsArrayBuffer, readUriAsUtf8 } from '@/src/lib/readImportFile';import { keyboardAvoidingBehavior } from "@/src/lib/keyboardAvoiding";
 import { supabase } from "@/src/lib/supabase";
 
 const MIME_TYPES = [

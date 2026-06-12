@@ -75,3 +75,5 @@ export function useAppColors() {
     aiButtonFill:   isDark ? '#6366f1' : '#4255ff',
   } as const;
 }
+
+export type AppColors = ReturnType<typeof useAppColors>;
