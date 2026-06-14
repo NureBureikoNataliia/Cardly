@@ -12,7 +12,13 @@
     "web": "expo start --web",
     "build:android": "eas-cli build --platform android --profile preview",
     "build:android:download": "eas-cli build:download --platform android --latest --output dist/cardly-preview.apk",
-    "supabase": "supabase"
+    "supabase": "supabase",
+    "test": "npm run test:app",
+    "test:watch": "npm run test:app:watch",
+    "test:app": "jest --config jest.app.config.cjs --runInBand",
+    "test:app:watch": "jest --config jest.app.config.cjs --watch",
+    "test:srs": "npm --workspace=@cardly/srs run test",
+    "test:srs:watch": "npm --workspace=@cardly/srs run test:watch"
   },
   "dependencies": {
     "@cardly/srs": "*",
@@ -51,10 +57,14 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/jest": "^29.5.14",
     "@types/react": "~19.1.0",
     "eas-cli": "^19.0.0",
-    "react-test-renderer": "19.1.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^30.4.1",
     "supabase": "^2.84.4",
+    "ts-jest": "^29.4.11",
     "typescript": "~5.9.2"
   },
   "private": true

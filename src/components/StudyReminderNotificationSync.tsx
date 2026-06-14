@@ -6,7 +6,7 @@ import { useLanguage } from '@/src/contexts/LanguageContext';
 import { parseStudyReminderPrefs } from '@/src/lib/webStudyReminder';
 import { syncStudyDailyReminder } from '@/src/lib/studyReminderNotifications';
 
-function runSync(metadata: unknown, t: (key: string) => string) {
+export function runSync(metadata: unknown, t: (key: string) => string) {
   const { enabled, hour } = parseStudyReminderPrefs(metadata);
 
   void syncStudyDailyReminder({
