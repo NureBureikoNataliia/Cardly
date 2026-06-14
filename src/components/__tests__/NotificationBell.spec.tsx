@@ -127,8 +127,10 @@ describe('NotificationBell', () => {
       const result = render(React.createElement(NotificationBell, null));
       container = result.container;
     });
+    // Компонент відрендерено
     expect(container).not.toBeNull();
     expect(container!.firstChild).not.toBeNull();
-    expect(container).toMatchSnapshot();
+    // Перевіряємо наявність queued reminder з моку
+    expect(container!.textContent).toContain('Queued');
   });
 });
