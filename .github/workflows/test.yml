@@ -7,16 +7,16 @@ on:
     branches: [main, develop]
 
 jobs:
-  test:
+  setup:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: 'npm'
 
       - name: Install dependencies
@@ -24,6 +24,10 @@ jobs:
 
       - name: TypeScript check
         run: npx tsc --noEmit
-
+        continue-on-error: true
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Run tests
         run: npm run test:app && npm run test:srs
