@@ -36,7 +36,7 @@ export function mapAuthErrorMessage(
   if (msg.includes('password') && (msg.includes('at least') || msg.includes('6'))) {
     return t('authWeakPassword');
   }
-  if (msg.includes('invalid email') || msg.includes('unable to validate email')) {
+  if (msg.includes('invalid email') || msg.includes('unable to validate email') || (msg.includes('email') && msg.includes('invalid'))) {
     return t('authInvalidEmail');
   }
   if (msg.includes('rate limit') || msg.includes('too many')) return t('authEmailRateLimit');

@@ -20,6 +20,7 @@ import { useAppColors } from '@/src/contexts/ThemeContext';
 import { authFormStyles, authInputStyle } from '@/src/components/authFormStyles';
 import { mapAuthErrorMessage } from '@/src/lib/mapAuthError';
 import { keyboardAvoidingBehavior } from '@/src/lib/keyboardAvoiding';
+import { AntDesign } from '@expo/vector-icons';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -132,12 +133,13 @@ export default function LoginScreen() {
             <TouchableOpacity
               style={[
                 authFormStyles.googleButton,
-                { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                { backgroundColor: C.inputBg, borderColor: C.inputBorder, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
                 loading && styles.buttonDisabled,
               ]}
               onPress={handleGoogle}
               disabled={loading}
             >
+              <AntDesign name="google" size={20} color={C.text} />
               <Text style={[styles.googleButtonText, { color: C.text }]}>{t('googleSignIn')}</Text>
             </TouchableOpacity>
 
