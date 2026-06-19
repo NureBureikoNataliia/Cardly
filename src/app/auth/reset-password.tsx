@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
@@ -10,15 +9,23 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { AuthTopActions } from '@/src/components/AuthTopActions';
 import { useAppColors } from '@/src/contexts/ThemeContext';
-import { authFormStyles, authInputStyle } from '@/src/components/authFormStyles';
+import { authFormStyles } from '@/src/components/authFormStyles';
 import { PasswordField } from '@/src/components/PasswordField';
 import { mapAuthErrorMessage } from '@/src/lib/mapAuthError';
 import { keyboardAvoidingBehavior } from '@/src/lib/keyboardAvoiding';
 import { supabase } from '@/src/lib/supabase';
+
+function isRecoveryUrl(): boolean {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  const hash = window.location.hash;
+  const search = window.location.search;
+  return hash.includes('type=recovery') || search.includes('type=recovery');
+}
 
 export default function ResetPasswordScreen() {
   const [password, setPassword] = useState('');
@@ -33,29 +40,37 @@ export default function ResetPasswordScreen() {
   const { t } = useLanguage();
   const router = useRouter();
   const C = useAppColors();
-  const params = useLocalSearchParams<{ email?: string }>();
-  const emailParam = typeof params.email === 'string' ? decodeURIComponent(params.email) : null;
 
-  // Check if there's a valid session (token was already processed by Supabase)
   useEffect(() => {
-    const checkSession = async () => {
-      try {
+    let cancelled = false;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        setIsValidToken(true);
+        setCheckingToken(false);
+      }
+    });
+
+    (async () => {
+      if (isRecoveryUrl()) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        
-        // Check if we have a session and the user came from password reset
-        if (session?.user?.id) {
+        if (!cancelled && session) {
           setIsValidToken(true);
         }
-      } catch {
-        // If no valid session/token, still show form
-      } finally {
-        setCheckingToken(false);
       }
-    };
+      if (!cancelled) setCheckingToken(false);
+    })();
 
-    checkSession();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleResetPassword = async () => {
@@ -64,7 +79,7 @@ export default function ResetPasswordScreen() {
       return;
     }
 
-    if (password.length < 8) {
+    if (password.length < 6) {
       setError(t('passwordMinLength'));
       return;
     }
@@ -85,11 +100,10 @@ export default function ResetPasswordScreen() {
       setLoading(false);
     } else {
       setSuccess(true);
-      // Show success message for 1 second, then sign out and redirect
       setTimeout(async () => {
         await supabase.auth.signOut();
         router.replace('/auth/login' as never);
-      }, 1000);
+      }, 1500);
     }
   };
 
@@ -107,6 +121,7 @@ export default function ResetPasswordScreen() {
   if (!isValidToken) {
     return (
       <View style={[styles.center, { backgroundColor: C.bg, padding: 24 }]}>
+        <AuthTopActions />
         <Text style={[styles.errorTitle, { color: C.text }]}>{t('invalidResetLink')}</Text>
         <Text style={[styles.errorMessage, { color: C.textSub, marginTop: 12 }]}>
           {t('invalidResetLinkHint')}
@@ -117,6 +132,12 @@ export default function ResetPasswordScreen() {
         >
           <Text style={styles.buttonText}>{t('requestNewLink')}</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.backLink}
+          onPress={() => router.replace('/auth/login' as never)}
+        >
+          <Text style={[{ color: C.tint, fontSize: 14 }]}>{t('backToSignIn')}</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -126,6 +147,7 @@ export default function ResetPasswordScreen() {
       style={[styles.container, { backgroundColor: C.bg }]}
       behavior={keyboardAvoidingBehavior()}
     >
+      <AuthTopActions />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -169,16 +191,6 @@ export default function ResetPasswordScreen() {
                 ) : (
                   <Text style={styles.buttonText}>{t('resetPassword')}</Text>
                 )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.backLink}
-                onPress={() => router.back()}
-                disabled={loading}
-              >
-                <Text style={[{ color: C.tint, fontSize: 14, textAlign: 'center' }]}>
-                  ← {t('goBack')}
-                </Text>
               </TouchableOpacity>
             </View>
           ) : (

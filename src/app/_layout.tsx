@@ -207,6 +207,8 @@ function WebAuthenticatedShell({
           >
             <Stack.Screen name="auth/login" options={{ headerShown: false, animation: 'fade' }} />
             <Stack.Screen name="auth/signup" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="auth/forgot-password" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="auth/reset-password" options={{ headerShown: false, animation: 'fade' }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
             <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
@@ -260,9 +262,10 @@ function RootLayoutNav() {
       segments[0] === 'deck-detail' ||
       (segments[0] === 'public' && segments[1] === 'browse') ||
       guestAllowedByPathname(isWeb ? pathname : undefined);
+    const authAllowsLoggedIn = segments[1] === 'reset-password';
     if (!session && !inAuthGroup && segments.length > 0 && !guestBrowseOk) {
       router.replace('/auth/login');
-    } else if (session && inAuthGroup) {
+    } else if (session && inAuthGroup && !authAllowsLoggedIn) {
       router.replace('/(tabs)');
     }
   }, [session, loading, segments, router, pathname, isWeb]);
@@ -340,6 +343,8 @@ function RootLayoutNav() {
     >
       <Stack.Screen name="auth/login" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="auth/signup" options={{ headerShown: false, animation: 'fade' }} />
+      <Stack.Screen name="auth/forgot-password" options={{ headerShown: false, animation: 'fade' }} />
+      <Stack.Screen name="auth/reset-password" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
       <Stack.Screen name="publicdecks" options={{ headerShown: true }} />

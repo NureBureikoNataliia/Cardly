@@ -66,7 +66,8 @@ export default function LoginScreen() {
   };
 
   const handleForgotPassword = () => {
-    router.push('/auth/forgot-password' as never);
+    const query = email.trim() ? `?email=${encodeURIComponent(email.trim())}` : '';
+    router.push(`/auth/forgot-password${query}` as never);
   };
 
   return (
@@ -106,6 +107,14 @@ export default function LoginScreen() {
               editable={!loading}
             />
 
+            <TouchableOpacity
+              onPress={handleForgotPassword}
+              style={styles.forgotPasswordRow}
+              disabled={loading}
+            >
+              <Text style={[styles.forgotPasswordText, { color: C.tint }]}>{t('forgotPassword')}</Text>
+            </TouchableOpacity>
+
             <View style={styles.errorHolder}>{error ? <Text style={styles.errorText}>{error}</Text> : null}</View>
 
             <TouchableOpacity
@@ -130,12 +139,6 @@ export default function LoginScreen() {
               disabled={loading}
             >
               <Text style={[styles.googleButtonText, { color: C.text }]}>{t('googleSignIn')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={handleForgotPassword} style={{ marginTop: 16, paddingVertical: 8 }}>
-              <Text style={[styles.linkText, { color: C.tint, textAlign: 'center', fontSize: 14 }]}>
-                {t('forgotPassword')}
-              </Text>
             </TouchableOpacity>
 
             <View style={styles.footer}>
@@ -177,6 +180,17 @@ const styles = StyleSheet.create({
   },
   form: {
     width: '100%',
+  },
+  forgotPasswordRow: {
+    alignSelf: 'flex-end',
+    marginTop: -4,
+    marginBottom: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  forgotPasswordText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   button: {
   },
