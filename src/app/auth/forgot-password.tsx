@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,21 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { AuthTopActions } from '@/src/components/AuthTopActions';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import { authFormStyles, authInputStyle } from '@/src/components/authFormStyles';
 import { mapAuthErrorMessage } from '@/src/lib/mapAuthError';
 import { keyboardAvoidingBehavior } from '@/src/lib/keyboardAvoiding';
 
 export default function ForgotPasswordScreen() {
-  const [email, setEmail] = useState('');
+  const params = useLocalSearchParams<{ email?: string }>();
+  const initialEmail =
+    typeof params.email === 'string' ? decodeURIComponent(params.email) : '';
+
+  const [email, setEmail] = useState(initialEmail);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
@@ -28,6 +33,10 @@ export default function ForgotPasswordScreen() {
   const { t } = useLanguage();
   const router = useRouter();
   const C = useAppColors();
+
+  useEffect(() => {
+    if (initialEmail) setEmail(initialEmail);
+  }, [initialEmail]);
 
   const handleResetEmail = async () => {
     if (!email.trim()) {
@@ -44,14 +53,11 @@ export default function ForgotPasswordScreen() {
       const message = mapAuthErrorMessage(resetError, t);
       setError(message || t('unexpectedError'));
       setLoading(false);
-    } else {
-      setSent(true);
-      setLoading(false);
-      // Navigate to reset-password screen with email
-      setTimeout(() => {
-        router.push(`/auth/reset-password?email=${encodeURIComponent(email.trim())}` as never);
-      }, 2000);
+      return;
     }
+
+    setSent(true);
+    setLoading(false);
   };
 
   return (
@@ -59,6 +65,7 @@ export default function ForgotPasswordScreen() {
       style={[styles.container, { backgroundColor: C.bg }]}
       behavior={keyboardAvoidingBehavior()}
     >
+      <AuthTopActions />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -74,7 +81,7 @@ export default function ForgotPasswordScreen() {
           </TouchableOpacity>
 
           <View style={authFormStyles.header}>
-            <Text style={[authFormStyles.title, { color: C.text }]}>{t('resetPassword')}</Text>
+            <Text style={[authFormStyles.title, { color: C.text }]}>{t('forgotPasswordTitle')}</Text>
             <Text style={[authFormStyles.subtitle, { color: C.textSub, marginTop: 8 }]}>
               {sent ? t('resetPasswordEmailSent') : t('resetPasswordDescription')}
             </Text>
@@ -90,6 +97,7 @@ export default function ForgotPasswordScreen() {
                 onChangeText={setEmail}
                 autoCapitalize="none"
                 keyboardType="email-address"
+                autoComplete="email"
                 editable={!loading}
               />
 
@@ -108,18 +116,29 @@ export default function ForgotPasswordScreen() {
                   <Text style={styles.buttonText}>{t('sendResetEmail')}</Text>
                 )}
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.backLink}
+                onPress={() => router.replace('/auth/login' as never)}
+                disabled={loading}
+              >
+                <Text style={[styles.backLinkText, { color: C.tint }]}>{t('backToSignIn')}</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={[styles.form, styles.successContainer]}>
               <Text style={[styles.successText, { color: C.text }]}>
-                ✓ {t('resetEmailSent').replace('{email}', email)}
+                ✓ {t('resetEmailSent').replace('{email}', email.trim())}
               </Text>
               <Text style={[styles.successSubtext, { color: C.textSub }]}>
                 {t('resetEmailSentHint')}
               </Text>
-              <Text style={[styles.successSubtext, { color: C.textSub, marginTop: 12, fontSize: 12 }]}>
-                {t('redirectingToReset')}
-              </Text>
+              <TouchableOpacity
+                style={[authFormStyles.button, styles.button, { backgroundColor: C.tint }]}
+                onPress={() => router.replace('/auth/login' as never)}
+              >
+                <Text style={styles.buttonText}>{t('backToSignIn')}</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -171,6 +190,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
+  backLink: {
+    marginTop: 16,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  backLinkText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   successContainer: {
     alignItems: 'center',
     paddingVertical: 20,
@@ -185,5 +213,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 8,
   },
 });

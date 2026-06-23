@@ -62,11 +62,11 @@ export default function DeckImportScreen() {
 
   const [fileLabel, setFileLabel] = useState<string | null>(null);
   const [pairs, setPairs] = useState<ImportWordRow[]>([]);
-  const [parseError, setParseError] = useState<string | null>(null);
+  const [parseErrorKey, setParseErrorKey] = useState<string | null>(null);
   const [accessErrorKey, setAccessErrorKey] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveErrorKey, setSaveErrorKey] = useState<string | null>(null);
 
   const isAddToDeck = Boolean(deckIdParam);
 
@@ -116,11 +116,11 @@ export default function DeckImportScreen() {
 
   const parsePickedFile = useCallback(
     async (uri: string, name: string, mime?: string) => {
-      setParseError(null);
-      setSaveError(null);
+      setParseErrorKey(null);
+      setSaveErrorKey(null);
       const kind = inferImportKind(name, mime);
       if (!kind) {
-        setParseError(t("importErrorExtension"));
+        setParseErrorKey("importErrorExtension");
         setPairs([]);
         return;
       }
@@ -137,16 +137,16 @@ export default function DeckImportScreen() {
           result = parseImportFromXlsxArrayBuffer(buf);
         }
         if (result.error === "invalid_format") {
-          setParseError(t("importErrorInvalidFormat"));
+          setParseErrorKey("importErrorInvalidFormat");
           setPairs([]);
         } else if (result.rows.length === 0) {
-          setParseError(t("importErrorNoRows"));
+          setParseErrorKey("importErrorNoRows");
           setPairs([]);
         } else {
           setPairs(result.rows);
         }
       } catch {
-        setParseError(t("importErrorParse"));
+        setParseErrorKey("importErrorParse");
         setPairs([]);
       }
     },
@@ -155,8 +155,8 @@ export default function DeckImportScreen() {
 
   const pickFile = useCallback(async () => {
     if (!user) return;
-    setParseError(null);
-    setSaveError(null);
+    setParseErrorKey(null);
+    setSaveErrorKey(null);
     const res = await DocumentPicker.getDocumentAsync({
       type: MIME_TYPES,
       copyToCacheDirectory: true,
@@ -171,8 +171,8 @@ export default function DeckImportScreen() {
   const clearFile = useCallback(() => {
     setFileLabel(null);
     setPairs([]);
-    setParseError(null);
-    setSaveError(null);
+    setParseErrorKey(null);
+    setSaveErrorKey(null);
   }, []);
 
   const importRows = async (targetDeckId: string): Promise<boolean> => {
@@ -190,7 +190,7 @@ export default function DeckImportScreen() {
       }));
       const { error } = await supabase.from("cards").insert(rows);
       if (error) {
-        setSaveError(error.message);
+        setSaveErrorKey(error.message);
         return false;
       }
     }
@@ -199,9 +199,9 @@ export default function DeckImportScreen() {
 
   const handleImport = async () => {
     if (!user || saving) return;
-    setSaveError(null);
+    setSaveErrorKey(null);
     if (pairs.length === 0) {
-      setSaveError(t("importErrorNoRows"));
+      setSaveErrorKey("importErrorNoRows");
       return;
     }
     setSaving(true);
@@ -213,7 +213,7 @@ export default function DeckImportScreen() {
         }
       } else {
         if (!title.trim()) {
-          setSaveError(t("importErrorTitle"));
+          setSaveErrorKey("importErrorTitle");
           setSaving(false);
           return;
         }
@@ -229,7 +229,7 @@ export default function DeckImportScreen() {
           .select("*")
           .single();
         if (deckErr || !newDeck) {
-          setSaveError(deckErr?.message ?? t("unexpectedError"));
+          setSaveErrorKey(deckErr?.message ?? "unexpectedError");
           setSaving(false);
           return;
         }
@@ -355,8 +355,8 @@ export default function DeckImportScreen() {
             </View>
           )}
 
-          {parseError ? (
-            <Text style={styles.errTxt}>{parseError}</Text>
+          {parseErrorKey ? (
+            <Text style={styles.errTxt}>{t(parseErrorKey)}</Text>
           ) : pairs.length > 0 ? (
             <>
               <Text style={[styles.countTxt, { color: C.text }]}>
@@ -380,7 +380,7 @@ export default function DeckImportScreen() {
             </>
           ) : null}
 
-          {saveError ? <Text style={styles.errTxt}>{saveError}</Text> : null}
+          {saveErrorKey ? <Text style={styles.errTxt}>{t(saveErrorKey)}</Text> : null}
 
           <TouchableOpacity
             style={[

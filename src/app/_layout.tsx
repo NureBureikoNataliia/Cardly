@@ -196,7 +196,7 @@ function WebAuthenticatedShell({
             screenOptions={{
               headerStyle: { backgroundColor: headerBg },
               headerShadowVisible: true,
-              headerTintColor: headerText,
+              headerTintColor: headerTint,
               headerTitleStyle: { fontSize: 18, fontWeight: '600' },
               headerTitleAlign: 'left',
               headerTitle: () => <AppHeaderBrand color={headerText} />,
@@ -207,6 +207,8 @@ function WebAuthenticatedShell({
           >
             <Stack.Screen name="auth/login" options={{ headerShown: false, animation: 'fade' }} />
             <Stack.Screen name="auth/signup" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="auth/forgot-password" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="auth/reset-password" options={{ headerShown: false, animation: 'fade' }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
             <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
@@ -225,10 +227,9 @@ function WebAuthenticatedShell({
             <Stack.Screen
               name="modal"
               options={{
-          presentation: 'modal',
-          headerTitle: () => <AppHeaderBrand color={headerText} />,
-          headerRight: () => <View style={{ marginRight: 12 }}><LanguageDropdown /></View>,
-        }}
+                presentation: 'modal',
+                headerTitle: () => <AppHeaderBrand color={headerText} />,
+              }}
             />
           </Stack>
         </View>
@@ -260,9 +261,10 @@ function RootLayoutNav() {
       segments[0] === 'deck-detail' ||
       (segments[0] === 'public' && segments[1] === 'browse') ||
       guestAllowedByPathname(isWeb ? pathname : undefined);
+    const authAllowsLoggedIn = segments[1] === 'reset-password';
     if (!session && !inAuthGroup && segments.length > 0 && !guestBrowseOk) {
       router.replace('/auth/login');
-    } else if (session && inAuthGroup) {
+    } else if (session && inAuthGroup && !authAllowsLoggedIn) {
       router.replace('/(tabs)');
     }
   }, [session, loading, segments, router, pathname, isWeb]);
@@ -296,16 +298,18 @@ function RootLayoutNav() {
           <NotificationBell />
           <ThemeToggle />
           <LanguageDropdown />
-          <Pressable onPress={() => router.push('/modal')}>
-            {({ pressed }) => (
-              <FontAwesome
-                name="info-circle"
-                size={25}
-                color={headerTint}
-                style={{ opacity: pressed ? 0.5 : 1 }}
-              />
-            )}
-          </Pressable>
+          {pathname !== '/modal' && (
+            <Pressable onPress={() => router.push('/modal')}>
+              {({ pressed }) => (
+                <FontAwesome
+                  name="info-circle"
+                  size={25}
+                  color={headerTint}
+                  style={{ opacity: pressed ? 0.5 : 1 }}
+                />
+              )}
+            </Pressable>
+          )}
         </>
       ) : guestBrowsing ? (
         <>
@@ -329,7 +333,7 @@ function RootLayoutNav() {
       screenOptions={{
         headerStyle: { backgroundColor: headerBg },
         headerShadowVisible: true,
-        headerTintColor: headerText,
+        headerTintColor: headerTint,
         headerTitleStyle: { fontSize: 18, fontWeight: '600' },
         headerTitleAlign: 'left',
         headerTitle: () => <AppHeaderBrand color={headerText} />,
@@ -340,6 +344,8 @@ function RootLayoutNav() {
     >
       <Stack.Screen name="auth/login" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="auth/signup" options={{ headerShown: false, animation: 'fade' }} />
+      <Stack.Screen name="auth/forgot-password" options={{ headerShown: false, animation: 'fade' }} />
+      <Stack.Screen name="auth/reset-password" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="deck-detail" options={{ headerShown: true }} />
       <Stack.Screen name="publicdecks" options={{ headerShown: true }} />
@@ -360,7 +366,6 @@ function RootLayoutNav() {
         options={{
           presentation: 'modal',
           headerTitle: () => <AppHeaderBrand color={headerText} />,
-          headerRight: () => <View style={{ marginRight: 12 }}><LanguageDropdown /></View>,
         }}
       />
     </Stack>
