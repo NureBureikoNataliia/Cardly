@@ -203,7 +203,7 @@ export default function DeckSrsOverridesPanel({
             <TextInput
               value={form.new_cards_per_day}
               onChangeText={(value) => handleChange("new_cards_per_day", value)}
-              placeholder="20"
+              placeholder="10"
               placeholderTextColor={C.placeholder}
               keyboardType="number-pad"
               style={[

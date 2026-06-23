@@ -1130,7 +1130,11 @@ export default function AdminPanelScreen() {
       <ConfirmModal
         visible={Boolean(cardToDelete)}
         title={t('adminDeleteCard')}
-        message={t('adminDeleteCardConfirm')}
+        message={
+          cardToDelete
+            ? `${t('adminDeleteCardConfirm')}\n\n"${cardToDelete.card_front_text}"`
+            : ""
+        }
         confirmText={t('delete')}
         cancelText={t('cancel')}
         destructive

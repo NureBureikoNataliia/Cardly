@@ -412,6 +412,25 @@ export default function DeckDetailScreen() {
 
   const handleDeleteCard = (card: Card) => setCardToDelete(card);
 
+  const getCardPreviewText = (c: Card) => {
+    const ctype = normalizeCardType(c.card_type);
+    if (ctype === "cloze") {
+      const clozeParts = getClozePartsFromCard(c);
+      if (clozeParts) {
+        const gapText = clozeParts.gapFront.trim().length > 0
+          ? `[${clozeParts.gapFront.trim()}]`
+          : `[${t("clozeGapMarker") || CLOZE_GAP_MARKER}]`;
+        const front = `${clozeParts.before}${gapText}${clozeParts.after}`;
+        const back = clozeParts.hidden.trim();
+        return `${t("front")}: ${front}\n${t("back")}: ${back}`;
+      }
+    }
+    const frontStr = c.front_text?.trim() || `[${t("mediaKindFront")}]`;
+    const backStr = c.back_text?.trim() || `[${t("mediaKindBack")}]`;
+    return `${t("front")}: ${frontStr}\n${t("back")}: ${backStr}`;
+  };
+
+
   const handleExportPdf = useCallback(async () => {
     if (!deck || isExportingPdf) return;
     setIsExportingPdf(true);
@@ -1121,7 +1140,12 @@ export default function DeckDetailScreen() {
 
       <ConfirmModal
         visible={Boolean(cardToDelete)}
-        title={t("deleteCard")} message={t("deleteCardConfirm")}
+        title={t("deleteCard")}
+        message={
+          cardToDelete
+            ? `${t("deleteCardConfirm")}\n\n${getCardPreviewText(cardToDelete)}`
+            : ""
+        }
         confirmText={t("delete")} cancelText={t("cancel")}
         destructive icon="trash-2"
         onConfirm={performDeleteCard} onCancel={() => setCardToDelete(null)}
