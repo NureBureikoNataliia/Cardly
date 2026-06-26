@@ -12,8 +12,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-export const QUIZ_CONTENT_WIDTH_RATIO = 0.7;
-const QUIZ_MAX_CONTENT_WIDTH = 560;
+export const QUIZ_CONTENT_WIDTH_RATIO = 0.88;
+const QUIZ_MAX_CONTENT_WIDTH = 640;
 
 export function useQuizContentWidth(): number {
   const { width } = useWindowDimensions();

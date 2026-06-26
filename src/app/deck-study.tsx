@@ -5,7 +5,7 @@ import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import {
     CLOZE_GAP_MARKER,
     getClozePartsFromCard,
-    isClozeGapComplete,
+    isClozeLearnable,
     normalizeCardType,
     type ClozeParts,
 } from "@/src/lib/cardModel";
@@ -147,6 +147,8 @@ export default function DeckStudyScreen() {
   const [showBack, setShowBack] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sessionComplete, setSessionComplete] = useState(false);
+  /** History of answered cards — used for the "go back" undo feature. */
+  const [history, setHistory] = useState<DueCard[]>([]);
   /** Prevents double-submit before the next frame (optimistic queue updates immediately). */
   const rateLockRef = useRef(false);
 
@@ -178,6 +180,7 @@ export default function DeckStudyScreen() {
     setQueue(dueList);
     setShowBack(false);
     setSessionComplete(false);
+    setHistory([]);
     setLoading(false);
   }, [
     deckId,
@@ -226,6 +229,9 @@ export default function DeckStudyScreen() {
     const card = current.card;
     const cardId = card.card_id;
 
+    // Save the original card (with original progress) to history before advancing
+    const originalCard = current;
+
     const { progress: optimisticProgress, outcome } = applyRatingToProgressRow(
       current.progress,
       rating,
@@ -241,6 +247,7 @@ export default function DeckStudyScreen() {
     };
     const requeue = shouldRequeueInSession(apiOutcome);
 
+    setHistory((h) => [...h, originalCard]);
     setQueue((q) => {
       const [, ...rest] = q;
       if (requeue) {
@@ -262,6 +269,19 @@ export default function DeckStudyScreen() {
         loadSession();
       }
     });
+  };
+
+  const handleGoBack = () => {
+    if (history.length === 0) return;
+    const prev = history[history.length - 1];
+    setHistory((h) => h.slice(0, -1));
+    setQueue((q) => {
+      // Remove any requeued copy of that card from the queue, then put original at front
+      const filtered = q.filter((c) => c.card.card_id !== prev.card.card_id);
+      return [prev, ...filtered];
+    });
+    setShowBack(false);
+    setSessionComplete(false);
   };
 
   const handleCardPress = () => {
@@ -305,6 +325,12 @@ export default function DeckStudyScreen() {
           <Feather name="check-circle" size={64} color="#66BB6A" />
           <Text style={[styles.completeTitle, { color: C.text }]}>{t("reviewComplete")}</Text>
         </View>
+        {history.length > 0 && (
+          <TouchableOpacity style={[styles.undoButton, styles.undoButtonComplete]} onPress={handleGoBack}>
+            <Feather name="arrow-left" size={16} color={C.textSub} />
+            <Text style={[styles.undoButtonText, { color: C.textSub }]}>{t("previousCard")}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -323,21 +349,36 @@ export default function DeckStudyScreen() {
   const ctype = normalizeCardType(currentCard.card_type);
   const clozeParts = getClozePartsFromCard(currentCard);
   const clozeOk =
-    ctype === "cloze" && clozeParts && isClozeGapComplete(clozeParts);
+    ctype === "cloze" && clozeParts && isClozeLearnable(clozeParts);
   const frontMedia = getCardMediaForSide(currentCard, "front");
   const backMedia = getCardMediaForSide(currentCard, "back");
   const visibleMedia = showBack ? backMedia : frontMedia;
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg, paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
-      <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text>
+      <View style={styles.topRow}>
+        {history.length > 0 ? (
+          <TouchableOpacity style={styles.undoButton} onPress={handleGoBack}>
+            <Feather name="arrow-left" size={16} color={C.textSub} />
+            <Text style={[styles.undoButtonText, { color: C.textSub }]}>{t("previousCard")}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View />
+        )}
+        <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text>
+        <View style={styles.undoPlaceholder} />
+      </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollInner}
         keyboardShouldPersistTaps="handled"
       >
-        <TouchableOpacity style={[styles.card, { backgroundColor: C.surface }]} onPress={handleCardPress} activeOpacity={1}>
+        <TouchableOpacity
+          style={[styles.card, { backgroundColor: C.surface }]}
+          onPress={handleCardPress}
+          activeOpacity={0.97}
+        >
           <View style={styles.cardInner}>
             {clozeOk ? (
               <>
@@ -408,6 +449,33 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6",
     paddingHorizontal: 16,
   },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+    minHeight: 36,
+  },
+  undoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.06)",
+  },
+  undoButtonText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  undoPlaceholder: {
+    width: 80,
+  },
+  undoButtonComplete: {
+    alignSelf: "center",
+    marginBottom: 16,
+  },
   container: {
     flex: 1,
     backgroundColor: "#f3f4f6",
@@ -461,26 +529,23 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   counter: {
-    alignSelf: "center",
     fontSize: 14,
     color: "#6b7280",
-    marginBottom: 12,
+    textAlign: "center",
   },
   card: {
     width: "100%",
     minHeight: 200,
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 28,
     justifyContent: "center",
     alignItems: "center",
-    elevation: 4,
+    elevation: 3,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    borderLeftWidth: 6,
-    borderLeftColor: "#66BB6A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    borderWidth: 0,
   },
   cardInner: {
     alignItems: "center",

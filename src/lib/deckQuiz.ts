@@ -3,6 +3,7 @@ import {
   CLOZE_GAP_MARKER,
   getClozePartsFromCard,
   isClozeGapComplete,
+  isClozeLearnable,
   normalizeCardType,
 } from "@/src/lib/cardModel";
 import { putDeckQuizSession } from "@/src/lib/deckQuizSession";
@@ -70,7 +71,7 @@ export function getQuizPrompt(card: Card): string | null {
   const ctype = normalizeCardType(card.card_type);
   if (ctype === "cloze") {
     const parts = getClozePartsFromCard(card);
-    if (parts && isClozeGapComplete(parts)) {
+    if (parts && isClozeLearnable(parts)) {
       return `${parts.before}${CLOZE_GAP_MARKER}${parts.after}`.trim();
     }
     const front = card.front_text?.trim();
