@@ -140,6 +140,12 @@ export default function DeckStudyScreen() {
   const { user } = useAuth();
   const { settings: studySettings } = useStudySettings();
   const C = useAppColors();
+  const undoButtonTheme = {
+    backgroundColor: C.isDark ? C.surfaceAlt : "rgba(0,0,0,0.06)",
+    borderWidth: C.isDark ? 1 : 0,
+    borderColor: C.isDark ? C.border : "transparent",
+  };
+  const undoButtonFg = C.isDark ? C.text : C.textSub;
 
   const [queue, setQueue] = useState<DueCard[]>([]);
   const [settings, setSettings] =
@@ -326,9 +332,12 @@ export default function DeckStudyScreen() {
           <Text style={[styles.completeTitle, { color: C.text }]}>{t("reviewComplete")}</Text>
         </View>
         {history.length > 0 && (
-          <TouchableOpacity style={[styles.undoButton, styles.undoButtonComplete]} onPress={handleGoBack}>
-            <Feather name="arrow-left" size={16} color={C.textSub} />
-            <Text style={[styles.undoButtonText, { color: C.textSub }]}>{t("previousCard")}</Text>
+          <TouchableOpacity
+            style={[styles.undoButton, styles.undoButtonComplete, undoButtonTheme]}
+            onPress={handleGoBack}
+          >
+            <Feather name="arrow-left" size={16} color={undoButtonFg} />
+            <Text style={[styles.undoButtonText, { color: undoButtonFg }]}>{t("previousCard")}</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity
@@ -357,16 +366,15 @@ export default function DeckStudyScreen() {
   return (
     <View style={[styles.root, { backgroundColor: C.bg, paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
       <View style={styles.topRow}>
+        <View style={styles.counterOverlay} pointerEvents="none">
+          <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text>
+        </View>
         {history.length > 0 ? (
-          <TouchableOpacity style={styles.undoButton} onPress={handleGoBack}>
-            <Feather name="arrow-left" size={16} color={C.textSub} />
-            <Text style={[styles.undoButtonText, { color: C.textSub }]}>{t("previousCard")}</Text>
+          <TouchableOpacity style={[styles.undoButton, undoButtonTheme]} onPress={handleGoBack}>
+            <Feather name="arrow-left" size={16} color={undoButtonFg} />
+            <Text style={[styles.undoButtonText, { color: undoButtonFg }]}>{t("previousCard")}</Text>
           </TouchableOpacity>
-        ) : (
-          <View />
-        )}
-        <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text>
-        <View style={styles.undoPlaceholder} />
+        ) : null}
       </View>
 
       <ScrollView
@@ -450,27 +458,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 4,
+    position: "relative",
     minHeight: 36,
+    marginTop: 16,
+    marginBottom: 8,
+    justifyContent: "center",
+  },
+  counterOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
   },
   undoButton: {
+    zIndex: 1,
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
-    backgroundColor: "rgba(0,0,0,0.06)",
   },
   undoButtonText: {
     fontSize: 13,
     fontWeight: "500",
-  },
-  undoPlaceholder: {
-    width: 80,
   },
   undoButtonComplete: {
     alignSelf: "center",
