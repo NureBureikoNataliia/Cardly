@@ -12,17 +12,17 @@ import {
   type ReactNode,
 } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { Deck } from "@/assets/data/decks";
@@ -411,6 +411,7 @@ type CardEditorFormProps = {
   isEdit: boolean;
   formSideBySide: boolean;
   snapshot: CardFormSnapshot;
+  onSaved: () => void;
 };
 
 /** Isolated form tree so typing does not re-render route shell / modals on every keystroke. */
@@ -422,6 +423,7 @@ function CardEditorForm({
   isEdit,
   formSideBySide,
   snapshot,
+  onSaved
 }: CardEditorFormProps) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -581,12 +583,12 @@ function CardEditorForm({
       "front",
       userId
         ? {
-            userId,
-            deckId,
-            cardId,
-            kind: "card-image",
-            side: "front",
-          }
+          userId,
+          deckId,
+          cardId,
+          kind: "card-image",
+          side: "front",
+        }
         : undefined,
     );
     setAiFrontImgBusy(false);
@@ -613,12 +615,12 @@ function CardEditorForm({
       "back",
       userId
         ? {
-            userId,
-            deckId,
-            cardId,
-            kind: "card-image",
-            side: "back",
-          }
+          userId,
+          deckId,
+          cardId,
+          kind: "card-image",
+          side: "back",
+        }
         : undefined,
     );
     setAiBackImgBusy(false);
@@ -889,7 +891,8 @@ function CardEditorForm({
           return;
         }
         await replaceCardMedia(secondRow.card_id, swapCardMediaFormSides(mediaToSave));
-        router.back();
+        setIsSaving(false);
+        onSaved();
         return;
       }
 
@@ -914,8 +917,9 @@ function CardEditorForm({
         return;
       }
       await replaceCardMedia(insertedCard.card_id, mediaToSave);
+      setIsSaving(false);
+      onSaved();
 
-      router.back();
     } catch (err) {
       const msg = err instanceof Error ? err.message : t("unexpectedError");
       setError(msg);
@@ -1451,173 +1455,173 @@ function CardEditorForm({
           />
           <View style={styles.studyPreviewCenter}>
             <View style={[styles.studyPreviewSheet, { backgroundColor: C.surface }]}>
-            <View style={[styles.studyPreviewHeader, { borderBottomColor: C.borderLight }]}>
-              <Text style={[styles.studyPreviewTitle, { color: C.text }]}>{t("addCardPreviewTitle")}</Text>
-              <Pressable
-                hitSlop={12}
-                onPress={() => setStudyPreviewOpen(false)}
-                accessibilityRole="button"
-                accessibilityLabel={t("addCardPreviewClose")}
-              >
-                <Feather name="x" size={22} color={C.textSub} />
-              </Pressable>
-            </View>
-            {showPairStudySwitcher ? (
-              <View style={styles.studyPreviewPairRow}>
+              <View style={[styles.studyPreviewHeader, { borderBottomColor: C.borderLight }]}>
+                <Text style={[styles.studyPreviewTitle, { color: C.text }]}>{t("addCardPreviewTitle")}</Text>
                 <Pressable
-                  onPress={() => {
-                    setStudyPreviewPairSlot(1);
-                    setStudyPreviewShowBack(false);
-                  }}
-                  style={[
-                    styles.studyPreviewPairChip,
-                    { backgroundColor: C.inputBg, borderColor: C.inputBorder },
-                    studyPreviewPairSlot === 1 && {
-                      borderColor: C.tint,
-                      backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
-                    },
-                  ]}
+                  hitSlop={12}
+                  onPress={() => setStudyPreviewOpen(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("addCardPreviewClose")}
                 >
-                  <Text
-                    style={[
-                      styles.studyPreviewPairChipTxt,
-                      { color: C.textSub },
-                      studyPreviewPairSlot === 1 && { color: C.tint, fontWeight: '700' as const },
-                    ]}
-                  >
-                    {t("addCardPreviewPair1")}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setStudyPreviewPairSlot(2);
-                    setStudyPreviewShowBack(false);
-                  }}
-                  style={[
-                    styles.studyPreviewPairChip,
-                    { backgroundColor: C.inputBg, borderColor: C.inputBorder },
-                    studyPreviewPairSlot === 2 && {
-                      borderColor: C.tint,
-                      backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.studyPreviewPairChipTxt,
-                      { color: C.textSub },
-                      studyPreviewPairSlot === 2 && { color: C.tint, fontWeight: '700' as const },
-                    ]}
-                  >
-                    {t("addCardPreviewPair2")}
-                  </Text>
+                  <Feather name="x" size={22} color={C.textSub} />
                 </Pressable>
               </View>
-            ) : null}
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.studyPreviewScrollInner}
-            >
-              <View
-                style={[
-                  styles.studyPreviewCard,
-                  {
-                    backgroundColor: C.isDark ? C.surfaceAlt : '#fff',
-                    borderWidth: C.isDark ? 1 : 0,
-                    borderColor: C.border,
-                  },
-                ]}
-              >
-                <View style={styles.studyPreviewCardInner}>
-                  {cardType === "cloze" &&
-                  hasAnyClozeFormContent(
-                    buildCardFormFields("", "", notes, clozePartsPreview, mediaForm),
-                  ) ? (
-                    <>
-                      <Pressable
-                        onPress={() => setStudyPreviewShowBack((v) => !v)}
-                        style={styles.studyPreviewFlipZone}
-                        accessibilityRole="button"
-                      >
-                        {!studyPreviewShowBack ? (
-                          <AddCardStudyClozeFront parts={clozePartsPreview} />
-                        ) : (
-                          <AddCardStudyClozeBack parts={clozePartsPreview} />
-                        )}
-                        {!studyPreviewShowBack && notes.trim() ? (
-                          <Text style={[styles.studyPreviewNotes, { color: C.textSub }]}>
-                            {notes.trim()}
-                          </Text>
-                        ) : null}
-                      </Pressable>
-                      {renderPreviewMedia(
-                        studyPreviewShowBack ? backPreviewMedia : frontPreviewMedia,
-                      )}
-                      {!studyPreviewShowBack ? (
-                        <Pressable
-                          onPress={() => setStudyPreviewShowBack(true)}
-                          style={styles.studyPreviewTapHintZone}
-                          accessibilityRole="button"
-                        >
-                          <Text style={[styles.studyPreviewTapHint, { color: C.textMuted }]}>
-                            {t("showAnswer")}
-                          </Text>
-                        </Pressable>
-                      ) : null}
-                    </>
-                  ) : cardType === "basic" ? (
-                    <>
-                      <Pressable
-                        onPress={() => setStudyPreviewShowBack((v) => !v)}
-                        style={styles.studyPreviewFlipZone}
-                        accessibilityRole="button"
-                      >
-                        {studyPreviewPairSlot === 1 ? (
-                          <Text style={[styles.studyPreviewCardTitle, { color: C.text }]}>
-                            {studyPreviewShowBack ? backText.trim() : frontText.trim()}
-                          </Text>
-                        ) : (
-                          <Text style={[styles.studyPreviewCardTitle, { color: C.text }]}>
-                            {studyPreviewShowBack ? frontText.trim() : backText.trim()}
-                          </Text>
-                        )}
-                        {!studyPreviewShowBack && notes.trim() ? (
-                          <Text style={[styles.studyPreviewNotes, { color: C.textSub }]}>
-                            {notes.trim()}
-                          </Text>
-                        ) : null}
-                      </Pressable>
-                      {renderPreviewMedia(
-                        studyPreviewShowBack
-                          ? studyPreviewPairSlot === 1
-                            ? backPreviewMedia
-                            : frontPreviewMedia
-                          : studyPreviewPairSlot === 1
-                            ? frontPreviewMedia
-                            : backPreviewMedia,
-                      )}
-                      {!studyPreviewShowBack ? (
-                        <Pressable
-                          onPress={() => setStudyPreviewShowBack(true)}
-                          style={styles.studyPreviewTapHintZone}
-                          accessibilityRole="button"
-                        >
-                          <Text style={[styles.studyPreviewTapHint, { color: C.textMuted }]}>
-                            {t("showAnswer")}
-                          </Text>
-                        </Pressable>
-                      ) : null}
-                    </>
-                  ) : (
-                    <Text style={[styles.studyPreviewCardTitle, { color: C.textSub }]}>
-                      {t("addCardPreviewIncomplete")}
+              {showPairStudySwitcher ? (
+                <View style={styles.studyPreviewPairRow}>
+                  <Pressable
+                    onPress={() => {
+                      setStudyPreviewPairSlot(1);
+                      setStudyPreviewShowBack(false);
+                    }}
+                    style={[
+                      styles.studyPreviewPairChip,
+                      { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                      studyPreviewPairSlot === 1 && {
+                        borderColor: C.tint,
+                        backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.studyPreviewPairChipTxt,
+                        { color: C.textSub },
+                        studyPreviewPairSlot === 1 && { color: C.tint, fontWeight: '700' as const },
+                      ]}
+                    >
+                      {t("addCardPreviewPair1")}
                     </Text>
-                  )}
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setStudyPreviewPairSlot(2);
+                      setStudyPreviewShowBack(false);
+                    }}
+                    style={[
+                      styles.studyPreviewPairChip,
+                      { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+                      studyPreviewPairSlot === 2 && {
+                        borderColor: C.tint,
+                        backgroundColor: C.isDark ? 'rgba(99,102,241,0.15)' : '#eff1ff',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.studyPreviewPairChipTxt,
+                        { color: C.textSub },
+                        studyPreviewPairSlot === 2 && { color: C.tint, fontWeight: '700' as const },
+                      ]}
+                    >
+                      {t("addCardPreviewPair2")}
+                    </Text>
+                  </Pressable>
                 </View>
-              </View>
-            </ScrollView>
+              ) : null}
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.studyPreviewScrollInner}
+              >
+                <View
+                  style={[
+                    styles.studyPreviewCard,
+                    {
+                      backgroundColor: C.isDark ? C.surfaceAlt : '#fff',
+                      borderWidth: C.isDark ? 1 : 0,
+                      borderColor: C.border,
+                    },
+                  ]}
+                >
+                  <View style={styles.studyPreviewCardInner}>
+                    {cardType === "cloze" &&
+                      hasAnyClozeFormContent(
+                        buildCardFormFields("", "", notes, clozePartsPreview, mediaForm),
+                      ) ? (
+                      <>
+                        <Pressable
+                          onPress={() => setStudyPreviewShowBack((v) => !v)}
+                          style={styles.studyPreviewFlipZone}
+                          accessibilityRole="button"
+                        >
+                          {!studyPreviewShowBack ? (
+                            <AddCardStudyClozeFront parts={clozePartsPreview} />
+                          ) : (
+                            <AddCardStudyClozeBack parts={clozePartsPreview} />
+                          )}
+                          {!studyPreviewShowBack && notes.trim() ? (
+                            <Text style={[styles.studyPreviewNotes, { color: C.textSub }]}>
+                              {notes.trim()}
+                            </Text>
+                          ) : null}
+                        </Pressable>
+                        {renderPreviewMedia(
+                          studyPreviewShowBack ? backPreviewMedia : frontPreviewMedia,
+                        )}
+                        {!studyPreviewShowBack ? (
+                          <Pressable
+                            onPress={() => setStudyPreviewShowBack(true)}
+                            style={styles.studyPreviewTapHintZone}
+                            accessibilityRole="button"
+                          >
+                            <Text style={[styles.studyPreviewTapHint, { color: C.textMuted }]}>
+                              {t("showAnswer")}
+                            </Text>
+                          </Pressable>
+                        ) : null}
+                      </>
+                    ) : cardType === "basic" ? (
+                      <>
+                        <Pressable
+                          onPress={() => setStudyPreviewShowBack((v) => !v)}
+                          style={styles.studyPreviewFlipZone}
+                          accessibilityRole="button"
+                        >
+                          {studyPreviewPairSlot === 1 ? (
+                            <Text style={[styles.studyPreviewCardTitle, { color: C.text }]}>
+                              {studyPreviewShowBack ? backText.trim() : frontText.trim()}
+                            </Text>
+                          ) : (
+                            <Text style={[styles.studyPreviewCardTitle, { color: C.text }]}>
+                              {studyPreviewShowBack ? frontText.trim() : backText.trim()}
+                            </Text>
+                          )}
+                          {!studyPreviewShowBack && notes.trim() ? (
+                            <Text style={[styles.studyPreviewNotes, { color: C.textSub }]}>
+                              {notes.trim()}
+                            </Text>
+                          ) : null}
+                        </Pressable>
+                        {renderPreviewMedia(
+                          studyPreviewShowBack
+                            ? studyPreviewPairSlot === 1
+                              ? backPreviewMedia
+                              : frontPreviewMedia
+                            : studyPreviewPairSlot === 1
+                              ? frontPreviewMedia
+                              : backPreviewMedia,
+                        )}
+                        {!studyPreviewShowBack ? (
+                          <Pressable
+                            onPress={() => setStudyPreviewShowBack(true)}
+                            style={styles.studyPreviewTapHintZone}
+                            accessibilityRole="button"
+                          >
+                            <Text style={[styles.studyPreviewTapHint, { color: C.textMuted }]}>
+                              {t("showAnswer")}
+                            </Text>
+                          </Pressable>
+                        ) : null}
+                      </>
+                    ) : (
+                      <Text style={[styles.studyPreviewCardTitle, { color: C.textSub }]}>
+                        {t("addCardPreviewIncomplete")}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </ScrollView>
             </View>
           </View>
         </View>
@@ -1713,6 +1717,7 @@ export default function AddCardScreen() {
     });
   }, [navigation, isEdit, t]);
 
+  const [formKey, setFormKey] = useState(0);
   const [deck, setDeck] = useState<Deck | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadErrorKey, setLoadErrorKey] = useState<string | null>(null);
@@ -1783,14 +1788,15 @@ export default function AddCardScreen() {
 
   return (
     <CardEditorForm
-      key={cardId ?? `new-${deckId}`}
+      key={cardId ?? `new-${deckId}-${formKey}`}
       deck={deck}
       deckId={deckId}
       cardId={cardId}
       userId={user?.id ?? null}
       isEdit={isEdit}
       formSideBySide={formSideBySide}
-      snapshot={snapshot}
+      snapshot={formKey === 0 ? snapshot : emptySnapshot}
+      onSaved={() => setFormKey(k => k + 1)}
     />
   );
 }
@@ -2059,7 +2065,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#64B5F6",
+    backgroundColor: "#647cf6ff",
     opacity: 0.6,
     elevation: 0,
   },
