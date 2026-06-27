@@ -4,12 +4,15 @@ import {
   getClozePartsFromCard,
   isClozeLearnable,
   normalizeCardType,
+  parseCardExtra,
 } from "@/src/lib/cardModel";
 
 export type ColumnEntry<T> = { item: T; index: number };
 
-/** Simple alternating column distribution: odd items go left, even items go right.
- *  This keeps cards in natural visual order and avoids misalignment. */
+/** Gap between tiles in a column (`deck-detail` `cardsColumn.gap`). */
+export const CARD_TILE_COLUMN_GAP = 10;
+
+/** Assign each item to the shortest column by estimated height (masonry-style balance). */
 export function splitIntoBalancedColumns<T>(
   items: T[],
   columnCount: number,
@@ -18,18 +21,31 @@ export function splitIntoBalancedColumns<T>(
   if (columnCount <= 1) {
     return [items.map((item, index) => ({ item, index }))];
   }
+
   const cols: ColumnEntry<T>[][] = Array.from({ length: columnCount }, () => []);
+  const colHeights = Array.from({ length: columnCount }, () => 0);
+
   items.forEach((item, index) => {
-    const col = index % columnCount;
-    cols[col].push({ item, index });
+    let targetCol = 0;
+    for (let c = 1; c < columnCount; c += 1) {
+      if (colHeights[c] < colHeights[targetCol]) targetCol = c;
+    }
+
+    cols[targetCol].push({ item, index });
+    const tileHeight = estimateHeight(item, index);
+    colHeights[targetCol] +=
+      tileHeight + (cols[targetCol].length > 1 ? CARD_TILE_COLUMN_GAP : 0);
   });
+
   return cols;
 }
 
-const TILE_BASE = 108;
-const LINE_H = 22;
-const CHARS_PER_LINE = 42;
-const DIVIDER = 36;
+const TILE_BASE = 132;
+const LINE_H = 24;
+const CHARS_PER_LINE = 34;
+const DIVIDER = 44;
+const NOTES_BLOCK = 36;
+const ACTIONS_ROW = 48;
 
 function textLines(text: string): number {
   const len = text.trim().length;
@@ -38,9 +54,9 @@ function textLines(text: string): number {
 }
 
 function mediaBlockHeight(type: string): number {
-  if (type === "image") return 140;
-  if (type === "video") return 168;
-  return 80;
+  if (type === "image") return 292;
+  if (type === "video") return 176;
+  return 88;
 }
 
 /** Rough height for balancing two columns in the deck card list. */
@@ -71,8 +87,41 @@ export function estimateCardTileHeight(card: Card): number {
   }
 
   if (card.notes?.trim()) {
-    h += 28 + textLines(card.notes) * 18;
+    h += NOTES_BLOCK + textLines(card.notes) * 18;
   }
 
-  return Math.max(120, h);
+  h += ACTIONS_ROW;
+
+  return Math.max(140, h);
+}
+
+/** Same min height for forward/reverse cards that share a `pairId`. */
+export function computePairedTileHeights(cards: Card[]): Map<string, number> {
+  const byPairId = new Map<string, Card[]>();
+
+  for (const card of cards) {
+    const pairId = parseCardExtra(card.card_extra).pairId?.trim();
+    if (!pairId) continue;
+    const group = byPairId.get(pairId) ?? [];
+    group.push(card);
+    byPairId.set(pairId, group);
+  }
+
+  const heights = new Map<string, number>();
+  for (const pairCards of byPairId.values()) {
+    if (pairCards.length < 2) continue;
+    const maxHeight = Math.max(...pairCards.map((card) => estimateCardTileHeight(card)));
+    for (const card of pairCards) {
+      heights.set(card.card_id, maxHeight);
+    }
+  }
+
+  return heights;
+}
+
+export function getCardTileHeight(
+  card: Card,
+  pairedHeights: Map<string, number>,
+): number {
+  return pairedHeights.get(card.card_id) ?? estimateCardTileHeight(card);
 }

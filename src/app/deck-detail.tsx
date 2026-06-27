@@ -39,13 +39,14 @@ import {
   type ClozeParts,
 } from "@/src/lib/cardModel";
 import { getCardMediaForSide, normalizeCardMediaRows } from "@/src/lib/cardMedia";
+import { deleteCardWithMediaStorageCleanup } from "@/src/lib/cardMediaStorageCleanup";
 import {
   hasActiveDeckCardQuery,
   type CardListFilter,
   type CardListSort,
   queryDeckCards,
 } from "@/src/lib/deckCardListQuery";
-import { estimateCardTileHeight, splitIntoBalancedColumns } from "@/src/lib/balancedColumns";
+import { computePairedTileHeights, getCardTileHeight, splitIntoBalancedColumns } from "@/src/lib/balancedColumns";
 import { useLayoutWidth } from "@/src/hooks/useLayoutWidth";
 
 const scrollPositions: Record<string, number> = {};
@@ -455,7 +456,7 @@ export default function DeckDetailScreen() {
     if (!cardToDelete) return;
     const card = cardToDelete;
     setCardToDelete(null);
-    const { error } = await supabase.from("cards").delete().eq("card_id", card.card_id);
+    const { error } = await deleteCardWithMediaStorageCleanup(card.card_id);
     if (error) { setErrorModal(error.message || t("failedToDeleteCard")); return; }
     setCards((prev) => prev.filter((c) => c.card_id !== card.card_id));
     setTotalCards((prev) => Math.max(0, prev - 1));
@@ -486,9 +487,17 @@ export default function DeckDetailScreen() {
     [cards, cardSearch, cardFilter, cardSort, progressMap, studySettings.srsDayStartHour],
   );
 
+  const pairedTileHeights = useMemo(
+    () => computePairedTileHeights(displayedCards),
+    [displayedCards],
+  );
+
   const cardColumns = useMemo(
-    () => splitIntoBalancedColumns(displayedCards, numCols, estimateCardTileHeight),
-    [displayedCards, numCols],
+    () =>
+      splitIntoBalancedColumns(displayedCards, numCols, (card) =>
+        getCardTileHeight(card, pairedTileHeights),
+      ),
+    [displayedCards, numCols, pairedTileHeights],
   );
 
   const hasActiveCardQuery = hasActiveDeckCardQuery(cardSearch, cardFilter, cardSort);
@@ -1080,6 +1089,7 @@ export default function DeckDetailScreen() {
                         key={card.card_id}
                         card={card}
                         index={index}
+                        minTileHeight={pairedTileHeights.get(card.card_id)}
                         isOwner={!!canEdit}
                         canReport={isPublicFromOther && !!user}
                         createdByName={
@@ -1326,9 +1336,10 @@ function CardTileClozeBack({ parts }: { parts: ClozeParts }) {
 }
 
 /* ─── CardTile ─── */
-function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDelete, onReport, t }: {
+function CardTile({ card, index, minTileHeight, isOwner, canReport, createdByName, onEdit, onDelete, onReport, t }: {
   card: Card;
   index: number;
+  minTileHeight?: number;
   isOwner: boolean;
   canReport?: boolean;
   createdByName: string | null;
@@ -1353,7 +1364,14 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
   const showBack = clozeOk || backDisplay.length > 0 || backMedia.length > 0;
 
   return (
-    <View style={[styles.cardTile, { backgroundColor: C.surface }]}>
+    <View
+      style={[
+        styles.cardTile,
+        { backgroundColor: C.surface },
+        minTileHeight != null ? { minHeight: minTileHeight } : null,
+      ]}
+    >
+      <View style={styles.cardTileBody}>
       {/* Number badge + author */}
       <View style={styles.cardTileHeader}>
         <View style={[styles.cardNumBadge, { backgroundColor: `${accent}18` }]}>
@@ -1413,6 +1431,7 @@ function CardTile({ card, index, isOwner, canReport, createdByName, onEdit, onDe
           ))}
         </>
       ) : null}
+      </View>
 
       {/* Actions */}
       {(isOwner || canReport) && (
@@ -1652,6 +1671,9 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
+  cardTileBody: {
+    flex: 1,
+  },
 
   cardTileHeader: {
     flexDirection: "row", alignItems: "center",
@@ -1673,7 +1695,7 @@ const styles = StyleSheet.create({
   cardMedia: { width: "100%", height: 100, borderRadius: 10, marginBottom: 8, backgroundColor: "#f3f4f6" },
   cardMediaAudio: { alignItems: "center", justifyContent: "center" },
 
-  cardFront: { fontSize: 17, fontWeight: "700", color: "#111827", lineHeight: 24, marginBottom: 10, textAlign: "center" },
+  cardFront: { fontSize: 15, fontWeight: "400", color: "#111827", lineHeight: 22, marginBottom: 10, textAlign: "center" },
   cardClozeGap: { fontStyle: "italic", fontWeight: "600" },
   cardClozeGapHint: { fontStyle: "italic", fontWeight: "500" },
   cardClozeAnswer: { fontWeight: "800", color: "#059669" },

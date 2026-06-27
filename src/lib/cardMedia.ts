@@ -4,6 +4,10 @@ import {
   extractVideoEmbedUrl,
   isSupabaseStorageUrl,
 } from "@/src/lib/resolveMediaPlaybackUrl";
+import {
+  deleteCardMediaStorageUrlsIfUnreferenced,
+  fetchCardMediaStorageUrlsForCard,
+} from "@/src/lib/cardMediaStorageCleanup";
 import { supabase } from "@/src/lib/supabase";
 
 export type { CardMedia, CardMediaSide, CardMediaType };
@@ -311,12 +315,16 @@ export function orderedMediaFromForm(
 }
 
 export async function replaceCardMedia(cardId: string, form: CardMediaForm): Promise<void> {
+  const previousStorageUrls = await fetchCardMediaStorageUrlsForCard(cardId);
+
   const { error: deleteError } = await supabase.from("card_media").delete().eq("card_id", cardId);
   if (deleteError) throw deleteError;
 
   const rows = mediaFormToInsertRows(cardId, form);
-  if (!rows.length) return;
+  if (rows.length) {
+    const { error: insertError } = await supabase.from("card_media").insert(rows);
+    if (insertError) throw insertError;
+  }
 
-  const { error: insertError } = await supabase.from("card_media").insert(rows);
-  if (insertError) throw insertError;
+  await deleteCardMediaStorageUrlsIfUnreferenced(previousStorageUrls);
 }

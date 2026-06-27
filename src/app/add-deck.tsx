@@ -27,6 +27,7 @@ import { generateDeckDescription, generateCardImageUrl } from '@/src/lib/gemini'
 import { keyboardAvoidingBehavior } from '@/src/lib/keyboardAvoiding';
 import { persistDeckCoverUrlIfNeeded } from '@/src/lib/uploadRemoteImage';
 import { uploadAudioErrorKey } from '@/src/lib/uploadCardAudio';
+import { deleteCardMediaStorageUrlsIfUnreferenced } from '@/src/lib/cardMediaStorageCleanup';
 
 export default function AddDeckScreen() {
   const router = useRouter();
@@ -56,6 +57,7 @@ export default function AddDeckScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
+  const [savedCoverUrl, setSavedCoverUrl] = useState<string | null>(null);
   const [isPublic, setIsPublic] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(isEdit);
@@ -80,6 +82,7 @@ export default function AddDeckScreen() {
       setTitle(data.title ?? '');
       setDescription(data.description ?? '');
       setCoverUrl(data.cover_image_url ?? '');
+      setSavedCoverUrl(data.cover_image_url ?? null);
       setIsPublic(data.is_public ?? true);
     })().finally(() => setIsLoading(false));
   }, [deckId, user]);
@@ -126,6 +129,10 @@ export default function AddDeckScreen() {
         .eq('deck_id', deckId)
         .eq('creator_id', user.id);
       if (e) { setError(e.message); setIsSaving(false); return; }
+      if (savedCoverUrl && savedCoverUrl !== coverToSave) {
+        await deleteCardMediaStorageUrlsIfUnreferenced([savedCoverUrl]);
+      }
+      setSavedCoverUrl(coverToSave);
     } else {
       const { error: e } = await supabase
         .from('decks')

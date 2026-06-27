@@ -7,6 +7,7 @@ import { ActivityIndicator, Pressable, StyleSheet, TextInput, TouchableOpacity, 
 
 import { Deck } from '@/assets/data/decks';
 import { compareDeckTitles } from '@/src/lib/deckSort';
+import { deleteDeckWithMediaStorageCleanup } from '@/src/lib/cardMediaStorageCleanup';
 import { supabase } from '@/src/lib/supabase';
 import ConfirmModal from '@/src/components/ConfirmModal';
 import ListOfDecks from '@/src/components/ListOfDecks';
@@ -180,8 +181,7 @@ export default function MainScreen() {
   const performDeleteDeck = async () => {
     if (!deckToDelete) return;
     setDeckToDelete(null);
-    await supabase.from('cards').delete().eq('deck_id', deckToDelete.deck_id);
-    const { error } = await supabase.from('decks').delete().eq('deck_id', deckToDelete.deck_id);
+    const { error } = await deleteDeckWithMediaStorageCleanup(deckToDelete.deck_id);
     if (error) {
       setErrorModal(error.message || 'Failed to delete deck.');
     } else {

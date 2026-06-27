@@ -20,6 +20,11 @@ import ConfirmModal from '@/src/components/ConfirmModal';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { supabase } from '@/src/lib/supabase';
+import {
+  deleteCardMediaStorageUrlsIfUnreferenced,
+  fetchDeckMediaStorageUrls,
+  fetchCardMediaStorageUrlsForCard,
+} from '@/src/lib/cardMediaStorageCleanup';
 import { useAppColors } from '@/src/contexts/ThemeContext';
 import { getComplaintIssueLabelKey } from '@/src/constants/deckComplaints';
 import {
@@ -247,9 +252,12 @@ export default function AdminPanelScreen() {
 
   const handleDeleteDeck = async () => {
     if (!deckToDelete) return;
-    const { error } = await supabase.rpc('admin_delete_deck', { p_deck_id: deckToDelete.deck_id });
+    const deckId = deckToDelete.deck_id;
+    const storageUrls = await fetchDeckMediaStorageUrls(deckId);
+    const { error } = await supabase.rpc('admin_delete_deck', { p_deck_id: deckId });
     if (error) { console.warn('[admin] delete deck error', error); return; }
-    setComplaints(prev => prev.filter(c => c.deck_id !== deckToDelete.deck_id));
+    await deleteCardMediaStorageUrlsIfUnreferenced(storageUrls);
+    setComplaints(prev => prev.filter(c => c.deck_id !== deckId));
     setDeckToDelete(null);
   };
 
@@ -302,9 +310,12 @@ export default function AdminPanelScreen() {
 
   const handleDeleteCard = async () => {
     if (!cardToDelete) return;
-    const { error } = await supabase.rpc('admin_delete_card', { p_card_id: cardToDelete.card_id });
+    const cardId = cardToDelete.card_id;
+    const storageUrls = await fetchCardMediaStorageUrlsForCard(cardId);
+    const { error } = await supabase.rpc('admin_delete_card', { p_card_id: cardId });
     if (error) { console.warn('[admin] delete card error', error); return; }
-    setCardComplaints(prev => prev.filter(c => c.card_id !== cardToDelete.card_id));
+    await deleteCardMediaStorageUrlsIfUnreferenced(storageUrls);
+    setCardComplaints(prev => prev.filter(c => c.card_id !== cardId));
     setCardToDelete(null);
   };
 
