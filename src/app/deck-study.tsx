@@ -1,4 +1,5 @@
 import { CardSideMedia } from "@/src/components/CardSideMedia";
+import { useContentWidth } from "@/src/hooks/useContentWidth";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
@@ -136,10 +137,11 @@ export default function DeckStudyScreen() {
   const todayParam = params.today;
   const todayStr = Array.isArray(todayParam) ? todayParam[0] : todayParam;
   const includeScheduledToday = todayStr === "1" || todayStr === "true";
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const { user } = useAuth();
   const { settings: studySettings } = useStudySettings();
   const C = useAppColors();
+  const contentWidth = useContentWidth();
   const undoButtonTheme = {
     backgroundColor: C.isDark ? C.surfaceAlt : "rgba(0,0,0,0.06)",
     borderWidth: C.isDark ? 1 : 0,
@@ -207,7 +209,14 @@ export default function DeckStudyScreen() {
   }, [navigation, t, includeScheduledToday]);
 
   const current = queue[0] ?? null;
-  const total = queue.length;
+
+  const sessionStats = useMemo(() => {
+    let newCount = 0;
+    for (const item of queue) {
+      if (item.progress.status === "new") newCount += 1;
+    }
+    return { remaining: queue.length, new: newCount };
+  }, [queue]);
 
   const intervalLabels = useMemo(() => {
     if (!showBack || !current || !settings) return null;
@@ -222,10 +231,10 @@ export default function DeckStudyScreen() {
     };
     for (const r of RATINGS) {
       const o = scheduleAfterAnswer(snapshot, r, delay, global);
-      out[r] = formatScheduleLabel(o);
+      out[r] = formatScheduleLabel(o, locale);
     }
     return out;
-  }, [showBack, current, settings]);
+  }, [showBack, current, settings, locale]);
 
   const handleRate = (rating: SubmitCardReviewRating) => {
     if (!current || !user?.id || !settings) return;
@@ -351,9 +360,12 @@ export default function DeckStudyScreen() {
   }
 
   const currentCard = current.card;
-  const cardCounterText = t("cardXOfY")
-    .replace("{current}", "1")
-    .replace("{total}", String(total));
+  const counterKey = includeScheduledToday
+    ? "studySessionRemaining"
+    : "studySessionRemainingDue";
+  const cardCounterText = t(counterKey)
+    .replace("{remaining}", String(sessionStats.remaining))
+    .replace("{new}", String(sessionStats.new));
 
   const ctype = normalizeCardType(currentCard.card_type);
   const clozeParts = getClozePartsFromCard(currentCard);
@@ -365,6 +377,7 @@ export default function DeckStudyScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg, paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
+      <View style={[styles.contentColumn, { width: contentWidth }]}>
       <View style={styles.topRow}>
         <View style={styles.counterOverlay} pointerEvents="none">
           <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text>
@@ -447,6 +460,7 @@ export default function DeckStudyScreen() {
           ))}
         </View>
       ) : null}
+      </View>
     </View>
   );
 }
@@ -456,6 +470,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f3f4f6",
     paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  contentColumn: {
+    flex: 1,
+    maxWidth: "100%",
   },
   topRow: {
     position: "relative",

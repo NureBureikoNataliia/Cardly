@@ -57,4 +57,16 @@ describe("formatScheduleLabel", () => {
       expect(formatScheduleLabel({ ...baseOutcome, dueInSecondsFromNow: null, intervalDays: 1000 })).toBe("2.7y");
     });
   });
+
+  describe("Ukrainian locale", () => {
+    it("uses Ukrainian unit suffixes", () => {
+      expect(formatScheduleLabel({ ...baseOutcome, dueInSecondsFromNow: 30 }, "uk")).toBe("<1хв");
+      expect(formatScheduleLabel({ ...baseOutcome, dueInSecondsFromNow: 150 }, "uk")).toBe("3хв");
+      expect(formatScheduleLabel({ ...baseOutcome, dueInSecondsFromNow: 7200 }, "uk")).toBe("2г");
+      expect(formatScheduleLabel({ ...baseOutcome, dueInSecondsFromNow: 86400 }, "uk")).toBe("1.0д");
+      expect(formatScheduleLabel({ ...baseOutcome, dueInSecondsFromNow: null, intervalDays: 7 }, "uk")).toBe("7д");
+      expect(formatScheduleLabel({ ...baseOutcome, dueInSecondsFromNow: null, intervalDays: 45 }, "uk")).toBe("1.5міс");
+      expect(formatScheduleLabel({ ...baseOutcome, dueInSecondsFromNow: null, intervalDays: 365 }, "uk")).toBe("1.0р");
+    });
+  });
 });

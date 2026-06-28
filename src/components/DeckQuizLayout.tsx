@@ -1,24 +1,16 @@
 import { useAppColors } from "@/src/contexts/ThemeContext";
+import { useContentWidth } from "@/src/hooks/useContentWidth";
 import { ReactNode } from "react";
 import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-export const QUIZ_CONTENT_WIDTH_RATIO = 0.88;
-const QUIZ_MAX_CONTENT_WIDTH = 640;
-
-export function useQuizContentWidth(): number {
-  const { width } = useWindowDimensions();
-  return Math.min(Math.round(width * QUIZ_CONTENT_WIDTH_RATIO), QUIZ_MAX_CONTENT_WIDTH);
-}
 
 type DeckQuizScreenShellProps = {
   children: ReactNode;
@@ -38,7 +30,7 @@ export function DeckQuizScreenShell({
 }: DeckQuizScreenShellProps) {
   const C = useAppColors();
   const insets = useSafeAreaInsets();
-  const contentWidth = useQuizContentWidth();
+  const contentWidth = useContentWidth();
 
   const column = (
     <View style={[styles.column, { width: contentWidth }, contentStyle]}>
@@ -132,7 +124,7 @@ type DeckQuizLoadingProps = {
 
 export function DeckQuizLoading({ message }: DeckQuizLoadingProps) {
   const C = useAppColors();
-  const contentWidth = useQuizContentWidth();
+  const contentWidth = useContentWidth();
 
   return (
     <View style={[styles.screen, styles.loadingScreen, { backgroundColor: C.bg }]}>
