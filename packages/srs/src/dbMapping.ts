@@ -1,17 +1,17 @@
 import {
   DEFAULT_EASE_PERMILLE,
   type ReviewRating,
-} from "./reviewScheduler";
-import { scheduleAfterAnswer, type ScheduleOutcome } from "./cardScheduling";
+} from "./reviewScheduler.ts";
+import { scheduleAfterAnswer, type ScheduleOutcome } from "./cardScheduling.ts";
 import type {
   AppSpacedRepetitionSettingsRow,
   DbProgressStatus,
   UserCardProgressRow,
-} from "./dbTypes";
+} from "./dbTypes.ts";
 import type {
   CardScheduleSnapshot,
   GlobalSpacedRepetitionSettings,
-} from "./globalSettings";
+} from "./globalSettings.ts";
 
 export const EASE_PERMILLE_FACTOR = 1000;
 

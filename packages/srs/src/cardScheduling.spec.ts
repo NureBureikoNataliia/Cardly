@@ -18,22 +18,44 @@ describe("cardScheduling", () => {
   });
 
   describe("scheduleAfterAnswer - learning phase", () => {
-    it("moves to the next learning step on Good rating", () => {
+    it("skips first step and moves to next index/delay on Good rating with multi-step settings", () => {
+      const customSettings = {
+        ...settings,
+        learningStepsSeconds: [60, 600],
+      };
       const snap = createSnapshot("learning", 0);
-      const outcome = scheduleAfterAnswer(snap, "good", 0, settings);
+      const outcome = scheduleAfterAnswer(snap, "good", 0, customSettings);
 
       expect(outcome.phase).toBe("learning");
-      expect(outcome.learningStepIndex).toBe(1);
-      expect(outcome.dueInSecondsFromNow).toBe(settings.learningStepsSeconds[0]);
+      expect(outcome.learningStepIndex).toBe(2);
+      expect(outcome.dueInSecondsFromNow).toBe(600);
+    });
+
+    it("graduates immediately on Good rating with single-step settings", () => {
+      const customSettings = {
+        ...settings,
+        learningStepsSeconds: [600],
+        graduatingIntervalDays: 1,
+      };
+      const snap = createSnapshot("learning", 0);
+      const outcome = scheduleAfterAnswer(snap, "good", 0, customSettings);
+
+      expect(outcome.phase).toBe("review");
+      expect(outcome.dueInSecondsFromNow).toBeNull();
+      expect(outcome.intervalDays).toBe(1);
     });
 
     it("resets to step 0 on Again rating", () => {
+      const customSettings = {
+        ...settings,
+        learningStepsSeconds: [60, 600],
+      };
       const snap = createSnapshot("learning", 2);
-      const outcome = scheduleAfterAnswer(snap, "again", 0, settings);
+      const outcome = scheduleAfterAnswer(snap, "again", 0, customSettings);
 
       expect(outcome.phase).toBe("learning");
       expect(outcome.learningStepIndex).toBe(0);
-      expect(outcome.dueInSecondsFromNow).toBe(settings.learningStepsSeconds[0]);
+      expect(outcome.dueInSecondsFromNow).toBe(60);
     });
 
     it("immediately graduates to review phase on Easy rating", () => {

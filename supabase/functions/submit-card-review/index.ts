@@ -1,5 +1,5 @@
-import type { ReviewRating } from "@cardly/srs/reviewScheduler";
-import { scheduleAfterAnswer } from "@cardly/srs/cardScheduling";
+import type { ReviewRating } from "../../../packages/srs/src/reviewScheduler.ts";
+import { scheduleAfterAnswer } from "../../../packages/srs/src/cardScheduling.ts";
 import {
     appSettingsRowToGlobal,
     delayDaysForReview,
@@ -7,8 +7,8 @@ import {
     nextRepetitionsCount,
     progressRowToSnapshot,
     scheduleOutcomeToProgressPatch,
-} from "@cardly/srs/dbMapping";
-import type { AppSpacedRepetitionSettingsRow, UserCardProgressRow } from "@cardly/srs/dbTypes";
+} from "../../../packages/srs/src/dbMapping.ts";
+import type { AppSpacedRepetitionSettingsRow, UserCardProgressRow } from "../../../packages/srs/src/dbTypes.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders: Record<string, string> = {

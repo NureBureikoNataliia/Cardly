@@ -313,14 +313,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardTypeBasic: 'Standard',
     cardTypeCloze: 'Cloze',
     cardFormIntroBasic:
-      'Left: what you study. Right: the answer after you flip. Fill at least one field to save.',
+      'Left: what you study. Right: the answer after you flip. Fill at least one field  on each side.',
     cardFormEmpty: 'Each side needs text or media. Notes alone are not enough.',
     cardFormReversedPairNeedsBothSides:
       'To create a reverse card too, both sides need text or media.',
     cardFormClozeNeedsCore:
       'Cloze cards need the hidden answer or text before/after the gap. A hint, notes, or media alone are not enough.',
     clozeIntro:
-      'Left: sentence with a gap. Right: hidden answer. Fill at least one field to save.',
+      'Left: sentence with a gap. Right: hidden answer. Fill at least one field on each side.',
     clozeFieldBefore: 'Text before the gap',
     clozePlaceholderBefore: 'Text before …',
     clozeGapMarker: '[…]',
@@ -939,7 +939,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     cardsSectionTitle: 'Картки',
     searchCards: 'Пошук карток...',
     cardsFilterAll: 'Усі',
-    cardsFilterStandard: 'Стандартні',
+    cardsFilterStandard: 'Стандартний',
     cardsFilterReversible: 'Пари',
     cardsFilterWithMedia: 'З медіа',
     cardsFilterDueToday: 'На сьогодні',
@@ -1047,17 +1047,17 @@ export const translations: Record<Locale, Record<string, string>> = {
     notesFrontHint: 'Показуються на лицьовій стороні під час навчання',
     notesPlaceholder: 'Додаткова інформація на лицьовій стороні…',
     cardTypeLabel: 'Тип картки',
-    cardTypeBasic: 'Стандартні',
+    cardTypeBasic: 'Стандартний',
     cardTypeCloze: 'З пропуском',
     cardFormIntroBasic:
-      'Ліворуч — питання, праворуч — відповідь після перевертання. Для збереження достатньо одного заповненого поля.',
+      'Ліворуч — питання, праворуч — відповідь після перевертання. Для збереження достатньо одного заповненого поля на кожній стороні.',
     cardFormEmpty: 'На кожній стороні потрібен текст або медіа. Самих нотаток недостатньо.',
     cardFormReversedPairNeedsBothSides:
       'Щоб створити зворотну картку, на обох сторонах має бути текст або медіа.',
     cardFormClozeNeedsCore:
       'У картці з пропуском потрібна прихована відповідь або текст до/після пропуску. Однієї підказки, нотаток чи медіа недостатньо.',
     clozeIntro:
-      'Ліворуч — речення з пропуском, праворуч — відповідь. Для збереження достатньо одного заповненого поля.',
+      'Ліворуч — речення з пропуском, праворуч — відповідь. Для збереження достатньо одного заповненого поля на кожній стороні.',
     clozeFieldBefore: 'Текст до пропуску',
     clozePlaceholderBefore: 'Текст перед …',
     clozeGapMarker: '[…]',
@@ -1410,7 +1410,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     minEase: 'Мін. фактор легкості',
     defaultEase: 'Фактор за замовчуванням',
     resetToDefaults: 'Скинути до значень за замовчуванням',
-    deckLimitsTitle: 'Ліміти навчання для дошки',
+    deckLimitsTitle: 'Денні ліміти карток дошки',
     deckLimitsInherited: 'Для цієї дошки немає окремих лімітів',
     deckLimitsActive: 'Активних окремих лімітів: {count}',
     deckLimitsDescription: 'Необовʼязкові ліміти для цієї дошки. Залиште поле порожнім, щоб використовувати стандартну поведінку застосунку.',
@@ -1420,10 +1420,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     deckDailyCardsLimitHint: 'Максимальна кількість карток із цієї дошки, які можна повторити протягом поточного навчального дня.',
     deckDailyCardsLimitWarning: 'Для ефективного навчання це число має бути щонайменше {min} (нові картки × 10). Ви все одно можете зберегти це значення.',
     deckLimitsRemove: 'Без лімітів',
-    deckLimitsSaved: 'Ліміти навчання для дошки збережено.',
+    deckLimitsSaved: 'Денні ліміти карток дошки збережено.',
     deckLimitsResetDone: 'Окремі ліміти для дошки прибрано.',
     deckLimitsInvalid: 'Некоректне значення',
-    deckLimitsSaveError: 'Не вдалося зберегти ліміти навчання для дошки.',
+    deckLimitsSaveError: 'Не вдалося зберегти денні ліміти карток дошки.',
     deckLimitsNoUpdate: 'Нічого не оновлено. Перевірте, що ви власник дошки і політика оновлення дошок дозволяє збереження.',
     statisticsPlaceholder: 'Заглушка для статистики.',
     deckTakeTest: 'Пройти тест',

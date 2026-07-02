@@ -2,7 +2,7 @@ import {
   DEFAULT_EASE_PERMILLE,
   type ReviewSchedulerConfig,
   defaultReviewSchedulerConfig,
-} from "./reviewScheduler";
+} from "./reviewScheduler.ts";
 
 /**
  * App-wide spaced repetition settings (same for every deck).
@@ -28,8 +28,8 @@ export const defaultGlobalSpacedRepetitionSettings: GlobalSpacedRepetitionSettin
   learningStepsSeconds: [60, 600],
   relearningStepsSeconds: [600],
   graduatingIntervalDays: 1,
-  easyIntervalDuringLearningDays: 4,
-  learningHardDelaySeconds: 60,
+  easyIntervalDuringLearningDays: 3,
+  learningHardDelaySeconds: 360,
   relearningHardDelaySeconds: 600,
 };
 

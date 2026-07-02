@@ -13,6 +13,7 @@ import {
 import { getCardMediaForSide } from "@/src/lib/cardMedia";
 import { formatScheduleLabel } from "@/src/lib/formatScheduleLabel";
 import { loadDueCardsForDeck, type DueCard } from "@/src/lib/reviewQueue";
+import { mergeQueueWithPreservedCards, shouldRefreshQueueAfterReview, shouldResetSessionUi } from "@/src/lib/studyQueueRefresh";
 import {
     submitCardReviewInvoke,
     type SubmitCardReviewRating,
@@ -160,12 +161,15 @@ export default function DeckStudyScreen() {
   /** Prevents double-submit before the next frame (optimistic queue updates immediately). */
   const rateLockRef = useRef(false);
 
-  const loadSession = useCallback(async () => {
+
+  const loadSession = useCallback(async (mode: "full" | "silent" = "full") => {
     if (!deckId || !user?.id) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (shouldResetSessionUi(mode)) {
+      setLoading(true);
+    }
     const [{ data: settingsData, error: settingsError }, dueList] = await Promise.all([
       supabase
         .from("app_spaced_repetition_settings")
@@ -183,6 +187,11 @@ export default function DeckStudyScreen() {
       setSettings(null);
     } else {
       setSettings(settingsData as AppSpacedRepetitionSettingsRow);
+    }
+
+    if (!shouldResetSessionUi(mode)) {
+      setQueue(dueList);
+      return;
     }
 
     setQueue(dueList);
@@ -209,6 +218,8 @@ export default function DeckStudyScreen() {
   }, [navigation, t, includeScheduledToday]);
 
   const current = queue[0] ?? null;
+
+
 
   const sessionStats = useMemo(() => {
     let newCount = 0;
@@ -243,6 +254,7 @@ export default function DeckStudyScreen() {
 
     const card = current.card;
     const cardId = card.card_id;
+    const previousQueue = queue;
 
     // Save the original card (with original progress) to history before advancing
     const originalCard = current;
@@ -261,6 +273,7 @@ export default function DeckStudyScreen() {
       ease_permille: outcome.easePermille,
     };
     const requeue = shouldRequeueInSession(apiOutcome);
+    const refreshQueue = shouldRefreshQueueAfterReview(apiOutcome);
 
     setHistory((h) => [...h, originalCard]);
     setQueue((q) => {
@@ -281,7 +294,28 @@ export default function DeckStudyScreen() {
     void submitCardReviewInvoke(cardId, rating, deckId ?? undefined).then((result) => {
       if (result.error) {
         Alert.alert(t("error"), result.error.message ?? "Request failed");
-        loadSession();
+        void loadSession("full");
+      } else if (refreshQueue) {
+        void loadDueCardsForDeck(deckId ?? "", {
+          includeScheduledToday,
+          srsDayStartHour: studySettings.srsDayStartHour,
+        }).then((freshList) => {
+          // Merge without disturbing the card currently shown (queue[0] after optimistic update)
+          setQueue((currentQueue) => {
+            const merged = mergeQueueWithPreservedCards(previousQueue, freshList, 5);
+            // Keep currently displayed card at position 0 to avoid a visible queue jump
+            if (
+              currentQueue.length > 0 &&
+              merged.length > 0 &&
+              currentQueue[0].card.card_id !== merged[0].card.card_id
+            ) {
+              const currentShown = currentQueue[0];
+              const rest = merged.filter((item) => item.card.card_id !== currentShown.card.card_id);
+              return [currentShown, ...rest];
+            }
+            return merged;
+          });
+        });
       }
     });
   };
@@ -395,41 +429,43 @@ export default function DeckStudyScreen() {
         contentContainerStyle={styles.scrollInner}
         keyboardShouldPersistTaps="handled"
       >
-        <TouchableOpacity
-          style={[styles.card, { backgroundColor: C.surface }]}
-          onPress={handleCardPress}
-          activeOpacity={0.97}
-        >
-          <View style={styles.cardInner}>
-            {clozeOk ? (
-              <>
-                {!showBack ? (
-                  <ClozeFrontParts
-                    parts={clozeParts}
-                    gapLabel={t("clozeGapMarker") || CLOZE_GAP_MARKER}
-                  />
-                ) : null}
-                {showBack ? <ClozeBackParts parts={clozeParts} /> : null}
-                {visibleMedia.map((item) => (
-                  <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
-                ))}
-              </>
-            ) : (
-              <>
-                <Text style={[styles.cardTitle, { color: C.text }]}>
-                  {showBack ? currentCard.back_text : currentCard.front_text}
-                </Text>
-                {visibleMedia.map((item) => (
-                  <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
-                ))}
-              </>
-            )}
-            {!showBack && currentCard.notes ? (
-              <Text style={[styles.cardNotes, { color: C.textSub }]}>{currentCard.notes}</Text>
-            ) : null}
-            {!showBack && <Text style={[styles.hint, { color: C.textMuted }]}>{t("showAnswer")}</Text>}
-          </View>
-        </TouchableOpacity>
+        <View style={[styles.card, { backgroundColor: C.surface }]}>
+          <TouchableOpacity
+            style={styles.cardTouchable}
+            onPress={handleCardPress}
+            activeOpacity={0.97}
+          >
+            <View style={styles.cardInner}>
+              {clozeOk ? (
+                <>
+                  {!showBack ? (
+                    <ClozeFrontParts
+                      parts={clozeParts}
+                      gapLabel={t("clozeGapMarker") || CLOZE_GAP_MARKER}
+                    />
+                  ) : null}
+                  {showBack ? <ClozeBackParts parts={clozeParts} /> : null}
+                  {visibleMedia.map((item) => (
+                    <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
+                  ))}
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.cardTitle, { color: C.text }]}>
+                    {showBack ? currentCard.back_text : currentCard.front_text}
+                  </Text>
+                  {visibleMedia.map((item) => (
+                    <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
+                  ))}
+                </>
+              )}
+              {!showBack && currentCard.notes ? (
+                <Text style={[styles.cardNotes, { color: C.textSub }]}>{currentCard.notes}</Text>
+              ) : null}
+              {!showBack && <Text style={[styles.hint, { color: C.textMuted }]}>{t("showAnswer")}</Text>}
+            </View>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {showBack ? (
@@ -576,6 +612,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 12,
     borderWidth: 0,
+  },
+  cardTouchable: {
+    width: "100%",
+    minHeight: 200,
+    justifyContent: "center",
+    alignItems: "center",
   },
   cardInner: {
     alignItems: "center",

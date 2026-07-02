@@ -324,16 +324,16 @@ describe("dbMapping", () => {
       const result = applyRatingToProgressRow(row, "good", dummySettings, reviewDate);
 
       // In default learning settings:
-      // first step delay is 60 seconds
+      // first step delay is skipped on first Good, so it goes to second step (600 seconds)
       expect(result.outcome.phase).toBe("learning");
-      expect(result.outcome.learningStepIndex).toBe(1);
-      expect(result.outcome.dueInSecondsFromNow).toBe(60);
+      expect(result.outcome.learningStepIndex).toBe(2);
+      expect(result.outcome.dueInSecondsFromNow).toBe(600);
 
       // Check row update
       expect(result.progress.status).toBe("learning");
-      expect(result.progress.learning_step_index).toBe(1);
+      expect(result.progress.learning_step_index).toBe(2);
       expect(result.progress.repetitions).toBe(1);
-      expect(result.progress.due_date).toBe(new Date(reviewDate.getTime() + 60 * 1000).toISOString());
+      expect(result.progress.due_date).toBe(new Date(reviewDate.getTime() + 600 * 1000).toISOString());
     });
   });
 });

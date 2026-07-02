@@ -208,7 +208,7 @@ export default function DeckSrsOverridesPanel({
               keyboardType="number-pad"
               style={[
                 styles.input,
-                { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+                { backgroundColor: C.surface, borderColor: C.inputBorder, color: C.text },
               ]}
             />
             <Text style={[styles.hint, { color: C.textMuted }]}>{t("deckNewCardsLimitHint")}</Text>
@@ -224,7 +224,7 @@ export default function DeckSrsOverridesPanel({
               keyboardType="number-pad"
               style={[
                 styles.input,
-                { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+                { backgroundColor: C.surface, borderColor: C.inputBorder, color: C.text },
               ]}
             />
             <Text style={[styles.hint, { color: C.textMuted }]}>{t("deckDailyCardsLimitHint")}</Text>

@@ -4,13 +4,13 @@ import {
   nextEasePermille,
   scheduleNextReview,
   type ReviewRating,
-} from "./reviewScheduler";
+} from "./reviewScheduler.ts";
 import {
   type CardScheduleSnapshot,
   type GlobalSpacedRepetitionSettings,
   defaultGlobalSpacedRepetitionSettings,
   validateGlobalSettings,
-} from "./globalSettings";
+} from "./globalSettings.ts";
 
 export interface ScheduleOutcome {
   phase: CardScheduleSnapshot["phase"];
@@ -48,8 +48,8 @@ function handleRelearning(
   const { learningStepIndex, easePermille } = snapshot;
 
   if (rating === "easy") {
-    const ease = nextEasePermille(easePermille, "easy", settings);
-    return graduate(ease);
+    // Ease does not change during relearning — only review-phase answers adjust ease.
+    return graduate(easePermille);
   }
 
   if (rating === "again") {
@@ -113,11 +113,11 @@ function handleLearningLike(
   const { learningStepIndex, easePermille } = snapshot;
 
   if (rating === "easy") {
-    const ease = nextEasePermille(easePermille, "easy", settings);
+    // Ease does not change during learning — only review-phase answers adjust ease.
     return {
       phase: "review",
       learningStepIndex: steps.length,
-      easePermille: ease,
+      easePermille,
       intervalDays: Math.max(
         settings.graduatingIntervalDays,
         settings.easyIntervalDuringLearningDays
@@ -149,6 +149,19 @@ function handleLearningLike(
   // Good — advance one learning delay; when all short delays are done, graduate.
   if (learningStepIndex >= steps.length) {
     return onGraduate(easePermille);
+  }
+
+  if (learningStepIndex === 0) {
+    if (steps.length === 1) {
+      return onGraduate(easePermille);
+    }
+    return {
+      phase: snapshot.phase,
+      learningStepIndex: 2,
+      easePermille,
+      intervalDays: snapshot.intervalDays,
+      dueInSecondsFromNow: steps[1],
+    };
   }
 
   const delay = steps[learningStepIndex];

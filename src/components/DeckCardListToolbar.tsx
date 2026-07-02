@@ -71,7 +71,7 @@ export function DeckCardListToolbar({
       <View
         style={[
           styles.search,
-          { backgroundColor: C.inputBg, borderColor: C.inputBorder },
+          { backgroundColor: C.surface, borderColor: C.inputBorder },
           searchFocused &&
             (C.isDark
               ? { borderColor: C.tint, backgroundColor: C.surface }
