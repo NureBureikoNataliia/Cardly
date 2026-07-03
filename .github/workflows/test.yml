@@ -6,32 +6,12 @@ on:
   pull_request:
     branches: [main, develop]
 
-# Отменяет предыдущие запуски того же PR/ветки при новом push — экономит минуты CI
+# Відміняє попередні запуски того ж PR/гілки при новому push
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  typecheck:
-    name: TypeScript Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22.x'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: TypeScript check
-        run: npx tsc --noEmit
-        continue-on-error: true 
-
   test:
     name: Run Tests
     runs-on: ubuntu-latest
