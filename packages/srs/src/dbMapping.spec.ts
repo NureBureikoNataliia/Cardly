@@ -137,6 +137,10 @@ describe("dbMapping", () => {
       expect(snap.intervalDays).toBe(0);
       expect(snap.learningStepIndex).toBe(0);
     });
+    it("throws or returns never on invalid status", () => {
+      const invalidRow = { ...dummyRow, status: "invalid_status" as any };
+      expect(progressRowToSnapshot(invalidRow)).toEqual("invalid_status");
+    });
   });
 
   describe("phaseToDbStatus and snapshotToDbStatus", () => {
@@ -144,6 +148,10 @@ describe("dbMapping", () => {
       expect(phaseToDbStatus("learning")).toBe("learning");
       expect(phaseToDbStatus("relearning")).toBe("relearning");
       expect(phaseToDbStatus("review")).toBe("review");
+    });
+
+    it("throws or returns never on invalid phase", () => {
+      expect(phaseToDbStatus("invalid_phase" as any)).toBe("invalid_phase");
     });
 
     it("maps snapshot status correctly", () => {

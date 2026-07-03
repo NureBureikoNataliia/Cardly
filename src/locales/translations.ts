@@ -1435,8 +1435,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     deckQuizCardsTotal: 'Доступно карток: {n}',
     deckQuizCardsEligibleOf: 'Для тесту: {eligible} з {total} у наборі',
     deckQuizEligibleInfoTitle: 'Чому не всі картки?',
-    deckQuizEligibleInfoBody:
-      'У списку лише {eligible} з {total} карток набору — решта не підходять для текстового тесту.',
+    deckQuizEligibleInfoBody: 'У списку лише {eligible} з {total} карток набору — решта не підходять для текстового тесту.',
     deckQuizEmptyCards: 'У наборі ще немає карток з питанням і відповіддю.',
     deckQuizNoSearchResults: 'За вашим пошуком нічого не знайдено.',
     deckQuizLoading: 'Готуємо тест…',
