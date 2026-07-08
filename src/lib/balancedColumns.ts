@@ -97,26 +97,7 @@ export function estimateCardTileHeight(card: Card): number {
 
 /** Same min height for forward/reverse cards that share a `pairId`. */
 export function computePairedTileHeights(cards: Card[]): Map<string, number> {
-  const byPairId = new Map<string, Card[]>();
-
-  for (const card of cards) {
-    const pairId = parseCardExtra(card.card_extra).pairId?.trim();
-    if (!pairId) continue;
-    const group = byPairId.get(pairId) ?? [];
-    group.push(card);
-    byPairId.set(pairId, group);
-  }
-
-  const heights = new Map<string, number>();
-  for (const pairCards of byPairId.values()) {
-    if (pairCards.length < 2) continue;
-    const maxHeight = Math.max(...pairCards.map((card) => estimateCardTileHeight(card)));
-    for (const card of pairCards) {
-      heights.set(card.card_id, maxHeight);
-    }
-  }
-
-  return heights;
+  return new Map<string, number>();
 }
 
 export function getCardTileHeight(

@@ -23,6 +23,7 @@ import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import { DeckCardListToolbar } from "@/src/components/DeckCardListToolbar";
+import { PaginationControls } from "@/src/components/PaginationControls";
 import { CardSideMedia } from "@/src/components/CardSideMedia";
 import { fetchUserProgressForDeck, getDueTodayCountForUser } from "@/src/lib/userCardProgress";
 import ConfirmModal from "@/src/components/ConfirmModal";
@@ -487,17 +488,31 @@ export default function DeckDetailScreen() {
     [cards, cardSearch, cardFilter, cardSort, progressMap, studySettings.srsDayStartHour],
   );
 
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
+
+  useEffect(() => {
+    setPage(1);
+  }, [cardSearch, cardFilter, cardSort]);
+
+  const paginatedCards = useMemo(
+    () => displayedCards.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [displayedCards, page]
+  );
+  
+  const totalPages = Math.ceil(displayedCards.length / PAGE_SIZE);
+
   const pairedTileHeights = useMemo(
-    () => computePairedTileHeights(displayedCards),
-    [displayedCards],
+    () => computePairedTileHeights(paginatedCards),
+    [paginatedCards],
   );
 
   const cardColumns = useMemo(
     () =>
-      splitIntoBalancedColumns(displayedCards, numCols, (card) =>
+      splitIntoBalancedColumns(paginatedCards, numCols, (card) =>
         getCardTileHeight(card, pairedTileHeights),
       ),
-    [displayedCards, numCols, pairedTileHeights],
+    [paginatedCards, numCols, pairedTileHeights],
   );
 
   const hasActiveCardQuery = hasActiveDeckCardQuery(cardSearch, cardFilter, cardSort);
@@ -1109,6 +1124,14 @@ export default function DeckDetailScreen() {
                 ))}
               </View>
             )}
+            
+            {totalPages > 1 && (
+              <PaginationControls
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            )}
           </View>
 
         </View>
@@ -1567,6 +1590,20 @@ const styles = StyleSheet.create({
   progressWrap: { marginHorizontal: 16, marginTop: 12 },
   progressTrack: { height: 6, borderRadius: 999, backgroundColor: "#e8eaee", overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 999, backgroundColor: "#059669" },
+
+  loadMoreBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignSelf: "center",
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  loadMoreBtnTxt: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
 
   /* ── ACTIONS ── */
   actions: { marginHorizontal: 16, marginTop: 16, gap: 10 },

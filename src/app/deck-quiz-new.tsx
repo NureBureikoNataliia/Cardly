@@ -19,6 +19,7 @@ import {
   DeckQuizIntro,
   DeckQuizScreenShell,
 } from "@/src/components/DeckQuizLayout";
+import { PaginationControls } from "@/src/components/PaginationControls";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
@@ -118,6 +119,20 @@ export default function DeckQuizNewScreen() {
       }),
     [cards, search, cardFilter, cardSort, progressMap, studySettings.srsDayStartHour],
   );
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, cardFilter, cardSort]);
+
+  const paginatedCards = useMemo(
+    () => displayedCards.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [displayedCards, page]
+  );
+  
+  const totalPages = Math.ceil(displayedCards.length / PAGE_SIZE);
 
   const hasActiveQuery = hasActiveDeckCardQuery(search, cardFilter, cardSort);
 
@@ -400,36 +415,45 @@ export default function DeckQuizNewScreen() {
               </Pressable>
             </View>
           ) : (
-            displayedCards.map((card) => {
-              const on = selected.has(card.card_id);
-              const prompt = getQuizPrompt(card) ?? "…";
-              return (
-                <Pressable
-                  key={card.card_id}
-                  onPress={() => toggleCard(card.card_id)}
-                  style={[
-                    styles.cardRow,
-                    {
-                      backgroundColor: on
-                        ? C.isDark
-                          ? "rgba(99,102,241,0.12)"
-                          : "#f5f3ff"
-                        : C.surface,
-                      borderColor: on ? C.tint : C.borderLight,
-                    },
-                  ]}
-                >
-                  <Feather
-                    name={on ? "check-square" : "square"}
-                    size={22}
-                    color={on ? C.tint : "#9ca3af"}
-                  />
-                  <Text style={[styles.cardPrompt, { color: C.text }]} numberOfLines={3}>
-                    {prompt}
-                  </Text>
-                </Pressable>
-              );
-            })
+            <>
+              {paginatedCards.map((card) => {
+                const on = selected.has(card.card_id);
+                const prompt = getQuizPrompt(card) ?? "…";
+                return (
+                  <Pressable
+                    key={card.card_id}
+                    onPress={() => toggleCard(card.card_id)}
+                    style={[
+                      styles.cardRow,
+                      {
+                        backgroundColor: on
+                          ? C.isDark
+                            ? "rgba(99,102,241,0.12)"
+                            : "#f5f3ff"
+                          : C.surface,
+                        borderColor: on ? C.tint : C.borderLight,
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name={on ? "check-square" : "square"}
+                      size={22}
+                      color={on ? C.tint : "#9ca3af"}
+                    />
+                    <Text style={[styles.cardPrompt, { color: C.text }]} numberOfLines={3}>
+                      {prompt}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              {totalPages > 1 && (
+                <PaginationControls
+                  currentPage={page}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                />
+              )}
+            </>
           )}
         </View>
       )}
@@ -572,4 +596,17 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   emptyTxt: { fontSize: 15, textAlign: "center", lineHeight: 22 },
+  loadMoreBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignSelf: "center",
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  loadMoreBtnTxt: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
 });
