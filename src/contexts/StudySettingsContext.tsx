@@ -1,9 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  DEFAULT_STUDY_SETTINGS,
-  type StudySettings,
-} from "@/src/lib/spacedRepetition";
+export interface StudySettings {
+  srsDayStartHour: number;
+}
+
+export const DEFAULT_STUDY_SETTINGS: StudySettings = {
+  srsDayStartHour: 3,
+};
+
 import { normalizeSrsDayStartHour } from "@/src/lib/srsDayBoundary";
 
 const STORAGE_KEY = "@cardly_study_settings";

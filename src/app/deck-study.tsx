@@ -183,7 +183,11 @@ export default function DeckStudyScreen() {
     ]);
 
     if (settingsError || !settingsData) {
-      Alert.alert(t("error"), "SRS settings not found. Apply DB migrations.");
+      const isNetworkError = !!settingsError?.message?.match(/fetch|network/i);
+      const msg = isNetworkError 
+        ? t("srsSettingsNetworkError") 
+        : t("srsSettingsGenericError");
+      Alert.alert(t("error"), msg);
       setSettings(null);
     } else {
       setSettings(settingsData as AppSpacedRepetitionSettingsRow);

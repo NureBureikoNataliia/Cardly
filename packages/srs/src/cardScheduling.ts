@@ -279,18 +279,3 @@ export function scheduleAfterAnswer(
   };
 }
 
-/**
- * Labels for the four buttons in the review UI (day-based intervals).
- */
-export function previewReviewIntervals(
-  snapshot: Pick<CardScheduleSnapshot, "intervalDays" | "easePermille">,
-  delayDaysForReview: number,
-  settings: GlobalSpacedRepetitionSettings = defaultGlobalSpacedRepetitionSettings
-): ReturnType<typeof computeCandidateIntervalsDays> {
-  return computeCandidateIntervalsDays(
-    snapshot.intervalDays,
-    delayDaysForReview,
-    snapshot.easePermille,
-    settings
-  );
-}

@@ -4,7 +4,6 @@ import {
   normalizeSrsDayStartHour,
   SRS_DAY_START_HOUR_LOCAL,
 } from "@/src/lib/srsDayBoundary";
-import { scheduleCard, type Rating, type StudySettings } from "./spacedRepetition";
 
 export interface UserCardProgress {
   user_id: string;
@@ -68,41 +67,4 @@ export function getDueTodayCountForUser(
   }).length;
 }
 
-/**
- * Save progress after user rates a card (UPSERT into user_card_progress)
- */
-export async function saveProgressAfterRating(
-  userId: string,
-  cardId: string,
-  rating: Rating,
-  currentProgress: UserCardProgress | undefined,
-  settings?: StudySettings
-): Promise<{ error: unknown }> {
-  const current = currentProgress
-    ? {
-        next_review_at: currentProgress.due_date,
-        interval_days: currentProgress.interval_days ?? undefined,
-        ease_factor: currentProgress.ease_factor ?? undefined,
-        repetitions: currentProgress.repetitions ?? undefined,
-      }
-    : undefined;
 
-  const scheduled = scheduleCard(current, rating, new Date(), settings);
-
-  const row = {
-    user_id: userId,
-    card_id: cardId,
-    status: rating === 1 ? "relearning" : "review",
-    due_date: scheduled.next_review_at,
-    interval_days: Math.max(0, Math.round(scheduled.interval_days)),
-    ease_factor: scheduled.ease_factor,
-    repetitions: scheduled.repetitions,
-    last_reviewed_at: scheduled.last_reviewed_at,
-  };
-
-  const { error } = await supabase
-    .from("user_card_progress")
-    .upsert(row, { onConflict: "user_id,card_id" });
-
-  return { error };
-}

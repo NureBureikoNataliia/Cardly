@@ -1,4 +1,4 @@
-import { scheduleAfterAnswer, previewReviewIntervals } from "./cardScheduling";
+import { scheduleAfterAnswer } from "./cardScheduling";
 import type { CardScheduleSnapshot } from "./globalSettings";
 import { defaultGlobalSpacedRepetitionSettings } from "./globalSettings";
 
@@ -184,15 +184,4 @@ describe("cardScheduling", () => {
     });
   });
 
-  describe("previewReviewIntervals", () => {
-    it("calculates candidate review intervals", () => {
-      const snap = createSnapshot("review", 0, 10, 2500);
-      const intervals = previewReviewIntervals(snap, 0, settings);
-
-      expect(intervals.hard).toBeDefined();
-      expect(intervals.good).toBeDefined();
-      expect(intervals.easy).toBeDefined();
-      expect(intervals.easy).toBeGreaterThan(intervals.good);
-    });
-  });
 });
