@@ -114,10 +114,6 @@ Contributions are welcome. Suggested workflow:
 
 Please follow existing code style and TypeScript settings in `tsconfig.json`.
 
-## License
-
-Specify your license here (e.g., MIT). If none, add one to the repository.
-
 ## Contact
 
 For questions or help, open an issue in this repository or contact the maintainers.
