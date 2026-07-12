@@ -160,6 +160,11 @@ export default function DeckStudyScreen() {
   const [history, setHistory] = useState<DueCard[]>([]);
   /** Prevents double-submit before the next frame (optimistic queue updates immediately). */
   const rateLockRef = useRef(false);
+  /**
+   * Card IDs that were restored via "go back" (undo) and must not be wiped
+   * by an in-flight server queue refresh.
+   */
+  const undoPinnedRef = useRef<Set<string>>(new Set());
 
 
   const loadSession = useCallback(async (mode: "full" | "silent" = "full") => {
@@ -307,17 +312,31 @@ export default function DeckStudyScreen() {
           // Merge without disturbing the card currently shown (queue[0] after optimistic update)
           setQueue((currentQueue) => {
             const merged = mergeQueueWithPreservedCards(previousQueue, freshList, 5);
+
+            // If the user pressed "go back" while this request was in flight,
+            // some cards were undo-pinned and must stay in the queue even if
+            // the server no longer considers them due.
+            const pinned = undoPinnedRef.current;
+            const pinnedCards = currentQueue.filter((item) => pinned.has(item.card.card_id));
+            const mergedWithoutPinned = merged.filter((item) => !pinned.has(item.card.card_id));
+            // Pinned cards go first (preserving their restored order), followed by the fresh list.
+            const withPinned = [...pinnedCards, ...mergedWithoutPinned];
+            // Clear pins now that they are safely in the queue.
+            undoPinnedRef.current = new Set();
+
+            const resolvedQueue = withPinned.length > 0 ? withPinned : merged;
+
             // Keep currently displayed card at position 0 to avoid a visible queue jump
             if (
               currentQueue.length > 0 &&
-              merged.length > 0 &&
-              currentQueue[0].card.card_id !== merged[0].card.card_id
+              resolvedQueue.length > 0 &&
+              currentQueue[0].card.card_id !== resolvedQueue[0].card.card_id
             ) {
               const currentShown = currentQueue[0];
-              const rest = merged.filter((item) => item.card.card_id !== currentShown.card.card_id);
+              const rest = resolvedQueue.filter((item) => item.card.card_id !== currentShown.card.card_id);
               return [currentShown, ...rest];
             }
-            return merged;
+            return resolvedQueue;
           });
         });
       }
@@ -327,6 +346,8 @@ export default function DeckStudyScreen() {
   const handleGoBack = () => {
     if (history.length === 0) return;
     const prev = history[history.length - 1];
+    // Pin this card so that any in-flight server refresh cannot remove it from the queue.
+    undoPinnedRef.current.add(prev.card.card_id);
     setHistory((h) => h.slice(0, -1));
     setQueue((q) => {
       // Remove any requeued copy of that card from the queue, then put original at front
