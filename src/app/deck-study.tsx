@@ -418,7 +418,7 @@ export default function DeckStudyScreen() {
       <View style={[styles.contentColumn, { width: contentWidth }]}>
         <View style={styles.topRow}>
           <View style={styles.counterOverlay} pointerEvents="none">
-            <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text>
+        {/* <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text> */}
           </View>
           {history.length > 0 ? (
             <TouchableOpacity style={[styles.undoButton, undoButtonTheme]} onPress={handleGoBack}>
