@@ -3,7 +3,7 @@ import { User } from '@supabase/supabase-js';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { Deck } from '@/assets/data/decks';
 import { getNextSrsDayBoundary, getSrsDayStart } from '@/src/lib/srsDayBoundary';
@@ -14,6 +14,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useStudySettings } from '@/src/contexts/StudySettingsContext';
 import { useAppColors } from '@/src/contexts/ThemeContext';
+import { useInfiniteScroll } from '@/src/hooks/useInfiniteScroll';
 
 type RatingRow = {
   user_id: string;
@@ -425,6 +426,12 @@ export default function DeckRateScreen() {
     return list;
   }, [feedEntries, feedDateFilter, feedSort, studySettings.srsDayStartHour]);
 
+  const {
+    visibleItems: visibleFeed,
+    hasMore: feedHasMore,
+    onScroll: feedOnScroll,
+  } = useInfiniteScroll(filteredFeed);
+
   const canSubmit = useMemo(() => {
     if (!user) return false;
     const commentChanged = commentText.trim() !== loadedMyComment.trim();
@@ -531,7 +538,12 @@ export default function DeckRateScreen() {
 
   return (
     <>
-    <ScrollView style={[styles.container, { backgroundColor: C.bg }]} contentContainerStyle={styles.scrollContent}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: C.bg }]}
+      contentContainerStyle={styles.scrollContent}
+      onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => feedOnScroll(e)}
+      scrollEventThrottle={200}
+    >
       <View style={[styles.hero, { backgroundColor: C.surface }]}>
         <View style={{ gap: 6 }}>
           <Text style={styles.heroTitle}>{deck.title}</Text>
@@ -602,7 +614,7 @@ export default function DeckRateScreen() {
           <Text style={styles.emptyText}>{t('noReviewsYet')}</Text>
         </View>
       ) : (
-        filteredFeed.map((entry) => {
+        visibleFeed.map((entry) => {
           const when = entryActivityIso(entry);
           return (
             <View key={entry.userId} style={[styles.reviewCard, { backgroundColor: C.surface }]}>
@@ -648,6 +660,11 @@ export default function DeckRateScreen() {
           );
         })
       )}
+      {feedHasMore && (
+        <View style={styles.feedFooter}>
+          <ActivityIndicator size="small" color="#6366f1" />
+        </View>
+      )}
     </ScrollView>
     <CommentComplaintModal
       visible={Boolean(reportComment && deck)}
@@ -668,6 +685,11 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 32,
     gap: 12,
+  },
+  feedFooter: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   center: {
     flex: 1,

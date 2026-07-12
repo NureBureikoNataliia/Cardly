@@ -1,9 +1,11 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   RefreshControl,
@@ -119,6 +121,8 @@ type SupportMessage = {
 };
 
 /* ═══════════════════════════════════════ */
+const ADMIN_PAGE_SIZE = 20;
+
 export default function AdminPanelScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -151,6 +155,60 @@ export default function AdminPanelScreen() {
   const [commentComplaintToDismiss, setCommentComplaintToDismiss] = useState<CommentComplaint | null>(null);
   const [commentComplaintReviewToDelete, setCommentComplaintReviewToDelete] = useState<CommentComplaint | null>(null);
   const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
+
+  // Per-tab pagination pages (reset on tab/filter change)
+  const [usersPage, setUsersPage] = useState(1);
+  const [commentsPage, setCommentsPage] = useState(1);
+  const [complaintsDeckPage, setComplaintsDeckPage] = useState(1);
+  const [complaintsWordPage, setComplaintsWordPage] = useState(1);
+  const [complaintsReviewPage, setComplaintsReviewPage] = useState(1);
+  const [supportPage, setSupportPage] = useState(1);
+
+  // Track previous active tab & filters to auto-reset pages
+  const prevTabRef = useRef<Tab>(activeTab);
+  const prevComplaintFilterRef = useRef(complaintFilter);
+  const prevSupportFilterRef = useRef(supportFilter);
+  const prevUserSearchRef = useRef(userSearch);
+
+  // Reset pages when tab or filter changes
+  useEffect(() => {
+    if (prevTabRef.current !== activeTab) {
+      prevTabRef.current = activeTab;
+      setUsersPage(1); setCommentsPage(1);
+      setComplaintsDeckPage(1); setComplaintsWordPage(1); setComplaintsReviewPage(1);
+      setSupportPage(1);
+    }
+    if (prevComplaintFilterRef.current !== complaintFilter) {
+      prevComplaintFilterRef.current = complaintFilter;
+      setComplaintsDeckPage(1); setComplaintsWordPage(1); setComplaintsReviewPage(1);
+    }
+    if (prevSupportFilterRef.current !== supportFilter) {
+      prevSupportFilterRef.current = supportFilter;
+      setSupportPage(1);
+    }
+    if (prevUserSearchRef.current !== userSearch) {
+      prevUserSearchRef.current = userSearch;
+      setUsersPage(1);
+    }
+  });
+
+  // onScroll handler for the main admin ScrollView
+  const handleAdminScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    if (distanceFromBottom > 250) return;
+    // Increment the correct page for the active tab
+    switch (activeTab) {
+      case 'users':      setUsersPage((p) => p + 1); break;
+      case 'comments':   setCommentsPage((p) => p + 1); break;
+      case 'support':    setSupportPage((p) => p + 1); break;
+      case 'complaints':
+        if (complaintFilter === 'decks')   setComplaintsDeckPage((p) => p + 1);
+        else if (complaintFilter === 'words')   setComplaintsWordPage((p) => p + 1);
+        else if (complaintFilter === 'reviews') setComplaintsReviewPage((p) => p + 1);
+        break;
+    }
+  }, [activeTab, complaintFilter]);
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: t('adminPanel') });
@@ -340,6 +398,19 @@ export default function AdminPanelScreen() {
     u.email.toLowerCase().includes(userSearch.toLowerCase())
   );
 
+  // Paginated slices for each tab
+  const visibleUsers    = filteredUsers.slice(0, usersPage * ADMIN_PAGE_SIZE);
+  const visibleComments = comments.slice(0, commentsPage * ADMIN_PAGE_SIZE);
+  const visibleDeckComplaints    = complaints.slice(0, complaintsDeckPage * ADMIN_PAGE_SIZE);
+  const visibleWordComplaints    = cardComplaints.slice(0, complaintsWordPage * ADMIN_PAGE_SIZE);
+  const visibleReviewComplaints  = commentComplaints.slice(0, complaintsReviewPage * ADMIN_PAGE_SIZE);
+
+  const hasMoreUsers           = visibleUsers.length < filteredUsers.length;
+  const hasMoreComments        = visibleComments.length < comments.length;
+  const hasMoreDeckComplaints  = visibleDeckComplaints.length < complaints.length;
+  const hasMoreWordComplaints  = visibleWordComplaints.length < cardComplaints.length;
+  const hasMoreReviewComplaints = visibleReviewComplaints.length < commentComplaints.length;
+
   /* ── Tab definitions ── */
   const TABS: { key: Tab; icon: keyof typeof Feather.glyphMap; label: string; count?: number }[] = [
     { key: 'overview',   icon: 'bar-chart-2',    label: t('adminTabOverview') },
@@ -458,6 +529,8 @@ export default function AdminPanelScreen() {
         contentContainerStyle={styles.mainContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />}
         showsVerticalScrollIndicator={Platform.OS === 'web'}
+        onScroll={handleAdminScroll}
+        scrollEventThrottle={200}
       >
         {loading && !refreshing ? (
           <View style={[styles.centered, { backgroundColor: C.bg }]}>
@@ -513,7 +586,7 @@ export default function AdminPanelScreen() {
                 {filteredUsers.length === 0 ? (
                   <EmptyState icon="users" text={t('adminNoUsers')} />
                 ) : (
-                  filteredUsers.map(u => (
+                  visibleUsers.map(u => (
                     <View key={u.user_id} style={[styles.userCard, { backgroundColor: C.surface }]}>
                       {/* Avatar + info */}
                       <View style={styles.userCardLeft}>
@@ -603,6 +676,11 @@ export default function AdminPanelScreen() {
                     </View>
                   ))
                 )}
+                {hasMoreUsers && (
+                  <View style={styles.tabFooter}>
+                    <ActivityIndicator size="small" color="#6366f1" />
+                  </View>
+                )}
               </View>
             )}
 
@@ -645,7 +723,7 @@ export default function AdminPanelScreen() {
                   cardComplaints.length === 0 ? (
                     <EmptyState icon="check-circle" text={t('adminNoCardComplaints')} />
                   ) : (
-                    cardComplaints.map(row => (
+                    visibleWordComplaints.map(row => (
                       <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
                         <View style={styles.cardHead}>
                           <View style={[styles.issueBadge, C.isDark && { backgroundColor: 'rgba(217,119,6,0.15)', borderColor: '#92400e' }]}>
@@ -708,7 +786,7 @@ export default function AdminPanelScreen() {
                   commentComplaints.length === 0 ? (
                     <EmptyState icon="check-circle" text={t('adminNoCommentComplaints')} />
                   ) : (
-                    commentComplaints.map(row => (
+                    visibleReviewComplaints.map(row => (
                       <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
                         <View style={styles.cardHead}>
                           <View style={[styles.issueBadge, C.isDark && { backgroundColor: 'rgba(217,119,6,0.15)', borderColor: '#92400e' }]}>
@@ -806,7 +884,7 @@ export default function AdminPanelScreen() {
                 ) : complaints.length === 0 ? (
                   <EmptyState icon="check-circle" text={t('adminNoComplaints')} />
                 ) : (
-                  complaints.map(row => (
+                  visibleDeckComplaints.map(row => (
                     <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
                       {/* Card header */}
                       <View style={styles.cardHead}>
@@ -864,6 +942,21 @@ export default function AdminPanelScreen() {
                     </View>
                   ))
                 )}
+                {complaintFilter === 'words' && hasMoreWordComplaints && (
+                  <View style={styles.tabFooter}>
+                    <ActivityIndicator size="small" color="#6366f1" />
+                  </View>
+                )}
+                {complaintFilter === 'reviews' && hasMoreReviewComplaints && (
+                  <View style={styles.tabFooter}>
+                    <ActivityIndicator size="small" color="#6366f1" />
+                  </View>
+                )}
+                {complaintFilter === 'decks' && hasMoreDeckComplaints && (
+                  <View style={styles.tabFooter}>
+                    <ActivityIndicator size="small" color="#6366f1" />
+                  </View>
+                )}
               </View>
             )}
 
@@ -879,6 +972,8 @@ export default function AdminPanelScreen() {
               const filtered = supportFilter === 'all'    ? supportMessages
                              : supportFilter === 'unread' ? supportMessages.filter(m => !m.is_read)
                              : supportMessages.filter(m => m.type === supportFilter);
+              const visibleSupport = filtered.slice(0, supportPage * ADMIN_PAGE_SIZE);
+              const hasMoreSupport = visibleSupport.length < filtered.length;
               const TYPE_META: Record<string, { color: string; icon: keyof typeof Feather.glyphMap; label: string }> = {
                 bug:        { color: '#ef4444', icon: 'alert-circle',   label: t('adminSupportFilterBug') },
                 suggestion: { color: '#f59e0b', icon: 'zap',            label: t('adminSupportFilterSuggestion') },
@@ -923,7 +1018,7 @@ export default function AdminPanelScreen() {
                   {filtered.length === 0 ? (
                     <EmptyState icon="inbox" text={t('adminSupportEmpty')} />
                   ) : (
-                    filtered.map(msg => {
+                    visibleSupport.map(msg => {
                       const meta = TYPE_META[msg.type] ?? TYPE_META.bug;
                       return (
                         <View key={msg.id} style={[
@@ -993,6 +1088,11 @@ export default function AdminPanelScreen() {
                       );
                     })
                   )}
+                  {hasMoreSupport && (
+                    <View style={styles.tabFooter}>
+                      <ActivityIndicator size="small" color="#6366f1" />
+                    </View>
+                  )}
                 </View>
               );
             })()}
@@ -1011,7 +1111,7 @@ export default function AdminPanelScreen() {
                 {comments.length === 0 ? (
                   <EmptyState icon="message-circle" text={t('adminNoComments')} />
                 ) : (
-                  comments.map(row => (
+                  visibleComments.map(row => (
                     <View key={row.id} style={[styles.card, { backgroundColor: C.surface }]}>
                       <View style={styles.commentHead}>
                         {/* Avatar */}
@@ -1045,6 +1145,11 @@ export default function AdminPanelScreen() {
                       </TouchableOpacity>
                     </View>
                   ))
+                )}
+                {hasMoreComments && (
+                  <View style={styles.tabFooter}>
+                    <ActivityIndicator size="small" color="#6366f1" />
+                  </View>
                 )}
               </View>
             )}
@@ -1277,6 +1382,11 @@ const styles = StyleSheet.create({
   main: { flex: 1 },
   mainContent: { padding: 20, paddingBottom: 60, gap: 0 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  tabFooter: {
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   section: { gap: 12 },
   sectionHead: {

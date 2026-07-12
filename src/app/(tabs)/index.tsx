@@ -17,6 +17,7 @@ import Colors from '@/src/constants/Colors';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useLanguage } from '@/src/contexts/LanguageContext';
 import { useAppColors } from '@/src/contexts/ThemeContext';
+import { useInfiniteScroll } from '@/src/hooks/useInfiniteScroll';
 
 type SortKey =
   | 'newest'
@@ -236,6 +237,12 @@ export default function MainScreen() {
       });
   }, [decks, searchQuery, sortBy, visibilityFilter, cardCounts, ratingByDeckId, ratingCountByDeckId]);
 
+  const {
+    visibleItems: visibleDecks,
+    hasMore,
+    loadMore,
+  } = useInfiniteScroll(filteredAndSortedDecks);
+
   return (
     <View style={styles.container}>
       {loading ? (
@@ -275,7 +282,7 @@ export default function MainScreen() {
         </View>
       ) : (
         <ListOfDecks
-          decks={filteredAndSortedDecks}
+          decks={visibleDecks}
           cardCounts={cardCounts}
           ratingByDeckId={ratingByDeckId}
           ratingCountByDeckId={ratingCountByDeckId}
@@ -283,6 +290,8 @@ export default function MainScreen() {
           onPressDeck={handlePressDeck}
           onEditDeck={handleEditDeck}
           onDeleteDeck={handleDeleteDeck}
+          onLoadMore={loadMore}
+          hasMore={hasMore}
           listEmptyComponent={
             <RNView style={styles.searchEmpty}>
               <Text style={[styles.searchEmptyText, { color: colorScheme === 'dark' ? '#9ca3af' : '#6b7280' }]}>

@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     FlatList,
     ImageBackground,
     Modal,
@@ -36,6 +37,10 @@ export interface ListOfDecksProps {
   listEmptyComponent?: React.ReactElement | null;
   /** Set of deck_ids where user is a collaborator (not owner) */
   collaboratedDeckIds?: Set<string>;
+  /** Called when the list is scrolled near the bottom. */
+  onLoadMore?: () => void;
+  /** Whether more items are available (shows loading footer when true). */
+  hasMore?: boolean;
 }
 
 function DeckCardInner({
@@ -230,6 +235,8 @@ export function ListOfDecks({
   listHeaderComponent = null,
   listEmptyComponent = null,
   collaboratedDeckIds,
+  onLoadMore,
+  hasMore = false,
 }: ListOfDecksProps) {
   const { t } = useLanguage();
   const { width } = useWindowDimensions();
@@ -268,6 +275,12 @@ export function ListOfDecks({
     );
   };
 
+  const listFooter = hasMore ? (
+    <View style={styles.footerLoader}>
+      <ActivityIndicator size="small" color="#6366f1" />
+    </View>
+  ) : null;
+
   return (
     <View style={styles.listWrapper}>
       <FlatList
@@ -279,12 +292,15 @@ export function ListOfDecks({
         columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
         ListHeaderComponent={listHeaderComponent}
         ListEmptyComponent={listEmptyComponent ?? undefined}
+        ListFooterComponent={listFooter}
         style={styles.list}
         contentContainerStyle={[
           styles.container,
           data.length === 0 && listEmptyComponent ? styles.containerWithEmpty : null,
         ]}
         showsVerticalScrollIndicator={Platform.OS === 'web'}
+        onEndReached={onLoadMore}
+        onEndReachedThreshold={0.3}
       />
     </View>
   );
@@ -317,6 +333,11 @@ const styles = StyleSheet.create({
   list: {
     flex: 1,
     width: '100%',
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   gridRow: {
     alignItems: 'stretch',

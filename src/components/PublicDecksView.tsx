@@ -17,6 +17,7 @@ import ListOfDecks from "@/src/components/ListOfDecks";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { usePublicDecksData } from "@/src/hooks/usePublicDecksData";
+import { useInfiniteScroll } from "@/src/hooks/useInfiniteScroll";
 import { compareDeckTitles } from "@/src/lib/deckSort";
 import { useAppColors } from "@/src/contexts/ThemeContext";
 
@@ -108,6 +109,12 @@ export default function PublicDecksView({ forGuest }: PublicDecksViewProps) {
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
   }, [decks, searchQuery, sortBy, cardCounts, ratingByDeckId, ratingCountByDeckId]);
+
+  const {
+    visibleItems: visibleDecks,
+    hasMore,
+    loadMore,
+  } = useInfiniteScroll(filtered);
 
   const sortOptions: { key: SortKey; label: string }[] = [
     { key: "newest", label: t("newest") },
@@ -233,7 +240,7 @@ export default function PublicDecksView({ forGuest }: PublicDecksViewProps) {
         </View>
       ) : (
         <ListOfDecks
-          decks={filtered}
+          decks={visibleDecks}
           cardCounts={cardCounts}
           ratingByDeckId={ratingByDeckId}
           ratingCountByDeckId={ratingCountByDeckId}
@@ -246,6 +253,8 @@ export default function PublicDecksView({ forGuest }: PublicDecksViewProps) {
             </View>
           }
           listHeaderComponent={listHeader}
+          onLoadMore={loadMore}
+          hasMore={hasMore}
         />
       )}
       {showReport ? (
