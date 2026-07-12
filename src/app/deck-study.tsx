@@ -378,7 +378,7 @@ export default function DeckStudyScreen() {
           <Feather name="check-circle" size={64} color="#66BB6A" />
           <Text style={[styles.completeTitle, { color: C.text }]}>{t("reviewComplete")}</Text>
         </View>
-        {history.length > 0 && (
+        {/* {history.length > 0 && (
           <TouchableOpacity
             style={[styles.undoButton, styles.undoButtonComplete, undoButtonTheme]}
             onPress={handleGoBack}
@@ -386,7 +386,7 @@ export default function DeckStudyScreen() {
             <Feather name="arrow-left" size={16} color={undoButtonFg} />
             <Text style={[styles.undoButtonText, { color: undoButtonFg }]}>{t("previousCard")}</Text>
           </TouchableOpacity>
-        )}
+        )} */}
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
