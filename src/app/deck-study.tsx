@@ -4,48 +4,48 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useLanguage } from "@/src/contexts/LanguageContext";
 import { useStudySettings } from "@/src/contexts/StudySettingsContext";
 import {
-    CLOZE_GAP_MARKER,
-    getClozePartsFromCard,
-    isClozeLearnable,
-    normalizeCardType,
-    type ClozeParts,
+  CLOZE_GAP_MARKER,
+  getClozePartsFromCard,
+  isClozeLearnable,
+  normalizeCardType,
+  type ClozeParts,
 } from "@/src/lib/cardModel";
 import { getCardMediaForSide } from "@/src/lib/cardMedia";
 import { formatScheduleLabel } from "@/src/lib/formatScheduleLabel";
 import { loadDueCardsForDeck, type DueCard } from "@/src/lib/reviewQueue";
 import { mergeQueueWithPreservedCards, shouldRefreshQueueAfterReview, shouldResetSessionUi } from "@/src/lib/studyQueueRefresh";
 import {
-    submitCardReviewInvoke,
-    type SubmitCardReviewRating,
+  submitCardReviewInvoke,
+  type SubmitCardReviewRating,
 } from "@/src/lib/submitCardReview";
 import { supabase } from "@/src/lib/supabase";
 import { scheduleAfterAnswer } from "@cardly/srs/cardScheduling";
 import {
-    applyRatingToProgressRow,
-    appSettingsRowToGlobal,
-    delayDaysForReview,
-    progressRowToSnapshot,
+  applyRatingToProgressRow,
+  appSettingsRowToGlobal,
+  delayDaysForReview,
+  progressRowToSnapshot,
 } from "@cardly/srs/dbMapping";
 import type { AppSpacedRepetitionSettingsRow } from "@cardly/srs/dbTypes";
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, {
-    useCallback,
-    useEffect,
-    useLayoutEffect,
-    useMemo,
-    useRef,
-    useState,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import {
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppColors } from "@/src/contexts/ThemeContext";
@@ -184,8 +184,8 @@ export default function DeckStudyScreen() {
 
     if (settingsError || !settingsData) {
       const isNetworkError = !!settingsError?.message?.match(/fetch|network/i);
-      const msg = isNetworkError 
-        ? t("srsSettingsNetworkError") 
+      const msg = isNetworkError
+        ? t("srsSettingsNetworkError")
         : t("srsSettingsGenericError");
       Alert.alert(t("error"), msg);
       setSettings(null);
@@ -416,90 +416,89 @@ export default function DeckStudyScreen() {
   return (
     <View style={[styles.root, { backgroundColor: C.bg, paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
       <View style={[styles.contentColumn, { width: contentWidth }]}>
-      <View style={styles.topRow}>
-        <View style={styles.counterOverlay} pointerEvents="none">
-          <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text>
+        <View style={styles.topRow}>
+          <View style={styles.counterOverlay} pointerEvents="none">
+            <Text style={[styles.counter, { color: C.textSub }]}>{cardCounterText}</Text>
+          </View>
+          {history.length > 0 ? (
+            <TouchableOpacity style={[styles.undoButton, undoButtonTheme]} onPress={handleGoBack}>
+              <Feather name="arrow-left" size={16} color={undoButtonFg} />
+            </TouchableOpacity>
+          ) : null}
         </View>
-        {history.length > 0 ? (
-          <TouchableOpacity style={[styles.undoButton, undoButtonTheme]} onPress={handleGoBack}>
-            <Feather name="arrow-left" size={16} color={undoButtonFg} />
-            <Text style={[styles.undoButtonText, { color: undoButtonFg }]}>{t("previousCard")}</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollInner}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={[styles.card, { backgroundColor: C.surface }]}>
-          <TouchableOpacity
-            style={styles.cardTouchable}
-            onPress={handleCardPress}
-            activeOpacity={0.97}
-          >
-            <View style={styles.cardInner}>
-              {clozeOk ? (
-                <>
-                  {!showBack ? (
-                    <ClozeFrontParts
-                      parts={clozeParts}
-                      gapLabel={t("clozeGapMarker") || CLOZE_GAP_MARKER}
-                    />
-                  ) : null}
-                  {showBack ? <ClozeBackParts parts={clozeParts} /> : null}
-                  {visibleMedia.map((item) => (
-                    <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
-                  ))}
-                </>
-              ) : (
-                <>
-                  <Text style={[styles.cardTitle, { color: C.text }]}>
-                    {showBack ? currentCard.back_text : currentCard.front_text}
-                  </Text>
-                  {visibleMedia.map((item) => (
-                    <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
-                  ))}
-                </>
-              )}
-              {!showBack && currentCard.notes ? (
-                <Text style={[styles.cardNotes, { color: C.textSub }]}>{currentCard.notes}</Text>
-              ) : null}
-              {!showBack && <Text style={[styles.hint, { color: C.textMuted }]}>{t("showAnswer")}</Text>}
-            </View>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {showBack ? (
-        <View style={styles.ratingButtons}>
-          {RATINGS.map((rating) => (
-            <Pressable
-              key={rating}
-              style={({ pressed }) => [
-                styles.ratingBtn,
-                rating === "again"
-                  ? styles.btn_again
-                  : rating === "hard"
-                    ? styles.btn_hard
-                    : rating === "good"
-                      ? styles.btn_good
-                      : styles.btn_easy,
-                pressed && styles.ratingPressed,
-              ]}
-              onPress={() => handleRate(rating)}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollInner}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={[styles.card, { backgroundColor: C.surface }]}>
+            <TouchableOpacity
+              style={styles.cardTouchable}
+              onPress={handleCardPress}
+              activeOpacity={0.97}
             >
-              <Text style={styles.ratingBtnText}>{t(rating)}</Text>
-              {intervalLabels ? (
-                <Text style={styles.intervalHint}>
-                  {intervalLabels[rating]}
-                </Text>
-              ) : null}
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
+              <View style={styles.cardInner}>
+                {clozeOk ? (
+                  <>
+                    {!showBack ? (
+                      <ClozeFrontParts
+                        parts={clozeParts}
+                        gapLabel={t("clozeGapMarker") || CLOZE_GAP_MARKER}
+                      />
+                    ) : null}
+                    {showBack ? <ClozeBackParts parts={clozeParts} /> : null}
+                    {visibleMedia.map((item) => (
+                      <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.cardTitle, { color: C.text }]}>
+                      {showBack ? currentCard.back_text : currentCard.front_text}
+                    </Text>
+                    {visibleMedia.map((item) => (
+                      <CardSideMedia key={item.media_id} url={item.url} kind={item.media_type} />
+                    ))}
+                  </>
+                )}
+                {!showBack && currentCard.notes ? (
+                  <Text style={[styles.cardNotes, { color: C.textSub }]}>{currentCard.notes}</Text>
+                ) : null}
+                {!showBack && <Text style={[styles.hint, { color: C.textMuted }]}>{t("showAnswer")}</Text>}
+              </View>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+
+        {showBack ? (
+          <View style={styles.ratingButtons}>
+            {RATINGS.map((rating) => (
+              <Pressable
+                key={rating}
+                style={({ pressed }) => [
+                  styles.ratingBtn,
+                  rating === "again"
+                    ? styles.btn_again
+                    : rating === "hard"
+                      ? styles.btn_hard
+                      : rating === "good"
+                        ? styles.btn_good
+                        : styles.btn_easy,
+                  pressed && styles.ratingPressed,
+                ]}
+                onPress={() => handleRate(rating)}
+              >
+                <Text style={styles.ratingBtnText}>{t(rating)}</Text>
+                {intervalLabels ? (
+                  <Text style={styles.intervalHint}>
+                    {intervalLabels[rating]}
+                  </Text>
+                ) : null}
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
       </View>
     </View>
   );
