@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, TextInput, TouchableOpacity, View as RNView } from 'react-native';
 
 import { Deck } from '@/assets/data/decks';
-import { compareDeckTitles } from '@/src/lib/deckSort';
+import { compareDeckTitles, queryDecks } from '@/src/lib/deckSort';
 import { deleteDeckWithMediaStorageCleanup } from '@/src/lib/cardMediaStorageCleanup';
 import { supabase } from '@/src/lib/supabase';
 import ConfirmModal from '@/src/components/ConfirmModal';
@@ -191,50 +191,14 @@ export default function MainScreen() {
   };
 
   const filteredAndSortedDecks = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-
-    return [...decks]
-      .filter((deck) => {
-        if (visibilityFilter === 'public' && !deck.is_public) return false;
-        if (visibilityFilter === 'private' && deck.is_public) return false;
-
-        if (!normalizedQuery) return true;
-
-        const title = (deck.title ?? '').toLowerCase();
-        const description = (deck.description ?? '').toLowerCase();
-        return title.includes(normalizedQuery) || description.includes(normalizedQuery);
-      })
-      .sort((a, b) => {
-        if (sortBy === 'oldest') {
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-        }
-        if (sortBy === 'titleAsc') {
-          return compareDeckTitles(a, b);
-        }
-        if (sortBy === 'titleDesc') {
-          return compareDeckTitles(b, a);
-        }
-        if (sortBy === 'ratingDesc' || sortBy === 'ratingAsc') {
-          const countA = ratingCountByDeckId[a.deck_id] ?? 0;
-          const countB = ratingCountByDeckId[b.deck_id] ?? 0;
-          const avgA = countA > 0 ? (ratingByDeckId[a.deck_id] ?? 0) : null;
-          const avgB = countB > 0 ? (ratingByDeckId[b.deck_id] ?? 0) : null;
-          if (avgA === null && avgB === null) {
-            return compareDeckTitles(a, b);
-          }
-          if (avgA === null) return 1;
-          if (avgB === null) return -1;
-          const diff = sortBy === 'ratingDesc' ? avgB - avgA : avgA - avgB;
-          if (diff !== 0) {
-            return diff > 0 ? 1 : -1;
-          }
-          return compareDeckTitles(a, b);
-        }
-        if (sortBy === 'cards') {
-          return (cardCounts[b.deck_id] ?? 0) - (cardCounts[a.deck_id] ?? 0);
-        }
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      });
+    return queryDecks(decks, {
+      searchQuery,
+      visibilityFilter,
+      sortBy: sortBy as any,
+      cardCounts,
+      ratingByDeckId,
+      ratingCountByDeckId,
+    });
   }, [decks, searchQuery, sortBy, visibilityFilter, cardCounts, ratingByDeckId, ratingCountByDeckId]);
 
   const {

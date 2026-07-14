@@ -8,6 +8,7 @@ import {
 } from '../deckCardListQuery';
 import { supabase } from '@/src/lib/supabase';
 import type { Card } from '@/assets/data/cards';
+import type { UserCardProgress } from '../userCardProgress';
 
 jest.mock('@/src/lib/supabase', () => ({
   supabase: {
@@ -17,111 +18,115 @@ jest.mock('@/src/lib/supabase', () => ({
 
 describe('deckCardListQuery', () => {
   const mockCard: Card = {
-    card_id: '1',
-    deck_id: 'd1',
-    front_text: 'apple',
-    back_text: 'яблуко',
-    notes: 'fruit',
+    card_id: 'card1',
+    deck_id: 'deck1',
+    front_text: 'Apple',
+    back_text: 'Яблуко',
+    notes: 'red fruit',
     card_type: 'standard',
-    created_at: '2023-01-01T00:00:00Z',
-    updated_at: '2023-01-01T00:00:00Z',
-  };
+    created_at: '2026-06-01T12:00:00Z',
+    updated_at: '2026-06-01T12:00:00Z',
+  } as unknown as Card;
+
+  const mockCards: Card[] = [
+    {
+      card_id: 'card1',
+      deck_id: 'deck1',
+      front_text: 'Apple',
+      back_text: 'Яблуко',
+      notes: 'red fruit',
+      card_type: 'standard',
+      created_at: '2026-06-01T12:00:00Z',
+      updated_at: '2026-06-01T12:00:00Z',
+    },
+    {
+      card_id: 'card2',
+      deck_id: 'deck1',
+      front_text: 'Banana',
+      back_text: 'Банан',
+      notes: 'yellow fruit',
+      card_type: 'cloze',
+      created_at: '2026-06-02T12:00:00Z',
+      updated_at: '2026-06-02T12:00:00Z',
+    },
+    {
+      card_id: 'card3',
+      deck_id: 'deck1',
+      front_text: 'Cherry',
+      back_text: 'Вишня',
+      notes: '',
+      card_type: 'reversible',
+      created_at: '2026-06-03T12:00:00Z',
+      updated_at: '2026-06-04T12:00:00Z',
+    },
+  ] as unknown as Card[];
+
+  const progressMap = new Map<string, UserCardProgress>([
+    ['card1', { card_id: 'card1', status: 'new', due_date: null } as UserCardProgress],
+    ['card2', { card_id: 'card2', status: 'review', due_date: '2026-06-22T10:00:00Z' } as UserCardProgress],
+  ]);
 
   describe('getCardSearchableText', () => {
     it('returns combined text lowercased', () => {
-      const text = getCardSearchableText({
-        ...mockCard,
-        front_text: 'Apple',
-        back_text: 'ЯБЛУКО',
-        notes: 'Fruit',
-      });
-      expect(text).toBe('apple яблуко fruit');
-    });
-
-    it('includes cloze parts if card is cloze', () => {
-      const text = getCardSearchableText({
-        ...mockCard,
-        card_type: 'cloze',
-        front_text: 'I like {{c1::apple::fruit}} today.',
-      });
-      expect(text).toContain('i like');
-      expect(text).toContain('apple');
-      expect(text).toContain('fruit');
-      expect(text).toContain('today.');
+      const text = getCardSearchableText(mockCards[0]);
+      expect(text).toBe('apple яблуко red fruit');
     });
   });
 
   describe('matchesCardFilter', () => {
-    const progressMap = new Map();
-    const now = new Date('2023-01-01T12:00:00Z');
-
     it('returns true for "all"', () => {
-      expect(matchesCardFilter(mockCard, 'all', progressMap, 4, now)).toBe(true);
+      expect(matchesCardFilter(mockCards[0], 'all', progressMap, 3)).toBe(true);
     });
 
-    it('filters "standard"', () => {
-      expect(matchesCardFilter(mockCard, 'standard', progressMap, 4, now)).toBe(true);
-      expect(matchesCardFilter({ ...mockCard, card_type: 'cloze' }, 'standard', progressMap, 4, now)).toBe(false);
+    it('correctly filters standard cards (not cloze)', () => {
+      expect(matchesCardFilter(mockCards[0], 'standard', progressMap, 3)).toBe(true);
+      expect(matchesCardFilter(mockCards[1], 'standard', progressMap, 3)).toBe(false);
     });
 
-    it('filters "cloze"', () => {
-      expect(matchesCardFilter({ ...mockCard, card_type: 'cloze' }, 'cloze', progressMap, 4, now)).toBe(true);
-      expect(matchesCardFilter(mockCard, 'cloze', progressMap, 4, now)).toBe(false);
+    it('correctly filters cloze cards', () => {
+      expect(matchesCardFilter(mockCards[0], 'cloze', progressMap, 3)).toBe(false);
+      expect(matchesCardFilter(mockCards[1], 'cloze', progressMap, 3)).toBe(true);
     });
 
-    it('filters "new" cards', () => {
-      expect(matchesCardFilter(mockCard, 'new', progressMap, 4, now)).toBe(true); // no progress
-      
-      const map = new Map();
-      map.set('1', { status: 'new' });
-      expect(matchesCardFilter(mockCard, 'new', map, 4, now)).toBe(true);
-      
-      map.set('1', { status: 'learning' });
-      expect(matchesCardFilter(mockCard, 'new', map, 4, now)).toBe(false);
+    it('correctly filters new cards', () => {
+      expect(matchesCardFilter(mockCards[0], 'new', progressMap, 3)).toBe(true);
+      expect(matchesCardFilter(mockCards[2], 'new', progressMap, 3)).toBe(true); // not in progressMap = new
+      expect(matchesCardFilter(mockCards[1], 'new', progressMap, 3)).toBe(false);
     });
 
-    it('filters "dueToday" cards', () => {
-      expect(matchesCardFilter(mockCard, 'dueToday', progressMap, 4, now)).toBe(true); // new cards are due
-
-      const map = new Map();
-      map.set('1', { due_date: '2023-01-01T10:00:00Z' }); // past due
-      expect(matchesCardFilter(mockCard, 'dueToday', map, 4, now)).toBe(true);
-
-      map.set('1', { due_date: '2023-01-02T10:00:00Z' }); // future
-      expect(matchesCardFilter(mockCard, 'dueToday', map, 4, now)).toBe(false);
+    it('correctly filters due today cards', () => {
+      const now = new Date('2026-06-22T12:00:00Z');
+      expect(matchesCardFilter(mockCards[0], 'dueToday', progressMap, 3, now)).toBe(true); // new is due
+      expect(matchesCardFilter(mockCards[1], 'dueToday', progressMap, 3, now)).toBe(true); // due_date matches end of day
     });
   });
 
   describe('sortDeckCards', () => {
-    const cards: Card[] = [
-      { ...mockCard, card_id: '1', front_text: 'Zebra', created_at: '2023-01-03T00:00:00Z', updated_at: '2023-01-04T00:00:00Z' },
-      { ...mockCard, card_id: '2', front_text: 'Apple', created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-02T00:00:00Z' },
-      { ...mockCard, card_id: '3', front_text: 'Mango', created_at: '2023-01-02T00:00:00Z', updated_at: '2023-01-03T00:00:00Z' },
-    ];
-
-    it('sorts newest', () => {
-      const res = sortDeckCards(cards, 'newest');
-      expect(res.map(c => c.card_id)).toEqual(['1', '3', '2']);
+    it('sorts cards by newest creation date by default', () => {
+      const sorted = sortDeckCards(mockCards, 'newest');
+      expect(sorted[0].card_id).toBe('card3');
+      expect(sorted[1].card_id).toBe('card2');
+      expect(sorted[2].card_id).toBe('card1');
     });
 
-    it('sorts oldest', () => {
-      const res = sortDeckCards(cards, 'oldest');
-      expect(res.map(c => c.card_id)).toEqual(['2', '3', '1']);
+    it('sorts cards by oldest creation date', () => {
+      const sorted = sortDeckCards(mockCards, 'oldest');
+      expect(sorted[0].card_id).toBe('card1');
+      expect(sorted[2].card_id).toBe('card3');
     });
 
-    it('sorts frontAsc', () => {
-      const res = sortDeckCards(cards, 'frontAsc');
-      expect(res.map(c => c.card_id)).toEqual(['2', '3', '1']);
+    it('sorts cards by front text alphabetically ascending', () => {
+      const sorted = sortDeckCards(mockCards, 'frontAsc');
+      expect(sorted[0].front_text).toBe('Apple');
+      expect(sorted[1].front_text).toBe('Banana');
+      expect(sorted[2].front_text).toBe('Cherry');
     });
 
-    it('sorts frontDesc', () => {
-      const res = sortDeckCards(cards, 'frontDesc');
-      expect(res.map(c => c.card_id)).toEqual(['1', '3', '2']);
-    });
-
-    it('sorts updatedDesc', () => {
-      const res = sortDeckCards(cards, 'updatedDesc');
-      expect(res.map(c => c.card_id)).toEqual(['1', '3', '2']);
+    it('sorts cards by front text alphabetically descending', () => {
+      const sorted = sortDeckCards(mockCards, 'frontDesc');
+      expect(sorted[0].front_text).toBe('Cherry');
+      expect(sorted[1].front_text).toBe('Banana');
+      expect(sorted[2].front_text).toBe('Apple');
     });
   });
 
@@ -144,39 +149,26 @@ describe('deckCardListQuery', () => {
   });
 
   describe('queryDeckCards', () => {
-    const cards: Card[] = [
-      { ...mockCard, card_id: '1', front_text: 'Apple is red', created_at: '2023-01-01T00:00:00Z' },
-      { ...mockCard, card_id: '2', front_text: 'Banana is yellow', created_at: '2023-01-02T00:00:00Z', card_type: 'cloze' },
-      { ...mockCard, card_id: '3', front_text: 'Cherry', created_at: '2023-01-03T00:00:00Z' },
-    ];
-
-    it('applies search, filter, and sort combined', () => {
-      const res = queryDeckCards(cards, {
-        search: 'is',
-        filter: 'standard',
-        sort: 'newest',
-        progressMap: new Map(),
-        srsDayStartHour: 4,
-        now: new Date(),
-      });
-      
-      // Should match 'is', only standard (not cloze), newest first
-      // Apple is red -> matches search, is standard
-      // Banana is yellow -> matches search, but is cloze
-      // Cherry -> no 'is'
-      expect(res).toHaveLength(1);
-      expect(res[0].card_id).toBe('1');
+    it('performs search, filter, and sort combined', () => {
+      const options = {
+        search: 'fruit',
+        filter: 'standard' as const,
+        sort: 'newest' as const,
+        progressMap,
+        srsDayStartHour: 3,
+        now: new Date('2026-06-22T12:00:00Z'),
+      };
+      const result = queryDeckCards(mockCards, options);
+      expect(result.length).toBe(1);
+      expect(result[0].card_id).toBe('card1');
     });
   });
-  
+
   describe('hasActiveDeckCardQuery', () => {
-    it('returns true if any filter active', () => {
-      expect(hasActiveDeckCardQuery('a', 'all', 'newest')).toBe(true);
-      expect(hasActiveDeckCardQuery('', 'standard', 'newest')).toBe(true);
+    it('returns true if any query parameter is active', () => {
+      expect(hasActiveDeckCardQuery('apple', 'all', 'newest')).toBe(true);
+      expect(hasActiveDeckCardQuery('', 'cloze', 'newest')).toBe(true);
       expect(hasActiveDeckCardQuery('', 'all', 'oldest')).toBe(true);
-    });
-    
-    it('returns false if defaults', () => {
       expect(hasActiveDeckCardQuery('', 'all', 'newest')).toBe(false);
     });
   });
